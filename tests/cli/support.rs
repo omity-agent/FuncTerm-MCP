@@ -3,12 +3,15 @@ use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
-use std::sync::{Mutex, MutexGuard, mpsc};
+use std::sync::mpsc;
 use std::thread;
 use std::time::Instant;
+mod daemon;
+#[path = "powershell_version.rs"]
+mod powershell_version;
+pub(crate) use daemon::{locked, locked_with_env};
 const CLI_COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
 const PIPE_CLOSE_TIMEOUT: Duration = Duration::from_secs(5);
-static CLI_TEST_LOCK: Mutex<()> = Mutex::new(());
 pub(crate) struct ChildGuard {
     child: Child,
 }
@@ -46,17 +49,13 @@ impl Drop for ChildGuard {
         self.child.wait().unwrap();
     }
 }
-pub(crate) fn locked() -> MutexGuard<'static, ()> {
-    CLI_TEST_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-}
 pub(crate) fn exe() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_shell-mcp-pty"))
 }
 pub(crate) fn run_cli(arguments: &[&str]) -> Output {
     let mut command = Command::new(exe());
     command.args(arguments).stdin(Stdio::null());
+    daemon::apply_active_env(&mut command);
     output_to_files(command, CLI_COMMAND_TIMEOUT)
 }
 pub(crate) fn run_cli_with_pipes(arguments: &[&str]) -> Output {
@@ -66,6 +65,7 @@ pub(crate) fn run_cli_with_pipes(arguments: &[&str]) -> Output {
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    daemon::apply_active_env(&mut command);
     output_from_pipes(command, CLI_COMMAND_TIMEOUT)
 }
 pub(crate) fn create_powershell_shell(cwd: &Path) -> ShellCreated {
@@ -74,7 +74,7 @@ pub(crate) fn create_powershell_shell(cwd: &Path) -> ShellCreated {
         "--cwd",
         cwd.to_str().unwrap(),
         "--shell",
-        "powershell",
+        "pwsh",
     ]))
 }
 pub(crate) fn send_test_command(shell_id: &str) -> Output {
@@ -190,9 +190,8 @@ fn field(text: &str, name: &str) -> String {
         .unwrap()
 }
 fn parse_exit_code(value: &str) -> Option<i32> {
-    if value == "pending" {
-        None
-    } else {
-        Some(value.parse().unwrap())
+    match value {
+        "pending" => None,
+        code => Some(code.parse().unwrap()),
     }
 }

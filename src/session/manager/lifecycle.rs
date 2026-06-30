@@ -7,10 +7,19 @@ use anyhow::{Result, bail};
 )]
 impl Drop for ShellSession {
     fn drop(&mut self) {
-        if let Ok(mut child) = self.child.lock()
-            && let Err(error) = child.kill()
-        {
-            eprintln!("failed to kill shell child during cleanup: {error}");
+        if let Ok(mut child) = self.child.lock() {
+            match child.try_wait() {
+                Ok(Some(_)) => {}
+                Ok(None) => {
+                    if let Err(error) = child.kill() {
+                        eprintln!("failed to kill shell child during cleanup: {error}");
+                    }
+                    if let Err(error) = child.wait() {
+                        eprintln!("failed to wait shell child during cleanup: {error}");
+                    }
+                }
+                Err(error) => eprintln!("failed to poll shell child during cleanup: {error}"),
+            }
         }
     }
 }

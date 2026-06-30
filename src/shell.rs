@@ -15,6 +15,7 @@ pub(crate) enum ShellChoice {
 }
 pub(crate) struct ShellStartup {
     pub(crate) args: Vec<String>,
+    pub(crate) ready_file: std::path::PathBuf,
 }
 impl ShellChoice {
     pub(crate) fn executable(self, settings: &Settings) -> &str {
@@ -26,12 +27,13 @@ impl ShellChoice {
         }
     }
     pub(crate) fn startup(self, cwd: &Path, session_root: &Path) -> Result<ShellStartup> {
+        let ready_file = session_root.join("startup.ready");
         let args = match self {
-            Self::PowerShell | Self::Pwsh => powershell::startup_args(cwd),
-            Self::Bash => bash::startup_args(cwd, session_root)?,
-            Self::NuShell => nushell::startup_args(cwd),
+            Self::PowerShell | Self::Pwsh => powershell::startup_args(cwd, &ready_file),
+            Self::Bash => bash::startup_args(cwd, session_root, &ready_file)?,
+            Self::NuShell => nushell::startup_args(cwd, &ready_file),
         };
-        Ok(ShellStartup { args })
+        Ok(ShellStartup { args, ready_file })
     }
     pub(crate) fn invocation(self, command_id: &str, command: &str, directory: &Path) -> String {
         match self {

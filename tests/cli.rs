@@ -9,8 +9,8 @@ mod support;
 )]
 mod tests {
     use super::support::{
-        ChildGuard, create_powershell_shell, locked, parse_command_accepted, parse_command_query,
-        run_cli, run_cli_with_pipes, send_test_command,
+        ChildGuard, create_powershell_shell, locked, locked_with_env, parse_command_accepted,
+        parse_command_query, run_cli, run_cli_with_pipes, send_test_command,
     };
     use core::time::Duration;
     use std::process::{Command, Stdio};
@@ -41,7 +41,7 @@ mod tests {
             "--cwd",
             cwd.to_str().unwrap(),
             "--shell",
-            "powershell",
+            "pwsh",
         ]);
         assert!(output.status.success());
         assert!(String::from_utf8_lossy(&output.stdout).contains("shell_id: "));
@@ -52,6 +52,20 @@ mod tests {
         let cwd = std::env::temp_dir();
         let created = create_powershell_shell(&cwd);
         assert_eq!(created.shell_id.len(), 12);
+    }
+    #[test]
+    fn cli_reports_shell_startup_failure() {
+        let _guard = locked_with_env(&[("SHELL_MCP_PTY_PWSH", "where.exe")]);
+        let cwd = std::env::temp_dir();
+        let output = run_cli(&[
+            "new-shell",
+            "--cwd",
+            cwd.to_str().unwrap(),
+            "--shell",
+            "pwsh",
+        ]);
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("startup"));
     }
     #[test]
     fn cli_send_command_returns_short_id() {

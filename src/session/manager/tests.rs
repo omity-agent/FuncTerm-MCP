@@ -28,3 +28,13 @@ fn missing_cwd_is_rejected_before_shell_creation() {
             .contains("cwd does not exist or is not a directory")
     );
 }
+#[test]
+fn immediately_exiting_shell_is_rejected_before_registration() {
+    let mut settings = test_settings();
+    settings.windows_powershell = "where.exe".to_owned();
+    let manager = Manager::new(settings).unwrap();
+    let error = manager
+        .new_shell(std::env::temp_dir().as_path(), ShellChoice::PowerShell)
+        .unwrap_err();
+    assert!(error.to_string().contains("startup"));
+}

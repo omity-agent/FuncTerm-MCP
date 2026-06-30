@@ -2,9 +2,13 @@ use anyhow::{Context as _, Result};
 use base64_turbo::STANDARD;
 use std::fs;
 use std::path::Path;
-pub(super) fn startup_args(cwd: &Path, session_root: &Path) -> Result<Vec<String>> {
+pub(super) fn startup_args(
+    cwd: &Path,
+    session_root: &Path,
+    ready_file: &Path,
+) -> Result<Vec<String>> {
     let init_path = session_root.join("bash_init.sh");
-    let script = initialization_script(cwd);
+    let script = initialization_script(cwd, ready_file);
     fs::write(&init_path, script).context("failed to write Bash initialization script")?;
     Ok(vec![
         "--noprofile".to_owned(),
@@ -22,11 +26,12 @@ pub(super) fn invocation(command_id: &str, command: &str, directory: &Path) -> S
         sh_quote(&bash_path(directory))
     )
 }
-fn initialization_script(cwd: &Path) -> String {
+fn initialization_script(cwd: &Path, ready_file: &Path) -> String {
     format!(
-        "{}\ncd {}\n",
+        "{}\ncd {}\n: > {}\n",
         include_str!("bash_init.sh"),
-        sh_quote(&bash_path(cwd))
+        sh_quote(&bash_path(cwd)),
+        sh_quote(&bash_path(ready_file))
     )
 }
 fn bash_path(path: &Path) -> String {

@@ -1,24 +1,24 @@
+mod commands;
 mod lifecycle;
+mod startup;
 mod state;
 #[cfg(test)]
 mod tests;
 use crate::config::Settings;
-use crate::ipc::{EndReason, QueryResult};
-use crate::session::records::{CommandRecord, command_query, create_record, wait_for_done};
+use crate::ipc::QueryResult;
+use crate::session::records::{CommandRecord, command_query};
 use crate::session::support::{lock_mutex, start_reader};
-use crate::shell::{ShellChoice, ShellStartup};
+use crate::shell::ShellChoice;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result, bail};
-use core::time::Duration;
-use lifecycle::{release_shell, reserve_shell};
-use portable_pty::{Child, CommandBuilder, PtySize, native_pty_system};
+use portable_pty::{Child, CommandBuilder, PtySize, SlavePty, native_pty_system};
+use startup::{apply_startup, wait_for_shell_startup};
 use state::path_text;
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::sync::Mutex;
-use std::thread;
 pub(crate) struct Manager {
     settings: Settings,
     root: std::path::PathBuf,
@@ -33,6 +33,7 @@ pub(super) struct ShellSession {
     busy: Mutex<Option<String>>,
     command_root: std::path::PathBuf,
     child: Mutex<Box<dyn Child + Send + Sync>>,
+    _slave: Mutex<Box<dyn SlavePty + Send>>,
 }
 impl Manager {
     pub(crate) fn new(settings: Settings) -> Result<Self> {
@@ -65,9 +66,10 @@ impl Manager {
         };
         let pair = pty_system.openpty(size).context("failed to open pty")?;
         let mut command = CommandBuilder::new(shell.executable(&self.settings));
+        let ready_file = startup.ready_file.clone();
         apply_startup(&mut command, startup);
         command.cwd(cwd);
-        let child = pair
+        let mut child = pair
             .slave
             .spawn_command(command)
             .context("failed to spawn shell")?;
@@ -85,6 +87,7 @@ impl Manager {
             0,
         )));
         start_reader(Arc::clone(&screen), reader);
+        wait_for_shell_startup(&mut child, &ready_file, &screen)?;
         let session = Arc::new(ShellSession {
             choice: shell,
             cwd: Mutex::new(cwd.to_path_buf()),
@@ -93,44 +96,10 @@ impl Manager {
             busy: Mutex::new(None),
             command_root,
             child: Mutex::new(child),
+            _slave: Mutex::new(pair.slave),
         });
         lock_mutex(&self.shells, "shell")?.insert(shell_id.clone(), session);
         Ok(shell_id)
-    }
-    pub(crate) fn write_keyboard(&self, shell_id: &str, bytes: &[u8]) -> Result<()> {
-        let shell = self.shell(shell_id)?;
-        let mut writer = lock_mutex(&shell.writer, "writer")?;
-        writer.write_all(bytes).context("failed to write to pty")?;
-        writer.flush().context("failed to flush pty writer")
-    }
-    pub(crate) fn send_command(
-        self: &Arc<Self>,
-        shell_id: &str,
-        command: &str,
-        wait_ms: u64,
-    ) -> Result<(String, EndReason, QueryResult)> {
-        let shell = self.shell(shell_id)?;
-        let command_id = self.next_id()?;
-        reserve_shell(&shell, &command_id)?;
-        let initial_cwd = Self::shell_cwd(&shell)?;
-        let record = create_record(&shell.command_root, &command_id, shell_id, &initial_cwd)?;
-        lock_mutex(&self.commands, "command")?.insert(command_id.clone(), record.clone());
-        if let Err(error) = Self::write_invocation(&shell, &command_id, command, &record) {
-            release_shell(&shell, &command_id)?;
-            lock_mutex(&self.commands, "command")?.remove(&command_id);
-            return Err(error);
-        }
-        self.start_monitor(command_id.clone(), Arc::clone(&shell), record.clone());
-        let ended = wait_for_done(&record.done, Duration::from_millis(wait_ms));
-        let reason = if ended {
-            Self::update_shell_cwd(&shell, &record)?;
-            EndReason::CommandEnded
-        } else {
-            EndReason::WaitTimeout
-        };
-        let cwd = Self::shell_cwd(&shell)?;
-        let query = command_query(&record, &cwd)?;
-        Ok((command_id, reason, query))
     }
     pub(crate) fn query(&self, id: &str) -> Result<QueryResult> {
         if let Some(shell) = self.find_shell(id)? {
@@ -150,50 +119,4 @@ impl Manager {
     fn find_command(&self, id: &str) -> Result<Option<CommandRecord>> {
         Ok(lock_mutex(&self.commands, "command")?.get(id).cloned())
     }
-    fn shell(&self, shell_id: &str) -> Result<Arc<ShellSession>> {
-        self.find_shell(shell_id)?
-            .with_context(|| format!("unknown shell id {shell_id}"))
-    }
-    fn write_invocation(
-        shell: &ShellSession,
-        command_id: &str,
-        command: &str,
-        record: &CommandRecord,
-    ) -> Result<()> {
-        let directory = record
-            .stdout
-            .parent()
-            .context("missing command directory")?;
-        let line = shell.choice.invocation(command_id, command, directory);
-        let mut writer = lock_mutex(&shell.writer, "writer")?;
-        writer
-            .write_all(line.as_bytes())
-            .context("failed to write command invocation")?;
-        writer.flush().context("failed to flush command invocation")
-    }
-    fn start_monitor(
-        self: &Arc<Self>,
-        command_id: String,
-        shell: Arc<ShellSession>,
-        record: CommandRecord,
-    ) {
-        let manager = Arc::clone(self);
-        thread::spawn(move || {
-            while !record.done.exists() {
-                thread::sleep(Duration::from_millis(100));
-            }
-            if let Err(error) = Self::update_shell_cwd(&shell, &record) {
-                eprintln!("{error:#}");
-            }
-            if let Ok(mut busy) = shell.busy.lock() {
-                *busy = None;
-            }
-            if let Ok(mut commands) = manager.commands.lock() {
-                commands.entry(command_id).or_insert(record);
-            }
-        });
-    }
-}
-fn apply_startup(command: &mut CommandBuilder, startup: ShellStartup) {
-    command.args(startup.args);
 }

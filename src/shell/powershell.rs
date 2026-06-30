@@ -1,7 +1,7 @@
 use base64_turbo::STANDARD;
 use std::path::Path;
-pub(super) fn startup_args(cwd: &Path) -> Vec<String> {
-    let init = initialization_script(cwd);
+pub(super) fn startup_args(cwd: &Path, ready_file: &Path) -> Vec<String> {
+    let init = initialization_script(cwd, ready_file);
     vec![
         "-NoLogo".to_owned(),
         "-NoProfile".to_owned(),
@@ -19,11 +19,12 @@ pub(super) fn invocation(command_id: &str, command: &str, directory: &Path) -> S
         "Invoke-McpPtyCommand -CommandId '{command_id}' -Payload '{payload}' -Directory {quoted_directory}\r\n"
     )
 }
-fn initialization_script(cwd: &Path) -> String {
+fn initialization_script(cwd: &Path, ready_file: &Path) -> String {
     format!(
-        "{}\nSet-Location -LiteralPath {}",
+        "{}\nSet-Location -LiteralPath {}\nSet-Content -LiteralPath {} -Value '' -NoNewline",
         include_str!("./powershell_init.ps1"),
-        ps_quote(cwd)
+        ps_quote(cwd),
+        ps_quote(ready_file)
     )
 }
 fn ps_quote(path: &Path) -> String {
@@ -51,9 +52,13 @@ mod tests {
     }
     #[test]
     fn initialization_sets_literal_location() {
-        let script = super::initialization_script(Path::new("F:\\dir with ' quote"));
+        let script = super::initialization_script(
+            Path::new("F:\\dir with ' quote"),
+            Path::new("F:\\ready'file"),
+        );
         assert!(script.contains("Invoke-McpPtyCommand"));
         assert!(script.contains("Set-Location -LiteralPath 'F:\\dir with '' quote'"));
+        assert!(script.contains("Set-Content -LiteralPath 'F:\\ready''file'"));
     }
     #[test]
     fn encoded_command_round_trips_as_utf16() {
