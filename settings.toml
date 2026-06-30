@@ -1,0 +1,14 @@
+# 本地 Daemon 监听地址；MCP 与 CLI 均通过它复用同一个 Shell 管理实例。
+daemon_address = "127.0.0.1:43875"
+
+# PowerShell PTY 的默认行数。
+terminal_rows = 30
+
+# PowerShell PTY 的默认列数。
+terminal_cols = 120
+
+# Windows PowerShell 可执行文件名称。
+windows_powershell = "powershell.exe"
+
+# PowerShell 7+ 可执行文件名称。
+pwsh = "pwsh.exe"
