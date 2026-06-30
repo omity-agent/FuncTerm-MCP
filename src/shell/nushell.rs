@@ -1,6 +1,5 @@
 use base64_turbo::STANDARD;
 use std::path::Path;
-use uuid::Uuid;
 pub(super) fn startup_args(cwd: &Path) -> Vec<String> {
     vec![
         "--no-config-file".to_owned(),
@@ -9,11 +8,11 @@ pub(super) fn startup_args(cwd: &Path) -> Vec<String> {
         initialization_script(cwd),
     ]
 }
-pub(super) fn invocation(command_id: Uuid, command: &str, directory: &Path) -> String {
+pub(super) fn invocation(command_id: &str, command: &str, directory: &Path) -> String {
     let payload = STANDARD.encode(command.as_bytes());
     format!(
         "mcp_pty_command {} {} {}\n",
-        nu_quote(&command_id.to_string()),
+        nu_quote(command_id),
         nu_quote(&payload),
         nu_quote(&directory.to_string_lossy())
     )

@@ -1,4 +1,5 @@
 mod lifecycle;
+mod state;
 #[cfg(test)]
 mod tests;
 use crate::config::Settings;
@@ -11,24 +12,25 @@ use anyhow::{Context as _, Result, bail};
 use core::time::Duration;
 use lifecycle::{release_shell, reserve_shell};
 use portable_pty::{Child, CommandBuilder, PtySize, native_pty_system};
+use state::path_text;
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::sync::Mutex;
 use std::thread;
-use uuid::Uuid;
 pub(crate) struct Manager {
     settings: Settings,
     root: std::path::PathBuf,
-    shells: Mutex<HashMap<Uuid, Arc<ShellSession>>>,
-    commands: Mutex<HashMap<Uuid, CommandRecord>>,
+    shells: Mutex<HashMap<String, Arc<ShellSession>>>,
+    commands: Mutex<HashMap<String, CommandRecord>>,
 }
 pub(super) struct ShellSession {
     choice: ShellChoice,
+    cwd: Mutex<std::path::PathBuf>,
     writer: Mutex<Box<dyn Write + Send>>,
     screen: Arc<Mutex<vt100::Parser>>,
-    busy: Mutex<Option<Uuid>>,
+    busy: Mutex<Option<String>>,
     command_root: std::path::PathBuf,
     child: Mutex<Box<dyn Child + Send + Sync>>,
 }
@@ -43,15 +45,15 @@ impl Manager {
             commands: Mutex::new(HashMap::new()),
         })
     }
-    pub(crate) fn new_shell(&self, cwd: &Path, shell: ShellChoice) -> Result<Uuid> {
+    pub(crate) fn new_shell(&self, cwd: &Path, shell: ShellChoice) -> Result<String> {
         if !cwd.is_dir() {
             bail!(
                 "cwd does not exist or is not a directory: {}",
                 cwd.display()
             );
         }
-        let shell_id = Uuid::new_v4();
-        let command_root = self.root.join("commands").join(shell_id.to_string());
+        let shell_id = self.next_id()?;
+        let command_root = self.root.join("commands").join(&shell_id);
         fs::create_dir_all(&command_root).context("failed to create command root")?;
         let startup = shell.startup(cwd, &command_root)?;
         let pty_system = native_pty_system();
@@ -85,16 +87,17 @@ impl Manager {
         start_reader(Arc::clone(&screen), reader);
         let session = Arc::new(ShellSession {
             choice: shell,
+            cwd: Mutex::new(cwd.to_path_buf()),
             writer: Mutex::new(writer),
             screen,
             busy: Mutex::new(None),
             command_root,
             child: Mutex::new(child),
         });
-        lock_mutex(&self.shells, "shell")?.insert(shell_id, session);
+        lock_mutex(&self.shells, "shell")?.insert(shell_id.clone(), session);
         Ok(shell_id)
     }
-    pub(crate) fn write_keyboard(&self, shell_id: Uuid, bytes: &[u8]) -> Result<()> {
+    pub(crate) fn write_keyboard(&self, shell_id: &str, bytes: &[u8]) -> Result<()> {
         let shell = self.shell(shell_id)?;
         let mut writer = lock_mutex(&shell.writer, "writer")?;
         writer.write_all(bytes).context("failed to write to pty")?;
@@ -102,52 +105,58 @@ impl Manager {
     }
     pub(crate) fn send_command(
         self: &Arc<Self>,
-        shell_id: Uuid,
+        shell_id: &str,
         command: &str,
         wait_ms: u64,
-    ) -> Result<(Uuid, EndReason)> {
+    ) -> Result<(String, EndReason, QueryResult)> {
         let shell = self.shell(shell_id)?;
-        let command_id = Uuid::new_v4();
-        reserve_shell(&shell, command_id)?;
-        let record = create_record(&shell.command_root, command_id)?;
-        lock_mutex(&self.commands, "command")?.insert(command_id, record.clone());
-        if let Err(error) = Self::write_invocation(&shell, command_id, command, &record) {
-            release_shell(&shell, command_id)?;
+        let command_id = self.next_id()?;
+        reserve_shell(&shell, &command_id)?;
+        let initial_cwd = Self::shell_cwd(&shell)?;
+        let record = create_record(&shell.command_root, &command_id, shell_id, &initial_cwd)?;
+        lock_mutex(&self.commands, "command")?.insert(command_id.clone(), record.clone());
+        if let Err(error) = Self::write_invocation(&shell, &command_id, command, &record) {
+            release_shell(&shell, &command_id)?;
             lock_mutex(&self.commands, "command")?.remove(&command_id);
             return Err(error);
         }
-        self.start_monitor(command_id, shell, record.clone());
+        self.start_monitor(command_id.clone(), Arc::clone(&shell), record.clone());
         let ended = wait_for_done(&record.done, Duration::from_millis(wait_ms));
         let reason = if ended {
+            Self::update_shell_cwd(&shell, &record)?;
             EndReason::CommandEnded
         } else {
             EndReason::WaitTimeout
         };
-        Ok((command_id, reason))
+        let cwd = Self::shell_cwd(&shell)?;
+        let query = command_query(&record, &cwd)?;
+        Ok((command_id, reason, query))
     }
-    pub(crate) fn query(&self, id: Uuid) -> Result<QueryResult> {
+    pub(crate) fn query(&self, id: &str) -> Result<QueryResult> {
         if let Some(shell) = self.find_shell(id)? {
             let screen = lock_mutex(&shell.screen, "screen")?.screen().contents();
-            return Ok(QueryResult::Shell { screen });
+            let cwd = path_text(&Self::shell_cwd(&shell)?)?;
+            return Ok(QueryResult::Shell { cwd, screen });
         }
         if let Some(record) = self.find_command(id)? {
-            return command_query(&record);
+            let fallback_cwd = self.command_fallback_cwd(&record)?;
+            return command_query(&record, &fallback_cwd);
         }
-        bail!("unknown UUID {id}")
+        bail!("unknown id {id}")
     }
-    fn find_shell(&self, id: Uuid) -> Result<Option<Arc<ShellSession>>> {
-        Ok(lock_mutex(&self.shells, "shell")?.get(&id).cloned())
+    fn find_shell(&self, id: &str) -> Result<Option<Arc<ShellSession>>> {
+        Ok(lock_mutex(&self.shells, "shell")?.get(id).cloned())
     }
-    fn find_command(&self, id: Uuid) -> Result<Option<CommandRecord>> {
-        Ok(lock_mutex(&self.commands, "command")?.get(&id).cloned())
+    fn find_command(&self, id: &str) -> Result<Option<CommandRecord>> {
+        Ok(lock_mutex(&self.commands, "command")?.get(id).cloned())
     }
-    fn shell(&self, shell_id: Uuid) -> Result<Arc<ShellSession>> {
+    fn shell(&self, shell_id: &str) -> Result<Arc<ShellSession>> {
         self.find_shell(shell_id)?
-            .with_context(|| format!("unknown shell UUID {shell_id}"))
+            .with_context(|| format!("unknown shell id {shell_id}"))
     }
     fn write_invocation(
         shell: &ShellSession,
-        command_id: Uuid,
+        command_id: &str,
         command: &str,
         record: &CommandRecord,
     ) -> Result<()> {
@@ -164,7 +173,7 @@ impl Manager {
     }
     fn start_monitor(
         self: &Arc<Self>,
-        command_id: Uuid,
+        command_id: String,
         shell: Arc<ShellSession>,
         record: CommandRecord,
     ) {
@@ -172,6 +181,9 @@ impl Manager {
         thread::spawn(move || {
             while !record.done.exists() {
                 thread::sleep(Duration::from_millis(100));
+            }
+            if let Err(error) = Self::update_shell_cwd(&shell, &record) {
+                eprintln!("{error:#}");
             }
             if let Ok(mut busy) = shell.busy.lock() {
                 *busy = None;

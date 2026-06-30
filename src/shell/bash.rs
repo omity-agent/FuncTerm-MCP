@@ -2,7 +2,6 @@ use anyhow::{Context as _, Result};
 use base64_turbo::STANDARD;
 use std::fs;
 use std::path::Path;
-use uuid::Uuid;
 pub(super) fn startup_args(cwd: &Path, session_root: &Path) -> Result<Vec<String>> {
     let init_path = session_root.join("bash_init.sh");
     let script = initialization_script(cwd);
@@ -14,11 +13,11 @@ pub(super) fn startup_args(cwd: &Path, session_root: &Path) -> Result<Vec<String
         "-i".to_owned(),
     ])
 }
-pub(super) fn invocation(command_id: Uuid, command: &str, directory: &Path) -> String {
+pub(super) fn invocation(command_id: &str, command: &str, directory: &Path) -> String {
     let payload = STANDARD.encode(command.as_bytes());
     format!(
         "mcp_pty_command {} {} {}\n",
-        sh_quote(&command_id.to_string()),
+        sh_quote(command_id),
         sh_quote(&payload),
         sh_quote(&bash_path(directory))
     )

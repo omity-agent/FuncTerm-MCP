@@ -1,7 +1,6 @@
 use super::ShellSession;
 use crate::session::support::lock_mutex;
 use anyhow::{Result, bail};
-use uuid::Uuid;
 #[expect(
     clippy::missing_trait_methods,
     reason = "Drop only needs the regular destructor for this type"
@@ -15,20 +14,20 @@ impl Drop for ShellSession {
         }
     }
 }
-pub(super) fn reserve_shell(shell: &ShellSession, command_id: Uuid) -> Result<()> {
+pub(super) fn reserve_shell(shell: &ShellSession, command_id: &str) -> Result<()> {
     {
         let mut busy = lock_mutex(&shell.busy, "busy")?;
-        if let Some(existing_id) = *busy {
+        if let Some(existing_id) = busy.as_deref() {
             bail!("shell is busy with command {existing_id}");
         }
-        *busy = Some(command_id);
+        *busy = Some(command_id.to_owned());
     }
     Ok(())
 }
-pub(super) fn release_shell(shell: &ShellSession, command_id: Uuid) -> Result<()> {
+pub(super) fn release_shell(shell: &ShellSession, command_id: &str) -> Result<()> {
     {
         let mut busy = lock_mutex(&shell.busy, "busy")?;
-        if *busy == Some(command_id) {
+        if busy.as_deref() == Some(command_id) {
             *busy = None;
         }
     }

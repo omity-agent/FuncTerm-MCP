@@ -6,21 +6,30 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Instant;
-use uuid::Uuid;
 #[derive(Clone)]
 pub(super) struct CommandRecord {
+    pub(super) shell_id: String,
+    pub(super) initial_cwd: PathBuf,
     pub(super) stdout: PathBuf,
     pub(super) stderr: PathBuf,
     pub(super) done: PathBuf,
 }
 #[derive(Deserialize)]
-struct DoneFile {
-    exit_code: i32,
+pub(super) struct DoneFile {
+    pub(super) exit_code: i32,
+    pub(super) cwd: String,
 }
-pub(super) fn create_record(command_root: &Path, command_id: Uuid) -> Result<CommandRecord> {
-    let command_dir = command_root.join(command_id.to_string());
+pub(super) fn create_record(
+    command_root: &Path,
+    command_id: &str,
+    shell_id: &str,
+    initial_cwd: &Path,
+) -> Result<CommandRecord> {
+    let command_dir = command_root.join(command_id);
     fs::create_dir_all(&command_dir).context("failed to create command directory")?;
     Ok(CommandRecord {
+        shell_id: shell_id.to_owned(),
+        initial_cwd: initial_cwd.to_path_buf(),
         stdout: command_dir.join("stdout.txt"),
         stderr: command_dir.join("stderr.txt"),
         done: command_dir.join("done.json"),
@@ -38,11 +47,16 @@ pub(super) fn wait_for_done(done: &Path, limit: Duration) -> bool {
         thread::sleep(Duration::from_millis(50));
     }
 }
-pub(super) fn command_query(record: &CommandRecord) -> Result<QueryResult> {
+pub(super) fn command_query(record: &CommandRecord, fallback_cwd: &Path) -> Result<QueryResult> {
     let stdout = read_optional(&record.stdout)?;
     let stderr = read_optional(&record.stderr)?;
-    let exit_code = read_exit_code(&record.done)?;
+    let done = read_done(&record.done)?;
+    let exit_code = done.as_ref().map(|file| file.exit_code);
+    let cwd = done
+        .as_ref()
+        .map_or_else(|| path_text(fallback_cwd), |file| Ok(file.cwd.clone()))?;
     Ok(QueryResult::Command {
+        cwd,
         finished: record.done.exists(),
         stdout,
         stderr,
@@ -82,14 +96,19 @@ fn decode_utf16_chunks(bytes: &[u8], convert: fn([u8; 2]) -> u16) -> Result<Stri
         .collect::<Vec<_>>();
     String::from_utf16(&words).context("text is not valid UTF-16")
 }
-fn read_exit_code(path: &Path) -> Result<Option<i32>> {
+pub(super) fn read_done(path: &Path) -> Result<Option<DoneFile>> {
     if !path.exists() {
         return Ok(None);
     }
     let bytes = fs::read(path).context("failed to read done file")?;
     let text = decode_text(&bytes).context("failed to decode done file")?;
     let done = sonic_rs::from_str::<DoneFile>(&text).context("failed to parse done file")?;
-    Ok(Some(done.exit_code))
+    Ok(Some(done))
+}
+fn path_text(path: &Path) -> Result<String> {
+    path.to_str()
+        .map(str::to_owned)
+        .with_context(|| format!("cwd is not valid UTF-8: {}", path.display()))
 }
 #[cfg(test)]
 #[expect(

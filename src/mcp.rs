@@ -3,18 +3,16 @@ use crate::client;
 use crate::config::Settings;
 use crate::ipc::{Payload, Request};
 use crate::shell::ShellChoice;
+use crate::working_dir;
 use anyhow::Result;
 use base64_turbo::STANDARD;
 use rmcp::{
-    Json, ServerHandler, ServiceExt as _,
+    ServerHandler, ServiceExt as _,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     tool, tool_handler, tool_router,
 };
-use types::{
-    NewShellRequest, NewShellResponse, QueryRequest, QueryResponse, SendCommandRequest,
-    SendCommandResponse, WriteKeyboardRequest, WriteKeyboardResponse,
-};
-use uuid::Uuid;
+use std::path::Path;
+use types::{NewShellRequest, QueryRequest, SendCommandRequest, WriteKeyboardRequest};
 #[derive(Clone, Debug)]
 struct McpServer {
     settings: Settings,
@@ -46,14 +44,16 @@ impl McpServer {
     async fn new_shell(
         &self,
         Parameters(request): Parameters<NewShellRequest>,
-    ) -> Result<Json<NewShellResponse>, String> {
+    ) -> Result<String, String> {
         let shell = ShellChoice::parse(&request.shell).map_err(error_text)?;
+        let cwd = request.cwd.as_deref().map(Path::new);
+        let resolved_cwd = working_dir::resolve(cwd).map_err(error_text)?;
         let payload = self.call(&Request::NewShell {
-            cwd: request.cwd.into(),
+            cwd: resolved_cwd,
             shell,
         })?;
         match payload {
-            Payload::ShellCreated { shell_id } => Ok(Json(NewShellResponse::new(shell_id))),
+            Payload::ShellCreated { .. } => Ok(payload.to_plain_text()),
             Payload::Pong
             | Payload::KeyboardWritten
             | Payload::CommandAccepted { .. }
@@ -67,15 +67,14 @@ impl McpServer {
     async fn write_keyboard(
         &self,
         Parameters(request): Parameters<WriteKeyboardRequest>,
-    ) -> Result<Json<WriteKeyboardResponse>, String> {
-        let shell_id = parse_uuid(&request.shell_id)?;
+    ) -> Result<String, String> {
         let bytes_base64 = STANDARD.encode(&request.bytes);
         let payload = self.call(&Request::WriteKeyboard {
-            shell_id,
+            shell_id: request.shell_id,
             bytes_base64,
         })?;
         match payload {
-            Payload::KeyboardWritten => Ok(Json(WriteKeyboardResponse::ok())),
+            Payload::KeyboardWritten => Ok(payload.to_plain_text()),
             Payload::Pong
             | Payload::ShellCreated { .. }
             | Payload::CommandAccepted { .. }
@@ -89,18 +88,14 @@ impl McpServer {
     async fn send_command(
         &self,
         Parameters(request): Parameters<SendCommandRequest>,
-    ) -> Result<Json<SendCommandResponse>, String> {
-        let shell_id = parse_uuid(&request.shell_id)?;
+    ) -> Result<String, String> {
         let payload = self.call(&Request::SendCommand {
-            shell_id,
+            shell_id: request.shell_id,
             command: request.command,
             wait_ms: request.wait_ms,
         })?;
         match payload {
-            Payload::CommandAccepted {
-                command_id,
-                end_reason,
-            } => Ok(Json(SendCommandResponse::new(command_id, end_reason))),
+            Payload::CommandAccepted { .. } => Ok(payload.to_plain_text()),
             Payload::Pong
             | Payload::ShellCreated { .. }
             | Payload::KeyboardWritten
@@ -111,14 +106,10 @@ impl McpServer {
         name = "query",
         description = "Query a shell screen or command output by UUID."
     )]
-    async fn query(
-        &self,
-        Parameters(request): Parameters<QueryRequest>,
-    ) -> Result<Json<QueryResponse>, String> {
-        let id = parse_uuid(&request.id)?;
-        let payload = self.call(&Request::Query { id })?;
+    async fn query(&self, Parameters(request): Parameters<QueryRequest>) -> Result<String, String> {
+        let payload = self.call(&Request::Query { id: request.id })?;
         match payload {
-            Payload::Query(query) => Ok(Json(query.into())),
+            Payload::Query(_) => Ok(payload.to_plain_text()),
             Payload::Pong
             | Payload::ShellCreated { .. }
             | Payload::KeyboardWritten
@@ -133,9 +124,6 @@ pub(crate) async fn run(settings: Settings) -> Result<()> {
         .await?;
     service.waiting().await?;
     Ok(())
-}
-fn parse_uuid(value: &str) -> Result<Uuid, String> {
-    Uuid::parse_str(value).map_err(error_text)
 }
 fn error_text(error: impl core::fmt::Display) -> String {
     error.to_string()

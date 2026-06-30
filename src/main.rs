@@ -6,6 +6,7 @@ mod ipc;
 mod mcp;
 mod session;
 mod shell;
+mod working_dir;
 extern crate alloc;
 use anyhow::Result;
 use mimalloc::MiMalloc;

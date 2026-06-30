@@ -2,11 +2,11 @@ use crate::client;
 use crate::config;
 use crate::ipc::{Payload, Request};
 use crate::shell::ShellChoice;
+use crate::working_dir;
 use anyhow::{Context as _, Result};
 use base64_turbo::STANDARD;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use uuid::Uuid;
 #[derive(Parser)]
 #[command(version, about)]
 struct Args {
@@ -19,24 +19,24 @@ enum CliCommand {
     Daemon,
     NewShell {
         #[arg(long)]
-        cwd: PathBuf,
+        cwd: Option<PathBuf>,
         #[arg(long, default_value = "powershell")]
         shell: String,
     },
     WriteKeyboard {
-        shell_id: Uuid,
+        shell_id: String,
         #[arg(long)]
         base64: String,
     },
     SendCommand {
-        shell_id: Uuid,
+        shell_id: String,
         #[arg(long)]
         command: String,
         #[arg(long, default_value_t = 0)]
         wait_ms: u64,
     },
     Query {
-        id: Uuid,
+        id: String,
     },
 }
 pub(crate) async fn run() -> Result<()> {
@@ -48,14 +48,16 @@ pub(crate) async fn run() -> Result<()> {
         CliCommand::NewShell { cwd, shell } => {
             client::ensure_daemon(&settings.daemon_address)?;
             let shell_choice = ShellChoice::parse(&shell)?;
+            let resolved_cwd = working_dir::resolve(cwd.as_deref())?;
             let payload = client::call(
                 &settings.daemon_address,
                 &Request::NewShell {
-                    cwd,
+                    cwd: resolved_cwd,
                     shell: shell_choice,
                 },
             )?;
-            print_payload(&payload)
+            print_payload(&payload);
+            Ok(())
         }
         CliCommand::WriteKeyboard { shell_id, base64 } => {
             client::ensure_daemon(&settings.daemon_address)?;
@@ -70,7 +72,8 @@ pub(crate) async fn run() -> Result<()> {
                     bytes_base64,
                 },
             )?;
-            print_payload(&payload)
+            print_payload(&payload);
+            Ok(())
         }
         CliCommand::SendCommand {
             shell_id,
@@ -86,17 +89,17 @@ pub(crate) async fn run() -> Result<()> {
                     wait_ms,
                 },
             )?;
-            print_payload(&payload)
+            print_payload(&payload);
+            Ok(())
         }
         CliCommand::Query { id } => {
             client::ensure_daemon(&settings.daemon_address)?;
             let payload = client::call(&settings.daemon_address, &Request::Query { id })?;
-            print_payload(&payload)
+            print_payload(&payload);
+            Ok(())
         }
     }
 }
-fn print_payload(payload: &Payload) -> Result<()> {
-    let text = sonic_rs::to_string_pretty(payload).context("failed to serialize payload")?;
-    println!("{text}");
-    Ok(())
+fn print_payload(payload: &Payload) {
+    println!("{}", payload.to_plain_text());
 }

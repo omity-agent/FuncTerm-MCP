@@ -31,6 +31,7 @@ function Invoke-McpPtyCommand {
     $done = @{
         command_id   = $CommandId
         exit_code    = $exitCode
+        cwd          = (Get-Location).Path
         completed_at = (Get-Date).ToUniversalTime().ToString('o')
     } | ConvertTo-Json -Compress
     Set-Content -LiteralPath $doneFile -Value $done -Encoding utf8

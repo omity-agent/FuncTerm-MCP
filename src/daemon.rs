@@ -57,7 +57,7 @@ fn dispatch(manager: &Arc<Manager>, request: Request) -> Result<Payload> {
             let bytes = STANDARD
                 .decode(bytes_base64)
                 .context("failed to decode keyboard bytes")?;
-            manager.write_keyboard(shell_id, &bytes)?;
+            manager.write_keyboard(&shell_id, &bytes)?;
             Ok(Payload::KeyboardWritten)
         }
         Request::SendCommand {
@@ -65,12 +65,14 @@ fn dispatch(manager: &Arc<Manager>, request: Request) -> Result<Payload> {
             command,
             wait_ms,
         } => {
-            let (command_id, end_reason) = manager.send_command(shell_id, &command, wait_ms)?;
+            let (command_id, end_reason, query) =
+                manager.send_command(&shell_id, &command, wait_ms)?;
             Ok(Payload::CommandAccepted {
                 command_id,
                 end_reason,
+                query,
             })
         }
-        Request::Query { id } => Ok(Payload::Query(manager.query(id)?)),
+        Request::Query { id } => Ok(Payload::Query(manager.query(&id)?)),
     }
 }

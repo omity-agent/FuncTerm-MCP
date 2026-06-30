@@ -1,6 +1,5 @@
 use base64_turbo::STANDARD;
 use std::path::Path;
-use uuid::Uuid;
 pub(super) fn startup_args(cwd: &Path) -> Vec<String> {
     let init = initialization_script(cwd);
     vec![
@@ -13,7 +12,7 @@ pub(super) fn startup_args(cwd: &Path) -> Vec<String> {
         encode_command(&init),
     ]
 }
-pub(super) fn invocation(command_id: Uuid, command: &str, directory: &Path) -> String {
+pub(super) fn invocation(command_id: &str, command: &str, directory: &Path) -> String {
     let payload = STANDARD.encode(command.as_bytes());
     let quoted_directory = ps_quote(directory);
     format!(
