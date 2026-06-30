@@ -4,8 +4,10 @@ mod tests {
         create_shell, locked, locked_with_env, parse_command_query, parse_shell_query, run_cli,
         send_command,
     };
+    use core::sync::atomic::{AtomicU64, Ordering};
     use std::fs;
     use std::path::{Path, PathBuf};
+    static CASE_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
     struct ShellCase {
         name: &'static str,
         env_var: &'static str,
@@ -104,10 +106,11 @@ mod tests {
         ]
     }
     fn case_dir(shell: &str, leaf: &str) -> PathBuf {
+        let unique = CASE_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
         let path = std::env::temp_dir()
             .join("agent")
             .join("shell-mcp-cli")
-            .join(format!("{shell}-{}", uuid::Uuid::new_v4().simple()))
+            .join(format!("{shell}-{}-{unique}", std::process::id()))
             .join("quote ' segment")
             .join(leaf);
         fs::create_dir_all(&path).unwrap();

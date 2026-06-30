@@ -35,7 +35,7 @@ impl Manager {
     ) -> Result<(String, EndReason, QueryResult)> {
         let shell = self.shell(shell_id)?;
         self.ensure_shell_running(shell_id, &shell)?;
-        let command_id = self.next_id()?;
+        let command_id = self.next_command_id()?;
         reserve_shell(&shell, &command_id)?;
         let initial_cwd = Self::shell_cwd(&shell)?;
         let record = create_record(&shell.command_root, &command_id, shell_id, &initial_cwd)?;

@@ -104,7 +104,7 @@ impl McpServer {
     }
     #[tool(
         name = "query",
-        description = "Query a shell screen or command output by UUID."
+        description = "Query a shell screen or command output by ID."
     )]
     async fn query(&self, Parameters(request): Parameters<QueryRequest>) -> Result<String, String> {
         let payload = self.call(&Request::Query { id: request.id })?;

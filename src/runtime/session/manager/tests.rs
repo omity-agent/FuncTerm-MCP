@@ -38,3 +38,18 @@ fn immediately_exiting_shell_is_rejected_before_registration() {
         .unwrap_err();
     assert!(error.to_string().contains("startup"));
 }
+#[test]
+fn generated_ids_have_kind_prefixes_and_base36_suffixes() {
+    let manager = Manager::new(test_settings()).unwrap();
+    assert_id(&manager.next_shell_id().unwrap(), "shell-");
+    assert_id(&manager.next_command_id().unwrap(), "command-");
+}
+fn assert_id(id: &str, prefix: &str) {
+    let suffix = id.strip_prefix(prefix).unwrap();
+    assert_eq!(suffix.len(), 12);
+    assert!(
+        suffix
+            .chars()
+            .all(|value| value.is_ascii_lowercase() || value.is_ascii_digit())
+    );
+}

@@ -1,12 +1,14 @@
 use super::daemon;
 use super::parse::{ShellCreated, parse_shell_created};
 use super::process::{output_from_parts, read_pipe, wait_for_status};
+use core::sync::atomic::{AtomicU64, Ordering};
 use core::time::Duration;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 pub(crate) const CLI_COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
 const PIPE_CLOSE_TIMEOUT: Duration = Duration::from_secs(5);
+static OUTPUT_COUNTER: AtomicU64 = AtomicU64::new(0);
 pub(crate) fn exe() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_shell-mcp-pty"))
 }
@@ -81,7 +83,8 @@ fn output_paths() -> (PathBuf, PathBuf) {
         .join("agent")
         .join("shell-mcp-test-output");
     fs::create_dir_all(&output_dir).unwrap();
-    let prefix = format!("{}-{}", std::process::id(), uuid::Uuid::new_v4().simple());
+    let unique = OUTPUT_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let prefix = format!("{}-{unique}", std::process::id());
     (
         output_dir.join(format!("{prefix}.stdout.txt")),
         output_dir.join(format!("{prefix}.stderr.txt")),

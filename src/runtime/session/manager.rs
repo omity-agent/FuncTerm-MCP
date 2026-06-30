@@ -53,7 +53,7 @@ impl Manager {
                 cwd.display()
             );
         }
-        let shell_id = self.next_id()?;
+        let shell_id = self.next_shell_id()?;
         let command_root = self.root.join("commands").join(&shell_id);
         fs::create_dir_all(&command_root).context("failed to create command root")?;
         let startup = shell.startup(cwd, &command_root)?;

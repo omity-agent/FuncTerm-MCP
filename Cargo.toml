@@ -85,6 +85,7 @@ base64-turbo = "*"
 clap = { version = "*", features = ["derive"] }
 mimalloc = { version = "*", features = ["v3"] }
 portable-pty = "*"
+getrandom = "*"
 rmcp = { version = "*", features = ["server", "macros", "transport-io"] }
 schemars = "*"
 serde = { version = "*", features = ["derive"] }
@@ -92,5 +93,4 @@ sonic-rs = "*"
 thiserror = "*"
 tokio = { version = "*", features = ["full"] }
 toml = "*"
-uuid = { version = "*", features = ["v4", "serde"] }
 vt100 = "*"
