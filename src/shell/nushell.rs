@@ -8,13 +8,14 @@ pub(super) fn startup_args(cwd: &Path, ready_file: &Path) -> Vec<String> {
         initialization_script(cwd, ready_file),
     ]
 }
-pub(super) fn invocation(command_id: &str, command: &str, directory: &Path) -> String {
+pub(super) fn invocation(command_id: &str, command: &str, directory: &Path, cwd: &Path) -> String {
     let payload = STANDARD.encode(command.as_bytes());
     format!(
-        "mcp_pty_command {} {} {}\n",
+        "mcp_pty_command {} {} {} {}\r\n",
         nu_quote(command_id),
         nu_quote(&payload),
-        nu_quote(&directory.to_string_lossy())
+        nu_quote(&directory.to_string_lossy()),
+        nu_quote(&cwd.to_string_lossy())
     )
 }
 fn initialization_script(cwd: &Path, ready_file: &Path) -> String {
@@ -26,8 +27,8 @@ fn initialization_script(cwd: &Path, ready_file: &Path) -> String {
     )
 }
 fn nu_quote(value: &str) -> String {
-    let text = value.replace('\'', "''");
-    format!("'{text}'")
+    let text = value.replace('\\', "\\\\").replace('"', "\\\"");
+    format!("\"{text}\"")
 }
 #[cfg(test)]
 #[expect(
@@ -38,7 +39,7 @@ mod tests {
     #[test]
     fn quotes_single_quotes_for_nushell() {
         let quoted = super::nu_quote("a'b");
-        assert_eq!(quoted, "'a''b'");
+        assert_eq!(quoted, "\"a'b\"");
     }
     #[test]
     fn initialization_defines_function_and_cwd() {
@@ -47,7 +48,7 @@ mod tests {
             std::path::Path::new("F:\\ready'file"),
         );
         assert!(script.contains("def mcp_pty_command"));
-        assert!(script.contains("cd 'F:\\dir with '' quote'"));
-        assert!(script.contains("save --force --raw 'F:\\ready''file'"));
+        assert!(script.contains("cd \"F:\\\\dir with ' quote\""));
+        assert!(script.contains("save --force --raw \"F:\\\\ready'file\""));
     }
 }

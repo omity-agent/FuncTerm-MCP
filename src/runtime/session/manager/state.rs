@@ -1,6 +1,6 @@
 use super::{Manager, ShellSession};
-use crate::session::records::{CommandRecord, read_done};
-use crate::session::support::lock_mutex;
+use crate::runtime::session::records::{CommandRecord, read_done};
+use crate::runtime::session::support::lock_mutex;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use std::path::{Path, PathBuf};

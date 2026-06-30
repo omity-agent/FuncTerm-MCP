@@ -1,4 +1,4 @@
-use crate::ipc::{Payload, Request, Response};
+use crate::runtime::ipc::{Payload, Request, Response};
 use anyhow::{Context as _, Result, bail};
 use core::time::Duration;
 use std::io::{BufRead as _, BufReader, Write as _};

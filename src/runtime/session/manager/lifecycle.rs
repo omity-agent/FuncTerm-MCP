@@ -1,5 +1,5 @@
 use super::ShellSession;
-use crate::session::support::lock_mutex;
+use crate::runtime::session::support::lock_mutex;
 use anyhow::{Result, bail};
 #[expect(
     clippy::missing_trait_methods,

@@ -17,13 +17,14 @@ pub(super) fn startup_args(
         "-i".to_owned(),
     ])
 }
-pub(super) fn invocation(command_id: &str, command: &str, directory: &Path) -> String {
+pub(super) fn invocation(command_id: &str, command: &str, directory: &Path, cwd: &Path) -> String {
     let payload = STANDARD.encode(command.as_bytes());
     format!(
-        "mcp_pty_command {} {} {}\n",
+        "mcp_pty_command {} {} {} {}\n",
         sh_quote(command_id),
         sh_quote(&payload),
-        sh_quote(&bash_path(directory))
+        sh_quote(&bash_path(directory)),
+        sh_quote(&bash_path(cwd))
     )
 }
 fn initialization_script(cwd: &Path, ready_file: &Path) -> String {

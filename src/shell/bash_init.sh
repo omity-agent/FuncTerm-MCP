@@ -2,6 +2,7 @@ mcp_pty_command() {
     local command_id="$1"
     local payload="$2"
     local directory="$3"
+    local working_directory="$4"
     mkdir -p "$directory" || return 1
     local stdout_file="$directory/stdout.txt"
     local stderr_file="$directory/stderr.txt"
@@ -17,6 +18,7 @@ mcp_pty_command() {
         cat "$stderr_file" >&2
         return 1
     fi
+    cd "$working_directory" || return 1
     { eval "$script"; } > >(tee "$stdout_file") 2> >(tee "$stderr_file" >&2)
     local exit_code=$?
     local cwd_json

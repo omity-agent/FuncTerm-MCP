@@ -1,4 +1,4 @@
-use crate::config::Settings;
+use crate::runtime::config::Settings;
 mod bash;
 mod nushell;
 mod powershell;
@@ -35,11 +35,19 @@ impl ShellChoice {
         };
         Ok(ShellStartup { args, ready_file })
     }
-    pub(crate) fn invocation(self, command_id: &str, command: &str, directory: &Path) -> String {
+    pub(crate) fn invocation(
+        self,
+        command_id: &str,
+        command: &str,
+        directory: &Path,
+        cwd: &Path,
+    ) -> String {
         match self {
-            Self::PowerShell | Self::Pwsh => powershell::invocation(command_id, command, directory),
-            Self::Bash => bash::invocation(command_id, command, directory),
-            Self::NuShell => nushell::invocation(command_id, command, directory),
+            Self::PowerShell | Self::Pwsh => {
+                powershell::invocation(command_id, command, directory, cwd)
+            }
+            Self::Bash => bash::invocation(command_id, command, directory, cwd),
+            Self::NuShell => nushell::invocation(command_id, command, directory, cwd),
         }
     }
     pub(crate) fn parse(value: &str) -> Result<Self> {

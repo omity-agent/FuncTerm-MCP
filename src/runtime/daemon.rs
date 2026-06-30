@@ -1,6 +1,6 @@
-use crate::config::Settings;
-use crate::ipc::{Payload, Request, Response};
-use crate::session::Manager;
+use crate::runtime::config::Settings;
+use crate::runtime::ipc::{Payload, Request, Response};
+use crate::runtime::session::Manager;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use base64_turbo::STANDARD;

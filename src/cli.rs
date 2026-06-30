@@ -1,8 +1,8 @@
-use crate::client;
-use crate::config;
-use crate::ipc::{Payload, Request};
+use crate::runtime::client;
+use crate::runtime::config;
+use crate::runtime::ipc::{Payload, Request};
+use crate::runtime::working_dir;
 use crate::shell::ShellChoice;
-use crate::working_dir;
 use anyhow::{Context as _, Result};
 use base64_turbo::STANDARD;
 use clap::{Parser, Subcommand};
@@ -44,7 +44,7 @@ pub(crate) async fn run() -> Result<()> {
     let settings = config::load()?;
     match args.command.unwrap_or(CliCommand::Mcp) {
         CliCommand::Mcp => crate::mcp::run(settings).await,
-        CliCommand::Daemon => crate::daemon::run(settings),
+        CliCommand::Daemon => crate::runtime::daemon::run(settings),
         CliCommand::NewShell { cwd, shell } => {
             client::ensure_daemon(&settings.daemon_address)?;
             let shell_choice = ShellChoice::parse(&shell)?;

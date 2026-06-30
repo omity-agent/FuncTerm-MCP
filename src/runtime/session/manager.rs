@@ -4,10 +4,10 @@ mod startup;
 mod state;
 #[cfg(test)]
 mod tests;
-use crate::config::Settings;
-use crate::ipc::QueryResult;
-use crate::session::records::{CommandRecord, command_query};
-use crate::session::support::{lock_mutex, start_reader};
+use crate::runtime::config::Settings;
+use crate::runtime::ipc::QueryResult;
+use crate::runtime::session::records::{CommandRecord, command_query};
+use crate::runtime::session::support::{lock_mutex, start_reader};
 use crate::shell::ShellChoice;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result, bail};

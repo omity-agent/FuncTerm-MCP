@@ -1,9 +1,9 @@
 mod types;
-use crate::client;
-use crate::config::Settings;
-use crate::ipc::{Payload, Request};
+use crate::runtime::client;
+use crate::runtime::config::Settings;
+use crate::runtime::ipc::{Payload, Request};
+use crate::runtime::working_dir;
 use crate::shell::ShellChoice;
-use crate::working_dir;
 use anyhow::Result;
 use base64_turbo::STANDARD;
 use rmcp::{

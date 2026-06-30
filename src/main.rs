@@ -1,12 +1,7 @@
 mod cli;
-mod client;
-mod config;
-mod daemon;
-mod ipc;
 mod mcp;
-mod session;
+mod runtime;
 mod shell;
-mod working_dir;
 extern crate alloc;
 use anyhow::Result;
 use mimalloc::MiMalloc;

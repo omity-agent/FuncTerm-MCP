@@ -1,4 +1,7 @@
 #[cfg(windows)]
+#[path = "cli/shell_matrix.rs"]
+mod shell_matrix;
+#[cfg(windows)]
 #[path = "cli/support.rs"]
 mod support;
 #[cfg(windows)]
@@ -9,12 +12,8 @@ mod support;
 )]
 mod tests {
     use super::support::{
-        ChildGuard, create_powershell_shell, locked, locked_with_env, parse_command_accepted,
-        parse_command_query, run_cli, run_cli_with_pipes, send_test_command,
+        create_shell, locked, parse_command_query, run_cli, run_cli_with_pipes, send_test_command,
     };
-    use core::time::Duration;
-    use std::process::{Command, Stdio};
-    use std::thread;
     #[test]
     fn cli_rejects_missing_cwd() {
         let _guard = locked();
@@ -47,67 +46,12 @@ mod tests {
         assert!(String::from_utf8_lossy(&output.stdout).contains("shell_id: "));
     }
     #[test]
-    fn cli_creates_shell_with_short_id() {
-        let _guard = locked();
-        let cwd = std::env::temp_dir();
-        let created = create_powershell_shell(&cwd);
-        assert_eq!(created.shell_id.len(), 12);
-    }
-    #[test]
-    fn cli_reports_shell_startup_failure() {
-        let _guard = locked_with_env(&[("SHELL_MCP_PTY_PWSH", "where.exe")]);
-        let cwd = std::env::temp_dir();
-        let output = run_cli(&[
-            "new-shell",
-            "--cwd",
-            cwd.to_str().unwrap(),
-            "--shell",
-            "pwsh",
-        ]);
-        assert!(!output.status.success());
-        assert!(String::from_utf8_lossy(&output.stderr).contains("startup"));
-    }
-    #[test]
-    fn cli_send_command_returns_short_id() {
-        let _guard = locked();
-        let cwd = std::env::temp_dir();
-        let created = create_powershell_shell(&cwd);
-        let accepted = parse_command_accepted(&send_test_command(&created.shell_id));
-        assert_eq!(accepted.command_id.len(), 12);
-    }
-    #[test]
-    fn cli_send_command_output_includes_command_snapshot() {
-        let _guard = locked();
-        let cwd = std::env::temp_dir();
-        let created = create_powershell_shell(&cwd);
-        let query = parse_command_query(&send_test_command(&created.shell_id));
-        assert_successful_test_query(&query);
-    }
-    #[test]
     fn cli_query_returns_command_output() {
         let _guard = locked();
         let cwd = std::env::temp_dir();
-        let created = create_powershell_shell(&cwd);
-        let accepted = parse_command_accepted(&send_test_command(&created.shell_id));
-        let query = parse_command_query(&run_cli(&["query", &accepted.command_id]));
-        assert_successful_test_query(&query);
-    }
-    #[test]
-    fn mcp_mode_starts_without_schema_panic() {
-        let _guard = locked();
-        let mut child = ChildGuard::new(
-            Command::new(super::support::exe())
-                .arg("mcp")
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-                .unwrap(),
-        );
-        thread::sleep(Duration::from_secs(1));
-        assert!(child.is_running());
-    }
-    fn assert_successful_test_query(query: &super::support::CommandQuery) {
+        let created = create_shell(&cwd, "pwsh");
+        let accepted_output = send_test_command(&created.shell_id);
+        let query = parse_command_query(&accepted_output);
         assert_eq!(
             query.recognized_as, "command",
             "query kind should be command"

@@ -12,11 +12,12 @@ pub(super) fn startup_args(cwd: &Path, ready_file: &Path) -> Vec<String> {
         encode_command(&init),
     ]
 }
-pub(super) fn invocation(command_id: &str, command: &str, directory: &Path) -> String {
+pub(super) fn invocation(command_id: &str, command: &str, directory: &Path, cwd: &Path) -> String {
     let payload = STANDARD.encode(command.as_bytes());
     let quoted_directory = ps_quote(directory);
+    let quoted_cwd = ps_quote(cwd);
     format!(
-        "Invoke-McpPtyCommand -CommandId '{command_id}' -Payload '{payload}' -Directory {quoted_directory}\r\n"
+        "Invoke-McpPtyCommand -CommandId '{command_id}' -Payload '{payload}' -Directory {quoted_directory} -WorkingDirectory {quoted_cwd}\r\n"
     )
 }
 fn initialization_script(cwd: &Path, ready_file: &Path) -> String {

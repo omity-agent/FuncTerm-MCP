@@ -2,7 +2,8 @@ function Invoke-McpPtyCommand {
     param(
         [Parameter(Mandatory = $true)][string]$CommandId,
         [Parameter(Mandatory = $true)][string]$Payload,
-        [Parameter(Mandatory = $true)][string]$Directory
+        [Parameter(Mandatory = $true)][string]$Directory,
+        [Parameter(Mandatory = $true)][string]$WorkingDirectory
     )
     New-Item -ItemType Directory -Force -Path $Directory | Out-Null
     $stdoutFile = Join-Path $Directory 'stdout.txt'
@@ -11,13 +12,18 @@ function Invoke-McpPtyCommand {
     Set-Content -LiteralPath $stdoutFile -Value '' -NoNewline -Encoding utf8
     Set-Content -LiteralPath $stderrFile -Value '' -NoNewline -Encoding utf8
     try {
+        Set-Location -LiteralPath $WorkingDirectory
+        $global:LASTEXITCODE = $null
         $script = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Payload))
         & ([scriptblock]::Create($script)) 2> $stderrFile | Tee-Object -FilePath $stdoutFile
         if ($null -ne $global:LASTEXITCODE) {
             $exitCode = [int]$global:LASTEXITCODE
         }
-        else {
+        elseif ($?) {
             $exitCode = 0
+        }
+        else {
+            $exitCode = 1
         }
         if ((Test-Path -LiteralPath $stderrFile) -and ((Get-Item -LiteralPath $stderrFile).Length -gt 0)) {
             Get-Content -LiteralPath $stderrFile | ForEach-Object { [Console]::Error.WriteLine($_) }

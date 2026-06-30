@@ -1,5 +1,5 @@
 use super::Manager;
-use crate::config::Settings;
+use crate::runtime::config::Settings;
 use crate::shell::ShellChoice;
 use std::path::Path;
 fn test_settings() -> Settings {

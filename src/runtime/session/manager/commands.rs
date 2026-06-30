@@ -1,8 +1,10 @@
 use super::lifecycle::{release_shell, reserve_shell};
 use super::{Manager, ShellSession};
-use crate::ipc::{EndReason, QueryResult};
-use crate::session::records::{CommandRecord, command_query, create_record, wait_for_done};
-use crate::session::support::lock_mutex;
+use crate::runtime::ipc::{EndReason, QueryResult};
+use crate::runtime::session::records::{
+    CommandRecord, command_query, create_record, wait_for_done,
+};
+use crate::runtime::session::support::lock_mutex;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result, bail};
 use core::time::Duration;
@@ -84,7 +86,9 @@ impl Manager {
             .stdout
             .parent()
             .context("missing command directory")?;
-        let line = shell.choice.invocation(command_id, command, directory);
+        let line = shell
+            .choice
+            .invocation(command_id, command, directory, &record.initial_cwd);
         let mut writer = lock_mutex(&shell.writer, "writer")?;
         writer
             .write_all(line.as_bytes())

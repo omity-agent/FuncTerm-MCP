@@ -1,4 +1,4 @@
-use crate::ipc::QueryResult;
+use crate::runtime::ipc::QueryResult;
 use anyhow::{Context as _, Result};
 use core::time::Duration;
 use serde::Deserialize;

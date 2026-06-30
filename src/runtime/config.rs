@@ -1,6 +1,6 @@
 use anyhow::{Context as _, Result};
 use serde::Deserialize;
-const SETTINGS: &str = include_str!("../settings.toml");
+const SETTINGS: &str = include_str!("../../settings.toml");
 #[derive(Clone, Debug, Deserialize)]
 pub(crate) struct Settings {
     pub(crate) daemon_address: String,

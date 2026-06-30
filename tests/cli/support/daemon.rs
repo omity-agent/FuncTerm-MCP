@@ -1,4 +1,5 @@
-use super::{CLI_COMMAND_TIMEOUT, ChildGuard, exe};
+use super::command::{CLI_COMMAND_TIMEOUT, exe};
+use super::process::ChildGuard;
 use core::time::Duration;
 use std::io::{BufRead as _, BufReader, Write as _};
 use std::net::TcpStream;
@@ -28,7 +29,6 @@ pub(crate) fn locked() -> TestGuard {
     locked_with_env(&[])
 }
 pub(crate) fn locked_with_env(extra_env: &[(&str, &str)]) -> TestGuard {
-    super::powershell_version::print_once();
     let guard = CLI_TEST_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
