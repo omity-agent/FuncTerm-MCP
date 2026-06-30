@@ -1,6 +1,7 @@
 use base64_turbo::STANDARD;
 use std::path::Path;
-pub(super) fn power_shell_args(cwd: &Path) -> Vec<String> {
+use uuid::Uuid;
+pub(super) fn startup_args(cwd: &Path) -> Vec<String> {
     let init = initialization_script(cwd);
     vec![
         "-NoLogo".to_owned(),
@@ -12,14 +13,21 @@ pub(super) fn power_shell_args(cwd: &Path) -> Vec<String> {
         encode_command(&init),
     ]
 }
-pub(super) fn initialization_script(cwd: &Path) -> String {
+pub(super) fn invocation(command_id: Uuid, command: &str, directory: &Path) -> String {
+    let payload = STANDARD.encode(command.as_bytes());
+    let quoted_directory = ps_quote(directory);
+    format!(
+        "Invoke-McpPtyCommand -CommandId '{command_id}' -Payload '{payload}' -Directory {quoted_directory}\r\n"
+    )
+}
+fn initialization_script(cwd: &Path) -> String {
     format!(
         "{}\nSet-Location -LiteralPath {}",
         include_str!("../powershell_init.ps1"),
         ps_quote(cwd)
     )
 }
-pub(super) fn ps_quote(path: &Path) -> String {
+fn ps_quote(path: &Path) -> String {
     let text = path.to_string_lossy().replace('\'', "''");
     format!("'{text}'")
 }

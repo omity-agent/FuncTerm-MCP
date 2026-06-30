@@ -75,7 +75,7 @@ codegen-units = 1
 rpath = false
 
 [package]
-name = "powershell-mcp-pty"
+name = "shell-mcp-pty"
 version = "0.0.0"
 edition = "2024"
 

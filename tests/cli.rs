@@ -56,7 +56,7 @@ mod tests {
         exit_code: Option<i32>,
     }
     fn exe() -> PathBuf {
-        PathBuf::from(env!("CARGO_BIN_EXE_powershell-mcp-pty"))
+        PathBuf::from(env!("CARGO_BIN_EXE_shell-mcp-pty"))
     }
     fn run_cli(arguments: &[&str]) -> std::process::Output {
         Command::new(exe()).args(arguments).output().unwrap()

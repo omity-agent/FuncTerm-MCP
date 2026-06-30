@@ -42,7 +42,7 @@ impl McpServer {
         client::ensure_daemon(&self.settings.daemon_address).map_err(error_text)?;
         client::call(&self.settings.daemon_address, request).map_err(error_text)
     }
-    #[tool(name = "new_shell", description = "Create a new PowerShell shell.")]
+    #[tool(name = "new_shell", description = "Create a new interactive shell.")]
     async fn new_shell(
         &self,
         Parameters(request): Parameters<NewShellRequest>,

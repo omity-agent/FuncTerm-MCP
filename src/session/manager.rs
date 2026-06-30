@@ -3,13 +3,11 @@ mod lifecycle;
 mod tests;
 use crate::config::Settings;
 use crate::ipc::{EndReason, QueryResult};
-use crate::session::powershell::{power_shell_args, ps_quote};
 use crate::session::records::{CommandRecord, command_query, create_record, wait_for_done};
 use crate::session::support::{lock_mutex, start_reader};
-use crate::shell::ShellChoice;
+use crate::shell::{ShellChoice, ShellStartup};
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result, bail};
-use base64_turbo::STANDARD;
 use core::time::Duration;
 use lifecycle::{release_shell, reserve_shell};
 use portable_pty::{Child, CommandBuilder, PtySize, native_pty_system};
@@ -27,6 +25,7 @@ pub(crate) struct Manager {
     commands: Mutex<HashMap<Uuid, CommandRecord>>,
 }
 pub(super) struct ShellSession {
+    choice: ShellChoice,
     writer: Mutex<Box<dyn Write + Send>>,
     screen: Arc<Mutex<vt100::Parser>>,
     busy: Mutex<Option<Uuid>>,
@@ -35,9 +34,7 @@ pub(super) struct ShellSession {
 }
 impl Manager {
     pub(crate) fn new(settings: Settings) -> Result<Self> {
-        let root = std::env::temp_dir()
-            .join("agent")
-            .join("powershell-mcp-pty");
+        let root = std::env::temp_dir().join("agent").join("shell-mcp-pty");
         fs::create_dir_all(&root).context("failed to create daemon temp root")?;
         Ok(Self {
             settings,
@@ -56,6 +53,7 @@ impl Manager {
         let shell_id = Uuid::new_v4();
         let command_root = self.root.join("commands").join(shell_id.to_string());
         fs::create_dir_all(&command_root).context("failed to create command root")?;
+        let startup = shell.startup(cwd, &command_root)?;
         let pty_system = native_pty_system();
         let size = PtySize {
             rows: self.settings.terminal_rows,
@@ -65,7 +63,7 @@ impl Manager {
         };
         let pair = pty_system.openpty(size).context("failed to open pty")?;
         let mut command = CommandBuilder::new(shell.executable(&self.settings));
-        command.args(power_shell_args(cwd));
+        apply_startup(&mut command, startup);
         command.cwd(cwd);
         let child = pair
             .slave
@@ -86,6 +84,7 @@ impl Manager {
         )));
         start_reader(Arc::clone(&screen), reader);
         let session = Arc::new(ShellSession {
+            choice: shell,
             writer: Mutex::new(writer),
             screen,
             busy: Mutex::new(None),
@@ -152,11 +151,11 @@ impl Manager {
         command: &str,
         record: &CommandRecord,
     ) -> Result<()> {
-        let payload = STANDARD.encode(command.as_bytes());
-        let directory = ps_quote(record.stdout.parent().context("missing command dir")?);
-        let line = format!(
-            "Invoke-McpPtyCommand -CommandId '{command_id}' -Payload '{payload}' -Directory {directory}\r\n"
-        );
+        let directory = record
+            .stdout
+            .parent()
+            .context("missing command directory")?;
+        let line = shell.choice.invocation(command_id, command, directory);
         let mut writer = lock_mutex(&shell.writer, "writer")?;
         writer
             .write_all(line.as_bytes())
@@ -182,4 +181,7 @@ impl Manager {
             }
         });
     }
+}
+fn apply_startup(command: &mut CommandBuilder, startup: ShellStartup) {
+    command.args(startup.args);
 }

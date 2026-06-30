@@ -9,6 +9,8 @@ fn test_settings() -> Settings {
         terminal_cols: 120,
         windows_powershell: "powershell.exe".to_owned(),
         pwsh: "pwsh.exe".to_owned(),
+        bash: "bash.exe".to_owned(),
+        nushell: "nu.exe".to_owned(),
     }
 }
 #[test]
