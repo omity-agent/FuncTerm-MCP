@@ -23,7 +23,7 @@ pub(super) fn invocation(command_id: Uuid, command: &str, directory: &Path) -> S
 fn initialization_script(cwd: &Path) -> String {
     format!(
         "{}\nSet-Location -LiteralPath {}",
-        include_str!("../powershell_init.ps1"),
+        include_str!("./powershell_init.ps1"),
         ps_quote(cwd)
     )
 }
