@@ -85,7 +85,7 @@ base64-turbo = "*"
 clap = { version = "*", features = ["derive"] }
 mimalloc = { version = "*", features = ["v3"] }
 portable-pty = "*"
-getrandom = "*"
+nanoid = "*"
 rmcp = { version = "*", features = ["server", "macros", "transport-io"] }
 schemars = "*"
 serde = { version = "*", features = ["derive"] }

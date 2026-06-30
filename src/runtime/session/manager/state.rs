@@ -2,12 +2,13 @@ use super::{Manager, ShellSession};
 use crate::runtime::session::records::{CommandRecord, read_done};
 use crate::runtime::session::support::lock_mutex;
 use alloc::sync::Arc;
-use anyhow::{Context as _, Result, anyhow};
+use anyhow::{Context as _, Result};
 use std::path::{Path, PathBuf};
 const ID_LENGTH: usize = 12;
-const ID_ALPHABET: &[u8; 36] = b"0123456789abcdefghijklmnopqrstuvwxyz";
-const ID_ALPHABET_LEN: u8 = 36;
-const ID_RANDOM_CEILING: u8 = 252;
+const ID_ALPHABET: [char; 36] = [
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i',
+    'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+];
 impl Manager {
     pub(super) fn next_shell_id(&self) -> Result<String> {
         self.next_id("shell-")
@@ -17,7 +18,7 @@ impl Manager {
     }
     fn next_id(&self, prefix: &str) -> Result<String> {
         loop {
-            let id = format!("{prefix}{}", random_id_suffix()?);
+            let id = format!("{prefix}{}", random_id_suffix());
             if !self.id_exists(&id)? {
                 return Ok(id);
             }
@@ -47,36 +48,8 @@ impl Manager {
         Ok(shell_exists || command_exists)
     }
 }
-fn random_id_suffix() -> Result<String> {
-    let mut id = String::with_capacity(ID_LENGTH);
-    while id.len() < ID_LENGTH {
-        let mut bytes = [0_u8; ID_LENGTH];
-        getrandom::fill(&mut bytes)
-            .map_err(|error| anyhow!("failed to generate random id: {error}"))?;
-        for byte in bytes {
-            if byte < ID_RANDOM_CEILING {
-                let index = alphabet_index(byte)?;
-                let selected = ID_ALPHABET
-                    .get(index)
-                    .copied()
-                    .with_context(|| format!("generated id index out of range: {index}"))?;
-                id.push(char::from(selected));
-                if id.len() == ID_LENGTH {
-                    return Ok(id);
-                }
-            }
-        }
-    }
-    Ok(id)
-}
-fn alphabet_index(byte: u8) -> Result<usize> {
-    let mut index = byte;
-    while index >= ID_ALPHABET_LEN {
-        index = index
-            .checked_sub(ID_ALPHABET_LEN)
-            .context("generated id index underflowed")?;
-    }
-    Ok(usize::from(index))
+fn random_id_suffix() -> String {
+    nanoid::nanoid!(ID_LENGTH, &ID_ALPHABET)
 }
 pub(super) fn path_text(path: &Path) -> Result<String> {
     path.to_str()
