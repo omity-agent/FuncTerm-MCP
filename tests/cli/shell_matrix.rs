@@ -135,6 +135,7 @@ mod tests {
             query.recognized_as, "shell",
             "{shell} query kind should be shell"
         );
+        assert!(query.alive, "{shell} query should report live shell");
         assert_cwd(&query.cwd, cwd, shell);
         assert!(
             !query.screen.is_empty(),

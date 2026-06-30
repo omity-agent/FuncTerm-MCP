@@ -12,6 +12,7 @@ pub(crate) struct CommandQuery {
 }
 pub(crate) struct ShellQuery {
     pub(crate) recognized_as: String,
+    pub(crate) alive: bool,
     pub(crate) cwd: String,
     pub(crate) screen: String,
 }
@@ -33,6 +34,7 @@ pub(crate) fn parse_shell_query(output: &Output) -> ShellQuery {
     let (_, screen) = text.split_once("screen:\n").unwrap();
     ShellQuery {
         recognized_as: field(&text, "recognized_as"),
+        alive: field(&text, "alive").parse().unwrap(),
         cwd: field(&text, "cwd"),
         screen: screen.to_owned(),
     }

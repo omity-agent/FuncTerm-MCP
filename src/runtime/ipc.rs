@@ -53,6 +53,7 @@ pub(crate) enum EndReason {
 #[serde(tag = "recognized_as", rename_all = "snake_case")]
 pub(crate) enum QueryResult {
     Shell {
+        alive: bool,
         cwd: String,
         screen: String,
     },
@@ -92,8 +93,8 @@ impl QueryResult {
     )]
     pub(crate) fn to_plain_text(&self) -> String {
         match self {
-            Self::Shell { cwd, screen } => {
-                format!("recognized_as: shell\ncwd: {cwd}\nscreen:\n{screen}")
+            Self::Shell { alive, cwd, screen } => {
+                format!("recognized_as: shell\nalive: {alive}\ncwd: {cwd}\nscreen:\n{screen}")
             }
             Self::Command {
                 cwd,

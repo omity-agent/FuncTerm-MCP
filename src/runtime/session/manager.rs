@@ -103,9 +103,10 @@ impl Manager {
     }
     pub(crate) fn query(&self, id: &str) -> Result<QueryResult> {
         if let Some(shell) = self.find_shell(id)? {
+            let alive = Self::shell_alive(&shell)?;
             let screen = lock_mutex(&shell.screen, "screen")?.screen().contents();
             let cwd = path_text(&Self::shell_cwd(&shell)?)?;
-            return Ok(QueryResult::Shell { cwd, screen });
+            return Ok(QueryResult::Shell { alive, cwd, screen });
         }
         if let Some(record) = self.find_command(id)? {
             let fallback_cwd = self.command_fallback_cwd(&record)?;
@@ -118,5 +119,11 @@ impl Manager {
     }
     fn find_command(&self, id: &str) -> Result<Option<CommandRecord>> {
         Ok(lock_mutex(&self.commands, "command")?.get(id).cloned())
+    }
+    fn shell_alive(shell: &ShellSession) -> Result<bool> {
+        let status = lock_mutex(&shell.child, "child")?
+            .try_wait()
+            .context("failed to poll shell child")?;
+        Ok(status.is_none())
     }
 }

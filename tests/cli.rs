@@ -14,6 +14,8 @@ mod tests {
     use super::support::{
         create_shell, locked, parse_command_query, run_cli, run_cli_with_pipes, send_test_command,
     };
+    use core::time::Duration;
+    use std::thread;
     #[test]
     fn cli_rejects_missing_cwd() {
         let _guard = locked();
@@ -64,5 +66,25 @@ mod tests {
         );
         assert_eq!(query.stderr, "", "stderr should be empty");
         assert_eq!(query.exit_code, Some(0_i32), "exit code should be zero");
+    }
+    #[test]
+    fn cli_query_reports_shell_liveness() {
+        let _guard = locked();
+        let cwd = std::env::temp_dir();
+        let created = create_shell(&cwd, "powershell");
+        let alive_query =
+            super::support::parse_shell_query(&run_cli(&["query", &created.shell_id]));
+        assert!(alive_query.alive, "new shell should be alive");
+        let _closed = super::support::send_command(&created.shell_id, "exit", 200);
+        let mut dead_query =
+            super::support::parse_shell_query(&run_cli(&["query", &created.shell_id]));
+        for _attempt in 0_usize..20 {
+            if !dead_query.alive {
+                return;
+            }
+            thread::sleep(Duration::from_millis(100));
+            dead_query = super::support::parse_shell_query(&run_cli(&["query", &created.shell_id]));
+        }
+        panic!("query should report exited shell as not alive");
     }
 }

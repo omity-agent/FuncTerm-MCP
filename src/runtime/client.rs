@@ -2,13 +2,20 @@ use crate::runtime::ipc::{Payload, Request, Response};
 use anyhow::{Context as _, Result, bail};
 use core::time::Duration;
 use std::io::{BufRead as _, BufReader, Write as _};
-use std::net::TcpStream;
+use std::net::{TcpStream, ToSocketAddrs as _};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Instant;
+const IPC_TIMEOUT: Duration = Duration::from_secs(15);
+const DAEMON_STARTUP_TIMEOUT: Duration = Duration::from_secs(15);
 pub(crate) fn call(address: &str, request: &Request) -> Result<Payload> {
-    let mut stream = TcpStream::connect(address)
-        .with_context(|| format!("failed to connect daemon at {address}"))?;
+    let mut stream = connect(address)?;
+    stream
+        .set_read_timeout(Some(IPC_TIMEOUT))
+        .context("failed to set daemon read timeout")?;
+    stream
+        .set_write_timeout(Some(IPC_TIMEOUT))
+        .context("failed to set daemon write timeout")?;
     let line = sonic_rs::to_string(request).context("failed to serialize request")?;
     stream
         .write_all(line.as_bytes())
@@ -28,6 +35,15 @@ pub(crate) fn call(address: &str, request: &Request) -> Result<Payload> {
         Response::Err { message } => bail!(message),
     }
 }
+fn connect(address: &str) -> Result<TcpStream> {
+    let socket = address
+        .to_socket_addrs()
+        .with_context(|| format!("failed to resolve daemon address {address}"))?
+        .next()
+        .with_context(|| format!("daemon address did not resolve to a socket: {address}"))?;
+    TcpStream::connect_timeout(&socket, IPC_TIMEOUT)
+        .with_context(|| format!("failed to connect daemon at {address}"))
+}
 pub(crate) fn ensure_daemon(address: &str) -> Result<()> {
     if call(address, &Request::Ping).is_ok() {
         return Ok(());
@@ -40,15 +56,18 @@ pub(crate) fn ensure_daemon(address: &str) -> Result<()> {
         .stdout(Stdio::null())
         .stderr(Stdio::null());
     apply_detached_flags(&mut command);
-    command.spawn().context("failed to spawn daemon")?;
+    let mut child = command.spawn().context("failed to spawn daemon")?;
     let start = Instant::now();
-    while start.elapsed() < Duration::from_secs(5) {
+    while start.elapsed() < DAEMON_STARTUP_TIMEOUT {
         if call(address, &Request::Ping).is_ok() {
             return Ok(());
         }
+        if let Some(status) = child.try_wait().context("failed to poll daemon startup")? {
+            bail!("daemon exited during startup with status {status}");
+        }
         thread::sleep(Duration::from_millis(100));
     }
-    bail!("daemon did not become ready within 5 seconds")
+    bail!("daemon did not become ready within {DAEMON_STARTUP_TIMEOUT:?}")
 }
 #[cfg(windows)]
 fn apply_detached_flags(command: &mut Command) {
