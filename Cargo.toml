@@ -81,7 +81,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = "*"
-base64 = "*"
+base64-turbo = "*"
 clap = { version = "*", features = ["derive"] }
 mimalloc = { version = "*", features = ["v3"] }
 portable-pty = "*"

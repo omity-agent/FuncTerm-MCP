@@ -3,7 +3,7 @@ use crate::ipc::{Payload, Request, Response};
 use crate::session::Manager;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
-use base64::Engine as _;
+use base64_turbo::STANDARD;
 use std::io::{BufRead as _, BufReader, Write as _};
 use std::net::{TcpListener, TcpStream};
 use std::thread;
@@ -54,7 +54,7 @@ fn dispatch(manager: &Arc<Manager>, request: Request) -> Result<Payload> {
             shell_id,
             bytes_base64,
         } => {
-            let bytes = base64::engine::general_purpose::STANDARD
+            let bytes = STANDARD
                 .decode(bytes_base64)
                 .context("failed to decode keyboard bytes")?;
             manager.write_keyboard(shell_id, &bytes)?;

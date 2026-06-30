@@ -3,7 +3,7 @@ use crate::config;
 use crate::ipc::{Payload, Request};
 use crate::shell::ShellChoice;
 use anyhow::{Context as _, Result};
-use base64::Engine as _;
+use base64_turbo::STANDARD;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -59,10 +59,10 @@ pub(crate) async fn run() -> Result<()> {
         }
         CliCommand::WriteKeyboard { shell_id, base64 } => {
             client::ensure_daemon(&settings.daemon_address)?;
-            let bytes = base64::engine::general_purpose::STANDARD
+            let bytes = STANDARD
                 .decode(&base64)
                 .context("invalid base64 keyboard input")?;
-            let bytes_base64 = base64::engine::general_purpose::STANDARD.encode(bytes);
+            let bytes_base64 = STANDARD.encode(&bytes);
             let payload = client::call(
                 &settings.daemon_address,
                 &Request::WriteKeyboard {

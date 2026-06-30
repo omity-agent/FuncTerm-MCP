@@ -6,7 +6,7 @@ use crate::session::support::{lock_mutex, start_reader};
 use crate::shell::ShellChoice;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result, bail};
-use base64::Engine as _;
+use base64_turbo::STANDARD;
 use core::time::Duration;
 use portable_pty::{Child, CommandBuilder, PtySize, native_pty_system};
 use std::collections::HashMap;
@@ -138,7 +138,7 @@ impl Manager {
         command: &str,
         record: &CommandRecord,
     ) -> Result<()> {
-        let payload = base64::engine::general_purpose::STANDARD.encode(command.as_bytes());
+        let payload = STANDARD.encode(command.as_bytes());
         let directory = ps_quote(record.stdout.parent().context("missing command dir")?);
         let line = format!(
             "Invoke-McpPtyCommand -CommandId '{command_id}' -Payload '{payload}' -Directory {directory}\r\n"

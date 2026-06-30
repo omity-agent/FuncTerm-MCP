@@ -4,7 +4,7 @@ use crate::config::Settings;
 use crate::ipc::{Payload, Request};
 use crate::shell::ShellChoice;
 use anyhow::Result;
-use base64::Engine as _;
+use base64_turbo::STANDARD;
 use rmcp::{
     Json, ServerHandler, ServiceExt as _,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
@@ -69,7 +69,7 @@ impl McpServer {
         Parameters(request): Parameters<WriteKeyboardRequest>,
     ) -> Result<Json<WriteKeyboardResponse>, String> {
         let shell_id = parse_uuid(&request.shell_id)?;
-        let bytes_base64 = base64::engine::general_purpose::STANDARD.encode(request.bytes);
+        let bytes_base64 = STANDARD.encode(&request.bytes);
         let payload = self.call(&Request::WriteKeyboard {
             shell_id,
             bytes_base64,
