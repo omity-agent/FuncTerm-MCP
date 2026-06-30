@@ -1,0 +1,36 @@
+use super::ShellSession;
+use crate::session::support::lock_mutex;
+use anyhow::{Result, bail};
+use uuid::Uuid;
+#[expect(
+    clippy::missing_trait_methods,
+    reason = "Drop only needs the regular destructor for this type"
+)]
+impl Drop for ShellSession {
+    fn drop(&mut self) {
+        if let Ok(mut child) = self.child.lock()
+            && let Err(error) = child.kill()
+        {
+            eprintln!("failed to kill shell child during cleanup: {error}");
+        }
+    }
+}
+pub(super) fn reserve_shell(shell: &ShellSession, command_id: Uuid) -> Result<()> {
+    {
+        let mut busy = lock_mutex(&shell.busy, "busy")?;
+        if let Some(existing_id) = *busy {
+            bail!("shell is busy with command {existing_id}");
+        }
+        *busy = Some(command_id);
+    }
+    Ok(())
+}
+pub(super) fn release_shell(shell: &ShellSession, command_id: Uuid) -> Result<()> {
+    {
+        let mut busy = lock_mutex(&shell.busy, "busy")?;
+        if *busy == Some(command_id) {
+            *busy = None;
+        }
+    }
+    Ok(())
+}

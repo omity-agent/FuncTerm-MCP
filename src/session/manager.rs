@@ -1,3 +1,6 @@
+mod lifecycle;
+#[cfg(test)]
+mod tests;
 use crate::config::Settings;
 use crate::ipc::{EndReason, QueryResult};
 use crate::session::powershell::{power_shell_args, ps_quote};
@@ -8,6 +11,7 @@ use alloc::sync::Arc;
 use anyhow::{Context as _, Result, bail};
 use base64_turbo::STANDARD;
 use core::time::Duration;
+use lifecycle::{release_shell, reserve_shell};
 use portable_pty::{Child, CommandBuilder, PtySize, native_pty_system};
 use std::collections::HashMap;
 use std::fs;
@@ -27,7 +31,7 @@ pub(super) struct ShellSession {
     screen: Arc<Mutex<vt100::Parser>>,
     busy: Mutex<Option<Uuid>>,
     command_root: std::path::PathBuf,
-    _child: Mutex<Box<dyn Child + Send + Sync>>,
+    child: Mutex<Box<dyn Child + Send + Sync>>,
 }
 impl Manager {
     pub(crate) fn new(settings: Settings) -> Result<Self> {
@@ -43,6 +47,12 @@ impl Manager {
         })
     }
     pub(crate) fn new_shell(&self, cwd: &Path, shell: ShellChoice) -> Result<Uuid> {
+        if !cwd.is_dir() {
+            bail!(
+                "cwd does not exist or is not a directory: {}",
+                cwd.display()
+            );
+        }
         let shell_id = Uuid::new_v4();
         let command_root = self.root.join("commands").join(shell_id.to_string());
         fs::create_dir_all(&command_root).context("failed to create command root")?;
@@ -80,7 +90,7 @@ impl Manager {
             screen,
             busy: Mutex::new(None),
             command_root,
-            _child: Mutex::new(child),
+            child: Mutex::new(child),
         });
         lock_mutex(&self.shells, "shell")?.insert(shell_id, session);
         Ok(shell_id)
@@ -102,7 +112,11 @@ impl Manager {
         reserve_shell(&shell, command_id)?;
         let record = create_record(&shell.command_root, command_id)?;
         lock_mutex(&self.commands, "command")?.insert(command_id, record.clone());
-        Self::write_invocation(&shell, command_id, command, &record)?;
+        if let Err(error) = Self::write_invocation(&shell, command_id, command, &record) {
+            release_shell(&shell, command_id)?;
+            lock_mutex(&self.commands, "command")?.remove(&command_id);
+            return Err(error);
+        }
         self.start_monitor(command_id, shell, record.clone());
         let ended = wait_for_done(&record.done, Duration::from_millis(wait_ms));
         let reason = if ended {
@@ -168,14 +182,4 @@ impl Manager {
             }
         });
     }
-}
-fn reserve_shell(shell: &ShellSession, command_id: Uuid) -> Result<()> {
-    {
-        let mut busy = lock_mutex(&shell.busy, "busy")?;
-        if let Some(existing_id) = *busy {
-            bail!("shell is busy with command {existing_id}");
-        }
-        *busy = Some(command_id);
-    }
-    Ok(())
 }

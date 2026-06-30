@@ -43,13 +43,13 @@ pub(crate) enum Payload {
     },
     Query(QueryResult),
 }
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum EndReason {
     CommandEnded,
     WaitTimeout,
 }
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "recognized_as", rename_all = "snake_case")]
 pub(crate) enum QueryResult {
     Shell {

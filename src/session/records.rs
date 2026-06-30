@@ -51,16 +51,43 @@ pub(super) fn command_query(record: &CommandRecord) -> Result<QueryResult> {
 }
 fn read_optional(path: &Path) -> Result<String> {
     if path.exists() {
-        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))
+        let bytes = fs::read(path).with_context(|| format!("failed to read {}", path.display()))?;
+        decode_text(&bytes).with_context(|| format!("failed to decode {}", path.display()))
     } else {
         Ok(String::new())
     }
+}
+fn decode_text(bytes: &[u8]) -> Result<String> {
+    if let Some(body) = bytes.strip_prefix(&[0xFF, 0xFE]) {
+        return decode_utf16_chunks(body, u16::from_le_bytes);
+    }
+    if let Some(body) = bytes.strip_prefix(&[0xFE, 0xFF]) {
+        return decode_utf16_chunks(body, u16::from_be_bytes);
+    }
+    if let Some(body) = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]) {
+        return String::from_utf8(body.to_vec()).context("text is not valid UTF-8");
+    }
+    String::from_utf8(bytes.to_vec()).context("text is not valid UTF-8")
+}
+fn decode_utf16_chunks(bytes: &[u8], convert: fn([u8; 2]) -> u16) -> Result<String> {
+    let chunks = bytes.chunks_exact(2);
+    if !chunks.remainder().is_empty() {
+        anyhow::bail!("UTF-16 text has an odd byte length");
+    }
+    let words = chunks
+        .map(|chunk| {
+            let pair = <[u8; 2]>::try_from(chunk).unwrap();
+            convert(pair)
+        })
+        .collect::<Vec<_>>();
+    String::from_utf16(&words).context("text is not valid UTF-16")
 }
 fn read_exit_code(path: &Path) -> Result<Option<i32>> {
     if !path.exists() {
         return Ok(None);
     }
-    let text = fs::read_to_string(path).context("failed to read done file")?;
+    let bytes = fs::read(path).context("failed to read done file")?;
+    let text = decode_text(&bytes).context("failed to decode done file")?;
     let done = sonic_rs::from_str::<DoneFile>(&text).context("failed to parse done file")?;
     Ok(Some(done.exit_code))
 }
@@ -77,5 +104,18 @@ mod tests {
     fn zero_wait_does_not_block_for_missing_done_file() {
         let missing_path = Path::new("Z:\\definitely-missing-command.done");
         assert!(!wait_for_done(missing_path, Duration::from_millis(0)));
+    }
+    #[test]
+    fn reads_utf16_little_endian_output() {
+        let bytes = [
+            0xFF, 0xFE, b'H', 0x00, b'E', 0x00, b'L', 0x00, b'L', 0x00, b'O', 0x00,
+        ];
+        let text = super::decode_text(&bytes).unwrap();
+        assert_eq!(text, "HELLO");
+    }
+    #[test]
+    fn reads_utf8_with_bom_output() {
+        let text = super::decode_text(&[0xEF, 0xBB, 0xBF, b'{', b'}']).unwrap();
+        assert_eq!(text, "{}");
     }
 }

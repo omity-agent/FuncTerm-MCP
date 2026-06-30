@@ -61,17 +61,24 @@ pub(super) struct QueryRequest {
     pub(super) id: String,
 }
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
-#[serde(tag = "recognized_as", rename_all = "snake_case")]
-pub(super) enum QueryResponse {
-    Shell {
-        screen: String,
-    },
-    Command {
-        finished: bool,
-        stdout: String,
-        stderr: String,
-        exit_code: Option<i32>,
-    },
+pub(super) struct QueryResponse {
+    recognized_as: QueryResponseKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    screen: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    finished: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stdout: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stderr: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    exit_code: Option<i32>,
+}
+#[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
+#[serde(rename_all = "snake_case")]
+enum QueryResponseKind {
+    Shell,
+    Command,
 }
 impl From<EndReason> for CommandEndReason {
     fn from(value: EndReason) -> Self {
@@ -84,18 +91,40 @@ impl From<EndReason> for CommandEndReason {
 impl From<QueryResult> for QueryResponse {
     fn from(value: QueryResult) -> Self {
         match value {
-            QueryResult::Shell { screen } => Self::Shell { screen },
+            QueryResult::Shell { screen } => Self {
+                recognized_as: QueryResponseKind::Shell,
+                screen: Some(screen),
+                finished: None,
+                stdout: None,
+                stderr: None,
+                exit_code: None,
+            },
             QueryResult::Command {
                 finished,
                 stdout,
                 stderr,
                 exit_code,
-            } => Self::Command {
-                finished,
-                stdout,
-                stderr,
+            } => Self {
+                recognized_as: QueryResponseKind::Command,
+                screen: None,
+                finished: Some(finished),
+                stdout: Some(stdout),
+                stderr: Some(stderr),
                 exit_code,
             },
         }
+    }
+}
+#[cfg(test)]
+#[expect(
+    clippy::inline_modules,
+    reason = "Rust skill permits inline modules guarded by cfg(test)"
+)]
+mod tests {
+    #[test]
+    fn query_response_schema_has_object_root() {
+        let schema = rmcp::schemars::schema_for!(super::QueryResponse);
+        let text = sonic_rs::to_string(&schema).unwrap();
+        assert!(text.contains(r#""type":"object""#));
     }
 }
