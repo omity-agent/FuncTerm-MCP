@@ -1565,6 +1565,7 @@ dependencies = [
  "toml 1.1.2+spec-1.1.0",
  "vt100",
  "which",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

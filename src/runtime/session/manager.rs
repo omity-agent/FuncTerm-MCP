@@ -1,5 +1,6 @@
 mod commands;
 mod lifecycle;
+mod process_tree;
 mod startup;
 mod state;
 #[cfg(test)]
@@ -32,6 +33,7 @@ pub(super) struct ShellSession {
     screen: Arc<Mutex<vt100::Parser>>,
     busy: Mutex<Option<String>>,
     command_root: std::path::PathBuf,
+    process_tree: process_tree::ProcessTree,
     child: Mutex<Box<dyn Child + Send + Sync>>,
     _slave: Mutex<Box<dyn SlavePty + Send>>,
 }
@@ -73,6 +75,22 @@ impl Manager {
             .slave
             .spawn_command(command)
             .context("failed to spawn shell")?;
+        let process_tree = match process_tree::ProcessTree::new()
+            .context("failed to create shell cleanup guard")
+        {
+            Ok(process_tree) => process_tree,
+            Err(error) => {
+                cleanup_unregistered_child(&mut child);
+                return Err(error);
+            }
+        };
+        if let Err(error) = process_tree
+            .attach(child.as_ref())
+            .context("failed to guard shell process tree")
+        {
+            cleanup_unregistered_child(&mut child);
+            return Err(error);
+        }
         let reader = pair
             .master
             .try_clone_reader()
@@ -95,6 +113,7 @@ impl Manager {
             screen,
             busy: Mutex::new(None),
             command_root,
+            process_tree,
             child: Mutex::new(child),
             _slave: Mutex::new(pair.slave),
         });
@@ -125,5 +144,13 @@ impl Manager {
             .try_wait()
             .context("failed to poll shell child")?;
         Ok(status.is_none())
+    }
+}
+fn cleanup_unregistered_child(child: &mut Box<dyn Child + Send + Sync>) {
+    if let Err(error) = child.kill() {
+        eprintln!("failed to kill unregistered shell child: {error}");
+    }
+    if let Err(error) = child.wait() {
+        eprintln!("failed to wait unregistered shell child: {error}");
     }
 }

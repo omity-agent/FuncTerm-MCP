@@ -98,3 +98,9 @@ tokio = { version = "*", features = ["full"] }
 toml = "*"
 vt100 = "*"
 which = "*"
+windows-sys = { version = "*", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+] }

@@ -7,6 +7,9 @@ use anyhow::{Result, bail};
 )]
 impl Drop for ShellSession {
     fn drop(&mut self) {
+        if let Err(error) = self.process_tree.terminate() {
+            eprintln!("failed to terminate shell process tree during cleanup: {error}");
+        }
         if let Ok(mut child) = self.child.lock() {
             match child.try_wait() {
                 Ok(Some(_)) => {}
@@ -120,6 +123,8 @@ mod tests {
             screen: Arc::new(Mutex::new(vt100::Parser::new(30, 120, 0))),
             busy: Mutex::new(busy.map(str::to_owned)),
             command_root: std::env::temp_dir().join("shell-mcp-pty-test-commands"),
+            process_tree: crate::runtime::session::manager::process_tree::ProcessTree::new()
+                .unwrap(),
             child: Mutex::new(child),
             _slave: Mutex::new(slave),
         }
