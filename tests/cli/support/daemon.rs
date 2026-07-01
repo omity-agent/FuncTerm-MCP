@@ -110,9 +110,7 @@ fn has_daemon_server(service_name: &str) -> bool {
     service.dynamic_config().number_of_servers() > 0
 }
 fn iceoryx_config() -> Option<Config> {
-    let root = std::env::temp_dir()
-        .join("agent")
-        .join("shell-mcp-iceoryx2");
+    let root = std::env::temp_dir().join("shell-mcp-iceoryx2");
     std::fs::create_dir_all(&root).ok()?;
     let root_text = root.to_string_lossy();
     let root_path = Path::new(root_text.as_bytes()).ok()?;

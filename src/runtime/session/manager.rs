@@ -8,6 +8,7 @@ use crate::runtime::config::Settings;
 use crate::runtime::ipc::QueryResult;
 use crate::runtime::session::records::{CommandRecord, command_query};
 use crate::runtime::session::support::{lock_mutex, start_reader};
+use crate::runtime::temp;
 use crate::shell::ShellChoice;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result, bail};
@@ -15,7 +16,6 @@ use portable_pty::{Child, CommandBuilder, PtySize, SlavePty, native_pty_system};
 use startup::{apply_startup, wait_for_shell_startup};
 use state::path_text;
 use std::collections::HashMap;
-use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::sync::Mutex;
@@ -37,8 +37,7 @@ pub(super) struct ShellSession {
 }
 impl Manager {
     pub(crate) fn new(settings: Settings) -> Result<Self> {
-        let root = std::env::temp_dir().join("agent").join("shell-mcp-pty");
-        fs::create_dir_all(&root).context("failed to create daemon temp root")?;
+        let root = temp::daemon_root()?;
         Ok(Self {
             settings,
             root,
@@ -55,7 +54,7 @@ impl Manager {
         }
         let shell_id = self.next_shell_id()?;
         let command_root = self.root.join("commands").join(&shell_id);
-        fs::create_dir_all(&command_root).context("failed to create command root")?;
+        std::fs::create_dir_all(&command_root).context("failed to create command root")?;
         let startup = shell.startup(cwd, &command_root)?;
         let pty_system = native_pty_system();
         let size = PtySize {
