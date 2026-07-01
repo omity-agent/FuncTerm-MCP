@@ -1,6 +1,7 @@
 use super::daemon;
 use super::parse::{ShellCreated, parse_shell_created};
 use super::process::{output_from_parts, read_pipe, wait_for_status};
+use base64_turbo::STANDARD;
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::time::Duration;
 use std::fs;
@@ -46,6 +47,10 @@ pub(crate) fn send_command(shell_id: &str, command: &str, wait_ms: u64) -> Outpu
         "--wait-ms",
         &wait_ms.to_string(),
     ])
+}
+pub(crate) fn write_keyboard(shell_id: &str, bytes: &[u8]) -> Output {
+    let encoded = STANDARD.encode(bytes);
+    run_cli(&["write-keyboard", shell_id, "--base64", &encoded])
 }
 pub(crate) fn send_test_command(shell_id: &str) -> Output {
     send_command(shell_id, "Write-Output 'MCP_PTY_TEST'", 5000)

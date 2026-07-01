@@ -13,6 +13,7 @@ mod support;
 mod tests {
     use super::support::{
         create_shell, locked, parse_command_query, run_cli, run_cli_with_pipes, send_test_command,
+        write_keyboard,
     };
     use core::time::Duration;
     use std::thread;
@@ -68,6 +69,39 @@ mod tests {
         assert_eq!(query.exit_code, Some(0_i32), "exit code should be zero");
     }
     #[test]
+    fn cli_keyboard_input_is_reflected_on_pty_screen() {
+        let _guard = locked();
+        let cwd = std::env::temp_dir();
+        let created = create_shell(&cwd, "pwsh");
+        let marker = "MCP_PTY_TYPED_INPUT";
+        let written = write_keyboard(&created.shell_id, marker.as_bytes());
+        assert!(
+            written.status.success(),
+            "stdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&written.stdout),
+            String::from_utf8_lossy(&written.stderr)
+        );
+        assert_eq!(String::from_utf8(written.stdout).unwrap().trim(), "ok");
+        let query = wait_for_screen_contains(&created.shell_id, marker);
+        assert_eq!(query.recognized_as, "shell", "query kind should be shell");
+    }
+    #[test]
+    fn cli_keyboard_enter_runs_command_through_pty() {
+        let _guard = locked();
+        let cwd = std::env::temp_dir();
+        let created = create_shell(&cwd, "pwsh");
+        let marker = "MCP_PTY_KEYBOARD_EVENT";
+        let command = format!("Write-Output '{marker}'\r\n");
+        let written = write_keyboard(&created.shell_id, command.as_bytes());
+        assert!(
+            written.status.success(),
+            "stdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&written.stdout),
+            String::from_utf8_lossy(&written.stderr)
+        );
+        wait_for_screen_contains(&created.shell_id, marker);
+    }
+    #[test]
     fn cli_query_reports_shell_liveness() {
         let _guard = locked();
         let cwd = std::env::temp_dir();
@@ -86,5 +120,17 @@ mod tests {
             dead_query = super::support::parse_shell_query(&run_cli(&["query", &created.shell_id]));
         }
         panic!("query should report exited shell as not alive");
+    }
+    fn wait_for_screen_contains(shell_id: &str, expected: &str) -> super::support::ShellQuery {
+        let mut last_screen = String::new();
+        for _attempt in 0_usize..50 {
+            let query = super::support::parse_shell_query(&run_cli(&["query", shell_id]));
+            if query.screen.contains(expected) {
+                return query;
+            }
+            last_screen = query.screen;
+            thread::sleep(Duration::from_millis(100));
+        }
+        panic!("screen should contain {expected:?}; last screen:\n{last_screen}");
     }
 }

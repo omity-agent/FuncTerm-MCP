@@ -3,6 +3,7 @@ def mcp_pty_command [command_id: string, payload: string, directory: path, worki
     let stdout_file = ($directory | path join 'stdout.txt')
     let stderr_file = ($directory | path join 'stderr.txt')
     let done_file = ($directory | path join 'done.json')
+    let done_temp_file = ($directory | path join 'done.json.tmp')
     let state_file = ($directory | path join 'state.json')
     let script_file = ($directory | path join 'command.nu')
     '' | save --force --raw $stdout_file
@@ -40,5 +41,6 @@ def mcp_pty_command [command_id: string, payload: string, directory: path, worki
         exit_code: $state.exit_code,
         cwd: $state.cwd,
         completed_at: (date now | date to-timezone UTC | format date '%+')
-    } | to json --raw | save --force $done_file
+    } | to json --raw | save --force $done_temp_file
+    mv --force $done_temp_file $done_file
 }

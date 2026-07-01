@@ -9,6 +9,7 @@ function Invoke-McpPtyCommand {
     $stdoutFile = Join-Path $Directory 'stdout.txt'
     $stderrFile = Join-Path $Directory 'stderr.txt'
     $doneFile = Join-Path $Directory 'done.json'
+    $doneTempFile = Join-Path $Directory 'done.json.tmp'
     Set-Content -LiteralPath $stdoutFile -Value '' -NoNewline -Encoding utf8
     Set-Content -LiteralPath $stderrFile -Value '' -NoNewline -Encoding utf8
     try {
@@ -40,5 +41,6 @@ function Invoke-McpPtyCommand {
         cwd          = (Get-Location).Path
         completed_at = (Get-Date).ToUniversalTime().ToString('o')
     } | ConvertTo-Json -Compress
-    Set-Content -LiteralPath $doneFile -Value $done -Encoding utf8
+    Set-Content -LiteralPath $doneTempFile -Value $done -Encoding utf8
+    Move-Item -LiteralPath $doneTempFile -Destination $doneFile -Force
 }

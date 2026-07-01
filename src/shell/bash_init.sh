@@ -7,6 +7,7 @@ mcp_pty_command() {
     local stdout_file="$directory/stdout.txt"
     local stderr_file="$directory/stderr.txt"
     local done_file="$directory/done.json"
+    local done_temp_file="$directory/done.json.tmp"
     : > "$stdout_file"
     : > "$stderr_file"
     local script
@@ -14,7 +15,8 @@ mcp_pty_command() {
         local cwd_json
         cwd_json="$(mcp_pty_json_string "$PWD")"
         printf '{"command_id":"%s","exit_code":1,"cwd":%s,"completed_at":"%s"}\n' \
-            "$command_id" "$cwd_json" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$done_file"
+            "$command_id" "$cwd_json" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$done_temp_file"
+        mv "$done_temp_file" "$done_file"
         cat "$stderr_file" >&2
         return 1
     fi
@@ -24,7 +26,8 @@ mcp_pty_command() {
     local cwd_json
     cwd_json="$(mcp_pty_json_string "$PWD")"
     printf '{"command_id":"%s","exit_code":%s,"cwd":%s,"completed_at":"%s"}\n' \
-        "$command_id" "$exit_code" "$cwd_json" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$done_file"
+        "$command_id" "$exit_code" "$cwd_json" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$done_temp_file"
+    mv "$done_temp_file" "$done_file"
     return "$exit_code"
 }
 
