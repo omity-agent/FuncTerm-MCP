@@ -1,5 +1,6 @@
 use anyhow::{Context as _, Result, bail};
-use std::path::{Path, PathBuf};
+use core::mem::MaybeUninit;
+use std::path::Path;
 pub(super) struct Cursor<'payload> {
     bytes: &'payload [u8],
     offset: usize,
@@ -21,12 +22,15 @@ impl<'payload> Cursor<'payload> {
         self.offset = end;
         Ok(slice)
     }
-    pub(super) fn take_text(&mut self, len: u64) -> Result<String> {
+    pub(super) fn take_str(&mut self, len: u64) -> Result<&'payload str> {
         let bytes = self.take_bytes(len)?;
-        String::from_utf8(bytes.to_vec()).context("frame text is not valid UTF-8")
+        core::str::from_utf8(bytes).context("frame text is not valid UTF-8")
     }
-    pub(super) fn take_path(&mut self, len: u64) -> Result<PathBuf> {
-        Ok(PathBuf::from(self.take_text(len)?))
+    pub(super) fn take_text(&mut self, len: u64) -> Result<String> {
+        Ok(self.take_str(len)?.to_owned())
+    }
+    pub(super) fn take_path_ref(&mut self, len: u64) -> Result<&'payload Path> {
+        Ok(Path::new(self.take_str(len)?))
     }
     pub(super) fn finish(&self) -> Result<()> {
         if self.offset == self.bytes.len() {
@@ -36,18 +40,115 @@ impl<'payload> Cursor<'payload> {
         }
     }
 }
-pub(super) fn append_text(payload: &mut Vec<u8>, value: &str) -> Result<u64> {
-    append_bytes(payload, value.as_bytes())
+pub(super) trait PayloadSink {
+    fn append_bytes(&mut self, value: &[u8]) -> Result<u64>;
+    fn append_text(&mut self, value: &str) -> Result<u64> {
+        self.append_bytes(value.as_bytes())
+    }
+    fn append_path(&mut self, value: &Path) -> Result<u64> {
+        let text = value
+            .to_str()
+            .with_context(|| format!("path is not valid UTF-8: {}", value.display()))?;
+        self.append_text(text)
+    }
 }
-pub(super) fn append_path(payload: &mut Vec<u8>, value: &Path) -> Result<u64> {
-    let text = value
-        .to_str()
-        .with_context(|| format!("path is not valid UTF-8: {}", value.display()))?;
-    append_text(payload, text)
+#[derive(Default)]
+pub(super) struct PayloadSize {
+    len: usize,
 }
-pub(super) fn append_bytes(payload: &mut Vec<u8>, value: &[u8]) -> Result<u64> {
-    payload.extend_from_slice(value);
-    u64::try_from(value.len()).context("payload length does not fit u64")
+impl PayloadSize {
+    pub(super) const fn len(&self) -> usize {
+        self.len
+    }
+}
+impl PayloadSink for PayloadSize {
+    fn append_bytes(&mut self, value: &[u8]) -> Result<u64> {
+        self.len = self
+            .len
+            .checked_add(value.len())
+            .context("payload length overflow")?;
+        u64::try_from(value.len()).context("payload length does not fit u64")
+    }
+    fn append_text(&mut self, value: &str) -> Result<u64> {
+        self.append_bytes(value.as_bytes())
+    }
+    fn append_path(&mut self, value: &Path) -> Result<u64> {
+        let text = value
+            .to_str()
+            .with_context(|| format!("path is not valid UTF-8: {}", value.display()))?;
+        self.append_text(text)
+    }
+}
+#[cfg(test)]
+pub(super) struct PayloadVec {
+    bytes: Vec<u8>,
+}
+#[cfg(test)]
+impl PayloadVec {
+    pub(super) const fn new() -> Self {
+        Self { bytes: Vec::new() }
+    }
+    pub(super) fn into_inner(self) -> Vec<u8> {
+        self.bytes
+    }
+}
+#[cfg(test)]
+impl PayloadSink for PayloadVec {
+    fn append_bytes(&mut self, value: &[u8]) -> Result<u64> {
+        self.bytes.extend_from_slice(value);
+        u64::try_from(value.len()).context("payload length does not fit u64")
+    }
+    fn append_text(&mut self, value: &str) -> Result<u64> {
+        self.append_bytes(value.as_bytes())
+    }
+    fn append_path(&mut self, value: &Path) -> Result<u64> {
+        let text = value
+            .to_str()
+            .with_context(|| format!("path is not valid UTF-8: {}", value.display()))?;
+        self.append_text(text)
+    }
+}
+pub(super) struct PayloadWriter<'payload> {
+    bytes: &'payload mut [MaybeUninit<u8>],
+    offset: usize,
+}
+impl<'payload> PayloadWriter<'payload> {
+    pub(super) const fn new(bytes: &'payload mut [MaybeUninit<u8>]) -> Self {
+        Self { bytes, offset: 0 }
+    }
+    pub(super) fn finish(&self) -> Result<()> {
+        if self.offset == self.bytes.len() {
+            Ok(())
+        } else {
+            bail!("frame payload writer left uninitialized bytes")
+        }
+    }
+}
+impl PayloadSink for PayloadWriter<'_> {
+    fn append_bytes(&mut self, value: &[u8]) -> Result<u64> {
+        let end = self
+            .offset
+            .checked_add(value.len())
+            .context("payload length overflow")?;
+        let target = self
+            .bytes
+            .get_mut(self.offset..end)
+            .context("payload writer buffer is shorter than encoded frame")?;
+        unsafe {
+            core::ptr::copy_nonoverlapping(value.as_ptr(), target.as_mut_ptr().cast(), value.len());
+        }
+        self.offset = end;
+        u64::try_from(value.len()).context("payload length does not fit u64")
+    }
+    fn append_text(&mut self, value: &str) -> Result<u64> {
+        self.append_bytes(value.as_bytes())
+    }
+    fn append_path(&mut self, value: &Path) -> Result<u64> {
+        let text = value
+            .to_str()
+            .with_context(|| format!("path is not valid UTF-8: {}", value.display()))?;
+        self.append_text(text)
+    }
 }
 pub(super) fn decode_flag(value: u8, name: &str) -> Result<bool> {
     match value {

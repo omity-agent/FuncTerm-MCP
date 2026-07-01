@@ -3,8 +3,14 @@ mod request;
 mod response;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
 pub(crate) use request::RequestFrame;
+pub(crate) use request::{
+    BorrowedRequest, decode_request, request_header_len, write_request_payload,
+};
+#[cfg(test)]
 pub(crate) use response::ResponseFrame;
+pub(crate) use response::{decode_response, response_header_len, write_response_payload};
 pub(super) const REQUEST_PING: u8 = 0;
 pub(super) const REQUEST_NEW_SHELL: u8 = 1;
 pub(super) const REQUEST_WRITE_KEYBOARD: u8 = 2;

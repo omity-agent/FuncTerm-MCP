@@ -1,4 +1,4 @@
-use crate::runtime::protocol::frame::{RequestFrame, ResponseFrame};
+use crate::runtime::protocol::frame::{decode_response, request_header_len, write_request_payload};
 use crate::runtime::protocol::wire::{RequestHeader, ResponseHeader};
 use crate::runtime::protocol::{Payload, Request, Response};
 use anyhow::{Context as _, Result, bail};
@@ -61,13 +61,14 @@ impl DaemonClient {
         })
     }
     pub(crate) fn call(&self, request: &Request) -> Result<Payload> {
-        let frame = RequestFrame::from_request(request)?;
+        let (header, payload_len) = request_header_len(request)?;
         let mut uninit_request = self
             .client
-            .loan_slice_uninit(frame.payload.len())
+            .loan_slice_uninit(payload_len)
             .context("failed to loan iceoryx2 request sample")?;
-        *uninit_request.user_header_mut() = frame.header;
-        let request_sample = uninit_request.write_from_slice(&frame.payload);
+        write_request_payload(request, uninit_request.payload_mut())?;
+        *uninit_request.user_header_mut() = header;
+        let request_sample = unsafe { uninit_request.assume_init() };
         let pending_response = request_sample
             .send()
             .context("failed to send iceoryx2 request")?;
@@ -95,11 +96,7 @@ fn wait_for_response(
             .receive()
             .context("failed to receive iceoryx2 response")?
         {
-            let frame = ResponseFrame {
-                header: *response.user_header(),
-                payload: response.payload().to_vec(),
-            };
-            return frame.into_response();
+            return decode_response(*response.user_header(), response.payload());
         }
         let Some(remaining) = IPC_TIMEOUT.checked_sub(start.elapsed()) else {
             bail!("daemon did not respond within {IPC_TIMEOUT:?}");

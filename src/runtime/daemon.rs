@@ -1,7 +1,9 @@
 use crate::runtime::config::Settings;
-use crate::runtime::protocol::frame::{RequestFrame, ResponseFrame};
+use crate::runtime::protocol::frame::{
+    BorrowedRequest, decode_request, response_header_len, write_response_payload,
+};
 use crate::runtime::protocol::wire::{RequestHeader, ResponseHeader};
-use crate::runtime::protocol::{Payload, Request, Response};
+use crate::runtime::protocol::{Payload, Response};
 use crate::runtime::session::Manager;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
@@ -77,12 +79,8 @@ fn receive_one(
     }
 }
 fn handle_request(manager: &Arc<Manager>, active_request: &IpcActiveRequest) -> Result<()> {
-    let request_frame = RequestFrame {
-        header: *active_request.user_header(),
-        payload: active_request.payload().to_vec(),
-    };
-    let response = match request_frame.into_request() {
-        Ok(request) => match dispatch(manager, request) {
+    let response = match decode_request(*active_request.user_header(), active_request.payload()) {
+        Ok(request) => match dispatch(manager, &request) {
             Ok(payload) => Response::Ok { payload },
             Err(error) => Response::Err {
                 message: format!("{error:#}"),
@@ -92,40 +90,45 @@ fn handle_request(manager: &Arc<Manager>, active_request: &IpcActiveRequest) -> 
             message: format!("failed to parse request: {error:#}"),
         },
     };
-    let frame = ResponseFrame::from_response(&response)?;
+    let (header, payload_len) = response_header_len(&response)?;
     let mut uninit_response = active_request
-        .loan_slice_uninit(frame.payload.len())
+        .loan_slice_uninit(payload_len)
         .context("failed to loan iceoryx2 response sample")?;
-    *uninit_response.user_header_mut() = frame.header;
-    let response_sample = uninit_response.write_from_slice(&frame.payload);
+    write_response_payload(&response, uninit_response.payload_mut())?;
+    *uninit_response.user_header_mut() = header;
+    let response_sample = unsafe { uninit_response.assume_init() };
     response_sample
         .send()
         .context("failed to send iceoryx2 response")
 }
-fn dispatch(manager: &Arc<Manager>, request: Request) -> Result<Payload> {
+#[expect(
+    clippy::pattern_type_mismatch,
+    reason = "matching borrowed request variants keeps dispatch allocation-free"
+)]
+fn dispatch(manager: &Arc<Manager>, request: &BorrowedRequest<'_>) -> Result<Payload> {
     match request {
-        Request::Ping => Ok(Payload::Pong),
-        Request::NewShell { cwd, shell } => {
-            let shell_id = manager.new_shell(&cwd, shell)?;
+        BorrowedRequest::Ping => Ok(Payload::Pong),
+        BorrowedRequest::NewShell { cwd, shell } => {
+            let shell_id = manager.new_shell(cwd, *shell)?;
             Ok(Payload::ShellCreated { shell_id })
         }
-        Request::WriteKeyboard { shell_id, bytes } => {
-            manager.write_keyboard(&shell_id, &bytes)?;
+        BorrowedRequest::WriteKeyboard { shell_id, bytes } => {
+            manager.write_keyboard(shell_id, bytes)?;
             Ok(Payload::KeyboardWritten)
         }
-        Request::SendCommand {
+        BorrowedRequest::SendCommand {
             shell_id,
             command,
             waiting,
         } => {
             let (command_id, end_reason, query) =
-                manager.send_command(&shell_id, &command, waiting)?;
+                manager.send_command(shell_id, command, *waiting)?;
             Ok(Payload::CommandAccepted {
                 command_id,
                 end_reason,
                 query,
             })
         }
-        Request::Query { id } => Ok(Payload::Query(manager.query(&id)?)),
+        BorrowedRequest::Query { id } => Ok(Payload::Query(manager.query(id)?)),
     }
 }

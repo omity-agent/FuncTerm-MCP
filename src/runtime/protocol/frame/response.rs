@@ -1,4 +1,6 @@
-use super::codec::{Cursor, append_text, decode_flag};
+#[cfg(test)]
+use super::codec::PayloadVec;
+use super::codec::{Cursor, PayloadSink, PayloadSize, PayloadWriter, decode_flag};
 use super::{
     END_COMMAND_ENDED, END_WAIT_TIMEOUT, PAYLOAD_COMMAND_ACCEPTED, PAYLOAD_KEYBOARD_WRITTEN,
     PAYLOAD_PONG, PAYLOAD_QUERY, PAYLOAD_SHELL_CREATED, QUERY_COMMAND, QUERY_SHELL, RESPONSE_ERR,
@@ -7,44 +9,55 @@ use super::{
 use crate::runtime::protocol::wire::ResponseHeader;
 use crate::runtime::protocol::{EndReason, Payload, QueryResult, Response};
 use anyhow::{Result, bail};
+use core::mem::MaybeUninit;
+#[cfg(test)]
 pub(crate) struct ResponseFrame {
     pub(crate) header: ResponseHeader,
     pub(crate) payload: Vec<u8>,
 }
+#[cfg(test)]
 impl ResponseFrame {
-    #[expect(
-        clippy::pattern_type_mismatch,
-        reason = "matching borrowed protocol variants avoids cloning payload fields"
-    )]
     pub(crate) fn from_response(response: &Response) -> Result<Self> {
-        let mut header = ResponseHeader::default();
-        let mut payload = Vec::new();
-        match response {
-            Response::Ok { payload: body } => {
-                header.status = RESPONSE_OK;
-                encode_payload(&mut header, &mut payload, body)?;
-            }
-            Response::Err { message } => {
-                header.status = RESPONSE_ERR;
-                header.message_len = append_text(&mut payload, message)?;
-            }
-        }
+        let mut sink = PayloadVec::new();
+        let header = encode_response(response, &mut sink)?;
+        let payload = sink.into_inner();
         Ok(Self { header, payload })
     }
     pub(crate) fn into_response(self) -> Result<Response> {
-        let mut cursor = Cursor::new(&self.payload);
-        let response = match self.header.status {
-            RESPONSE_OK => Response::Ok {
-                payload: decode_payload(&self.header, &mut cursor)?,
-            },
-            RESPONSE_ERR => Response::Err {
-                message: cursor.take_text(self.header.message_len)?,
-            },
-            other => bail!("unknown response status {other}"),
-        };
-        cursor.finish()?;
-        Ok(response)
+        decode_response(self.header, &self.payload)
     }
+}
+pub(crate) fn response_header_len(response: &Response) -> Result<(ResponseHeader, usize)> {
+    let mut sink = PayloadSize::default();
+    let header = encode_response(response, &mut sink)?;
+    Ok((header, sink.len()))
+}
+pub(crate) fn write_response_payload(
+    response: &Response,
+    payload: &mut [MaybeUninit<u8>],
+) -> Result<ResponseHeader> {
+    let mut sink = PayloadWriter::new(payload);
+    let header = encode_response(response, &mut sink)?;
+    sink.finish()?;
+    Ok(header)
+}
+#[expect(
+    clippy::pattern_type_mismatch,
+    reason = "matching borrowed protocol variants avoids cloning payload fields"
+)]
+fn encode_response(response: &Response, sink: &mut impl PayloadSink) -> Result<ResponseHeader> {
+    let mut header = ResponseHeader::default();
+    match response {
+        Response::Ok { payload } => {
+            header.status = RESPONSE_OK;
+            encode_payload(&mut header, sink, payload)?;
+        }
+        Response::Err { message } => {
+            header.status = RESPONSE_ERR;
+            header.message_len = sink.append_text(message)?;
+        }
+    }
+    Ok(header)
 }
 #[expect(
     clippy::pattern_type_mismatch,
@@ -52,14 +65,14 @@ impl ResponseFrame {
 )]
 fn encode_payload(
     header: &mut ResponseHeader,
-    payload: &mut Vec<u8>,
+    sink: &mut impl PayloadSink,
     body: &Payload,
 ) -> Result<()> {
     match body {
         Payload::Pong => header.payload_kind = PAYLOAD_PONG,
         Payload::ShellCreated { shell_id } => {
             header.payload_kind = PAYLOAD_SHELL_CREATED;
-            header.shell_id_len = append_text(payload, shell_id)?;
+            header.shell_id_len = sink.append_text(shell_id)?;
         }
         Payload::KeyboardWritten => header.payload_kind = PAYLOAD_KEYBOARD_WRITTEN,
         Payload::CommandAccepted {
@@ -69,15 +82,29 @@ fn encode_payload(
         } => {
             header.payload_kind = PAYLOAD_COMMAND_ACCEPTED;
             header.end_reason = encode_end_reason(*end_reason);
-            header.command_id_len = append_text(payload, command_id)?;
-            encode_query(header, payload, query)?;
+            header.command_id_len = sink.append_text(command_id)?;
+            encode_query(header, sink, query)?;
         }
         Payload::Query(query) => {
             header.payload_kind = PAYLOAD_QUERY;
-            encode_query(header, payload, query)?;
+            encode_query(header, sink, query)?;
         }
     }
     Ok(())
+}
+pub(crate) fn decode_response(header: ResponseHeader, payload: &[u8]) -> Result<Response> {
+    let mut cursor = Cursor::new(payload);
+    let response = match header.status {
+        RESPONSE_OK => Response::Ok {
+            payload: decode_payload(&header, &mut cursor)?,
+        },
+        RESPONSE_ERR => Response::Err {
+            message: cursor.take_text(header.message_len)?,
+        },
+        other => bail!("unknown response status {other}"),
+    };
+    cursor.finish()?;
+    Ok(response)
 }
 fn decode_payload(header: &ResponseHeader, cursor: &mut Cursor<'_>) -> Result<Payload> {
     match header.payload_kind {
@@ -101,15 +128,15 @@ fn decode_payload(header: &ResponseHeader, cursor: &mut Cursor<'_>) -> Result<Pa
 )]
 fn encode_query(
     header: &mut ResponseHeader,
-    payload: &mut Vec<u8>,
+    sink: &mut impl PayloadSink,
     query: &QueryResult,
 ) -> Result<()> {
     match query {
         QueryResult::Shell { alive, cwd, screen } => {
             header.query_kind = QUERY_SHELL;
             header.alive = u8::from(*alive);
-            header.cwd_len = append_text(payload, cwd)?;
-            header.screen_len = append_text(payload, screen)?;
+            header.cwd_len = sink.append_text(cwd)?;
+            header.screen_len = sink.append_text(screen)?;
         }
         QueryResult::Command {
             cwd,
@@ -124,9 +151,9 @@ fn encode_query(
                 header.has_exit_code = 1;
                 header.exit_code = code;
             }
-            header.cwd_len = append_text(payload, cwd)?;
-            header.stdout_len = append_text(payload, stdout)?;
-            header.stderr_len = append_text(payload, stderr)?;
+            header.cwd_len = sink.append_text(cwd)?;
+            header.stdout_len = sink.append_text(stdout)?;
+            header.stderr_len = sink.append_text(stderr)?;
         }
     }
     Ok(())
