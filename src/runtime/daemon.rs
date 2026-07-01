@@ -9,6 +9,7 @@ use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use iceoryx2::active_request::ActiveRequest;
 use iceoryx2::prelude::*;
+use std::thread;
 const INITIAL_SLICE_LEN: usize = 4096;
 type IpcActiveRequest =
     ActiveRequest<ipc_threadsafe::Service, [u8], RequestHeader, [u8], ResponseHeader>;
@@ -45,8 +46,10 @@ pub(crate) fn run(settings: Settings) -> Result<()> {
         .context("failed to create iceoryx2 daemon server")?;
     let request_listener =
         crate::runtime::ipc_events::request_listener(&node, &settings.daemon_service_name)?;
-    let response_notifier =
-        crate::runtime::ipc_events::response_notifier(&node, &settings.daemon_service_name)?;
+    let response_notifier = Arc::new(crate::runtime::ipc_events::response_notifier(
+        &node,
+        &settings.daemon_service_name,
+    )?);
     let ready_notifier =
         crate::runtime::ipc_events::ready_notifier(&node, &settings.daemon_service_name)?;
     let manager = Arc::new(Manager::new(settings)?);
@@ -63,20 +66,35 @@ pub(crate) fn run(settings: Settings) -> Result<()> {
 fn receive_one(
     server: &IpcServer,
     manager: &Arc<Manager>,
-    response_notifier: &crate::runtime::ipc_events::IpcNotifier,
+    response_notifier: &Arc<crate::runtime::ipc_events::IpcNotifier>,
 ) -> Result<bool> {
-    if let Some(active_request) = server
+    let Some(active_request) = server
         .receive()
         .context("failed to receive iceoryx2 request")?
-    {
-        handle_request(manager, &active_request)?;
-        response_notifier
-            .notify()
-            .context("failed to notify iceoryx2 response event")?;
-        Ok(true)
-    } else {
-        Ok(false)
-    }
+    else {
+        return Ok(false);
+    };
+    spawn_request_worker(
+        Arc::clone(manager),
+        Arc::clone(response_notifier),
+        active_request,
+    );
+    Ok(true)
+}
+fn spawn_request_worker(
+    manager: Arc<Manager>,
+    response_notifier: Arc<crate::runtime::ipc_events::IpcNotifier>,
+    active_request: IpcActiveRequest,
+) {
+    let _worker = thread::spawn(move || {
+        if let Err(error) = handle_request(&manager, &active_request).and_then(|()| {
+            response_notifier
+                .notify()
+                .context("failed to notify iceoryx2 response event")
+        }) {
+            eprintln!("{error:#}");
+        }
+    });
 }
 fn handle_request(manager: &Arc<Manager>, active_request: &IpcActiveRequest) -> Result<()> {
     let response = match decode_request(*active_request.user_header(), active_request.payload()) {

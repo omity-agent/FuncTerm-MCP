@@ -1,3 +1,15 @@
+if (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue) {
+    Set-PSReadLineOption -HistorySaveStyle SaveNothing
+    $setPsReadLineOption = Get-Command Set-PSReadLineOption
+    if ($setPsReadLineOption.Parameters.ContainsKey('AddToHistoryHandler')) {
+        Set-PSReadLineOption -AddToHistoryHandler {
+            param([string] $line)
+            return $false
+        }
+    }
+}
+Clear-History
+
 function Invoke-McpPtyCommand {
     param(
         [Parameter(Mandatory = $true)][string]$CommandId,

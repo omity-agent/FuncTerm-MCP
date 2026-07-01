@@ -1,4 +1,7 @@
 #[cfg(windows)]
+#[path = "cli/history.rs"]
+mod history;
+#[cfg(windows)]
 #[path = "cli/shell_matrix.rs"]
 mod shell_matrix;
 #[cfg(windows)]
@@ -17,6 +20,7 @@ mod tests {
     };
     use core::time::Duration;
     use std::thread;
+    use std::time::Instant;
     #[test]
     fn cli_rejects_missing_cwd() {
         let _guard = locked();
@@ -120,6 +124,37 @@ mod tests {
             dead_query = super::support::parse_shell_query(&run_cli(&["query", &created.shell_id]));
         }
         panic!("query should report exited shell as not alive");
+    }
+    #[test]
+    fn cli_waiting_command_does_not_block_other_requests() {
+        let _guard = locked();
+        let cwd = std::env::temp_dir();
+        let first = create_shell(&cwd, "powershell");
+        let second = create_shell(&cwd, "powershell");
+        let first_shell_id = first.shell_id;
+        let worker = thread::spawn(move || {
+            super::support::send_command(
+                &first_shell_id,
+                "Start-Sleep -Seconds 5; Write-Output 'MCP_PTY_WAIT_DONE'",
+                6.0,
+            )
+        });
+        thread::sleep(Duration::from_millis(500));
+        let start = Instant::now();
+        let query = super::support::parse_shell_query(&run_cli(&["query", &second.shell_id]));
+        let elapsed = start.elapsed();
+        assert!(query.alive, "second shell should remain alive");
+        assert!(
+            elapsed < Duration::from_secs(2),
+            "query should not wait for unrelated command; elapsed {elapsed:?}"
+        );
+        let accepted = worker.join().unwrap();
+        let command_query = parse_command_query(&accepted);
+        assert!(command_query.finished, "long command should finish");
+        assert!(
+            command_query.stdout.contains("MCP_PTY_WAIT_DONE"),
+            "stdout should include long command marker"
+        );
     }
     fn wait_for_screen_contains(shell_id: &str, expected: &str) -> super::support::ShellQuery {
         let mut last_screen = String::new();

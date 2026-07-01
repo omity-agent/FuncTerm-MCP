@@ -1,3 +1,9 @@
+set +o history
+unset HISTFILE
+export HISTSIZE=0
+export HISTFILESIZE=0
+history -c
+
 mcp_pty_command() {
     local command_id="$1"
     local payload="$2"
