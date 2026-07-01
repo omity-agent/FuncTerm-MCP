@@ -43,7 +43,7 @@ mod tests {
             "--cwd",
             cwd.to_str().unwrap(),
             "--shell",
-            "pwsh",
+            "powershell",
         ]);
         assert!(output.status.success());
         assert!(String::from_utf8_lossy(&output.stdout).contains("shell_id: "));
@@ -52,7 +52,7 @@ mod tests {
     fn cli_query_returns_command_output() {
         let _guard = locked();
         let cwd = std::env::temp_dir();
-        let created = create_shell(&cwd, "pwsh");
+        let created = create_shell(&cwd, "powershell");
         let accepted_output = send_test_command(&created.shell_id);
         let query = parse_command_query(&accepted_output);
         assert_eq!(
@@ -72,7 +72,7 @@ mod tests {
     fn cli_keyboard_input_is_reflected_on_pty_screen() {
         let _guard = locked();
         let cwd = std::env::temp_dir();
-        let created = create_shell(&cwd, "pwsh");
+        let created = create_shell(&cwd, "powershell");
         let marker = "MCP_PTY_TYPED_INPUT";
         let written = write_keyboard(&created.shell_id, marker.as_bytes());
         assert!(
@@ -89,7 +89,7 @@ mod tests {
     fn cli_keyboard_enter_runs_command_through_pty() {
         let _guard = locked();
         let cwd = std::env::temp_dir();
-        let created = create_shell(&cwd, "pwsh");
+        let created = create_shell(&cwd, "powershell");
         let marker = "MCP_PTY_KEYBOARD_EVENT";
         let command = format!("Write-Output '{marker}'\r\n");
         let written = write_keyboard(&created.shell_id, command.as_bytes());

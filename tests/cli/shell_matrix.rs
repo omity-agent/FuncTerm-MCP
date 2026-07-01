@@ -81,16 +81,11 @@ mod tests {
             );
         }
     }
-    const fn shell_cases() -> [ShellCase; 4] {
+    const fn shell_cases() -> [ShellCase; 3] {
         [
             ShellCase {
                 name: "powershell",
-                env_var: "SHELL_MCP_PTY_WINDOWS_POWERSHELL",
-                expected_exit_code: 7,
-            },
-            ShellCase {
-                name: "pwsh",
-                env_var: "SHELL_MCP_PTY_PWSH",
+                env_var: "SHELL_MCP_PTY_POWERSHELL",
                 expected_exit_code: 7,
             },
             ShellCase {
@@ -117,7 +112,7 @@ mod tests {
     }
     fn case_command(shell: &str, next: &Path) -> String {
         match shell {
-            "powershell" | "pwsh" => format!(
+            "powershell" => format!(
                 "Write-Output 'MCP_PTY_STDOUT'; Write-Error 'MCP_PTY_STDERR'; Set-Location -LiteralPath {}; cmd /c exit 7",
                 ps_quote(next)
             ),

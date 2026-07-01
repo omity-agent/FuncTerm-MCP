@@ -1,7 +1,7 @@
 use super::codec::{Cursor, append_bytes, append_path, append_text};
 use super::{
     REQUEST_NEW_SHELL, REQUEST_PING, REQUEST_QUERY, REQUEST_SEND_COMMAND, REQUEST_WRITE_KEYBOARD,
-    SHELL_BASH, SHELL_NUSHELL, SHELL_POWERSHELL, SHELL_PWSH,
+    SHELL_BASH, SHELL_NUSHELL, SHELL_POWERSHELL,
 };
 use crate::runtime::protocol::Request;
 use crate::runtime::protocol::wire::RequestHeader;
@@ -77,7 +77,6 @@ impl RequestFrame {
 const fn encode_shell(shell: ShellChoice) -> u8 {
     match shell {
         ShellChoice::PowerShell => SHELL_POWERSHELL,
-        ShellChoice::Pwsh => SHELL_PWSH,
         ShellChoice::Bash => SHELL_BASH,
         ShellChoice::NuShell => SHELL_NUSHELL,
     }
@@ -85,7 +84,6 @@ const fn encode_shell(shell: ShellChoice) -> u8 {
 fn decode_shell(value: u8) -> Result<ShellChoice> {
     match value {
         SHELL_POWERSHELL => Ok(ShellChoice::PowerShell),
-        SHELL_PWSH => Ok(ShellChoice::Pwsh),
         SHELL_BASH => Ok(ShellChoice::Bash),
         SHELL_NUSHELL => Ok(ShellChoice::NuShell),
         other => bail!("unknown shell kind {other}"),

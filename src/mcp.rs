@@ -44,7 +44,7 @@ impl McpServer {
             .call(request)
             .map_err(error_text)
     }
-    #[tool(name = "new_shell", description = "Create a new interactive shell.")]
+    #[tool(name = "new_shell", description = "打开一个新的 Shell 窗口。")]
     async fn new_shell(
         &self,
         Parameters(request): Parameters<NewShellRequest>,
@@ -84,10 +84,7 @@ impl McpServer {
             | Payload::Query(_) => Err(unexpected_daemon_response()),
         }
     }
-    #[tool(
-        name = "send_command",
-        description = "Run a command in a shell and wait up to wait_ms milliseconds."
-    )]
+    #[tool(name = "send_command", description = "向特定 Shell 发送命令。并获得等待时间结束前该命令产生的所有输出。")]
     async fn send_command(
         &self,
         Parameters(request): Parameters<SendCommandRequest>,
@@ -105,10 +102,7 @@ impl McpServer {
             | Payload::Query(_) => Err(unexpected_daemon_response()),
         }
     }
-    #[tool(
-        name = "query",
-        description = "Query a shell screen or command output by ID."
-    )]
+    #[tool(name = "query")]
     async fn query(&self, Parameters(request): Parameters<QueryRequest>) -> Result<String, String> {
         let payload = self.call(&Request::Query { id: request.id })?;
         match payload {

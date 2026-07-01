@@ -7,7 +7,6 @@ use std::path::Path;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ShellChoice {
     PowerShell,
-    Pwsh,
     Bash,
     NuShell,
 }
@@ -16,18 +15,17 @@ pub(crate) struct ShellStartup {
     pub(crate) ready_file: std::path::PathBuf,
 }
 impl ShellChoice {
-    pub(crate) fn executable(self, settings: &Settings) -> &str {
+    pub(crate) fn executable(self, settings: &Settings) -> Result<String> {
         match self {
-            Self::PowerShell => &settings.windows_powershell,
-            Self::Pwsh => &settings.pwsh,
-            Self::Bash => &settings.bash,
-            Self::NuShell => &settings.nushell,
+            Self::PowerShell => select_available_executable(&settings.powershell),
+            Self::Bash => Ok(settings.bash.clone()),
+            Self::NuShell => Ok(settings.nushell.clone()),
         }
     }
     pub(crate) fn startup(self, cwd: &Path, session_root: &Path) -> Result<ShellStartup> {
         let ready_file = session_root.join("startup.ready");
         let args = match self {
-            Self::PowerShell | Self::Pwsh => powershell::startup_args(cwd, &ready_file),
+            Self::PowerShell => powershell::startup_args(cwd, &ready_file),
             Self::Bash => bash::startup_args(cwd, session_root, &ready_file)?,
             Self::NuShell => nushell::startup_args(cwd, &ready_file),
         };
@@ -41,22 +39,63 @@ impl ShellChoice {
         cwd: &Path,
     ) -> String {
         match self {
-            Self::PowerShell | Self::Pwsh => {
-                powershell::invocation(command_id, command, directory, cwd)
-            }
+            Self::PowerShell => powershell::invocation(command_id, command, directory, cwd),
             Self::Bash => bash::invocation(command_id, command, directory, cwd),
             Self::NuShell => nushell::invocation(command_id, command, directory, cwd),
         }
     }
     pub(crate) fn parse(value: &str) -> Result<Self> {
         match value.to_ascii_lowercase().as_str() {
-            "powershell" | "windows_powershell" => Ok(Self::PowerShell),
-            "pwsh" | "powershell_core" => Ok(Self::Pwsh),
-            "bash" => Ok(Self::Bash),
-            "nu" | "nushell" => Ok(Self::NuShell),
+            "powershell" | "powershell.exe" | "pwsh" | "pwsh.exe" | "powershell_core"
+            | "windows_powershell" => Ok(Self::PowerShell),
+            "bash" | "bash.exe" => Ok(Self::Bash),
+            "nu" | "nu.exe" | "nushell" | "nushell.exe" => Ok(Self::NuShell),
             other => bail!(
-                "unsupported shell `{other}`; supported shells are powershell, pwsh, bash, and nu"
+                "unsupported shell `{other}`; supported shells are powershell, bash, and nushell"
             ),
         }
+    }
+}
+fn select_available_executable(candidates: &[String]) -> Result<String> {
+    for candidate in candidates {
+        if is_command_available(candidate) {
+            return Ok(candidate.clone());
+        }
+    }
+    bail!(
+        "none of the configured PowerShell executables are available: {}",
+        candidates.join(", ")
+    )
+}
+fn is_command_available(candidate: &str) -> bool {
+    let path = Path::new(candidate);
+    if path.components().count() > 1 {
+        return path.is_file();
+    }
+    let Ok(path_value) = std::env::var("PATH") else {
+        return false;
+    };
+    std::env::split_paths(&path_value).any(|directory| directory.join(candidate).is_file())
+}
+#[cfg(test)]
+#[expect(
+    clippy::inline_modules,
+    reason = "Rust skill permits inline modules guarded by cfg(test)"
+)]
+mod tests {
+    use super::ShellChoice;
+    #[test]
+    fn shell_aliases_parse_to_three_choices() {
+        assert_eq!(
+            ShellChoice::parse("powershell.exe").unwrap(),
+            ShellChoice::PowerShell
+        );
+        assert_eq!(ShellChoice::parse("pwsh").unwrap(), ShellChoice::PowerShell);
+        assert_eq!(ShellChoice::parse("bash.exe").unwrap(), ShellChoice::Bash);
+        assert_eq!(ShellChoice::parse("nu").unwrap(), ShellChoice::NuShell);
+        assert_eq!(
+            ShellChoice::parse("nushell.exe").unwrap(),
+            ShellChoice::NuShell
+        );
     }
 }

@@ -7,11 +7,8 @@ terminal_rows = 30
 # Shell PTY 的默认列数。
 terminal_cols = 120
 
-# Windows PowerShell 可执行文件名称。
-windows_powershell = "powershell.exe"
-
-# PowerShell 7+ 可执行文件名称。
-pwsh = "pwsh.exe"
+# PowerShell 可执行文件候选
+powershell = ["pwsh.exe", "powershell.exe"]
 
 # Bash 可执行文件名称。
 bash = "bash.exe"

@@ -64,7 +64,8 @@ impl Manager {
             pixel_height: 0,
         };
         let pair = pty_system.openpty(size).context("failed to open pty")?;
-        let mut command = CommandBuilder::new(shell.executable(&self.settings));
+        let executable = shell.executable(&self.settings)?;
+        let mut command = CommandBuilder::new(executable);
         let ready_file = startup.ready_file.clone();
         apply_startup(&mut command, startup);
         command.cwd(cwd);

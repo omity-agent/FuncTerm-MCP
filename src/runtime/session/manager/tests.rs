@@ -7,8 +7,7 @@ fn test_settings() -> Settings {
         daemon_service_name: "shell_mcp_pty/test".to_owned(),
         terminal_rows: 30,
         terminal_cols: 120,
-        windows_powershell: "powershell.exe".to_owned(),
-        pwsh: "pwsh.exe".to_owned(),
+        powershell: vec!["powershell.exe".to_owned()],
         bash: "bash.exe".to_owned(),
         nushell: "nu.exe".to_owned(),
     }
@@ -31,7 +30,7 @@ fn missing_cwd_is_rejected_before_shell_creation() {
 #[test]
 fn immediately_exiting_shell_is_rejected_before_registration() {
     let mut settings = test_settings();
-    settings.windows_powershell = "where.exe".to_owned();
+    settings.powershell = vec!["where.exe".to_owned()];
     let manager = Manager::new(settings).unwrap();
     let error = manager
         .new_shell(std::env::temp_dir().as_path(), ShellChoice::PowerShell)
