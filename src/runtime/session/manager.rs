@@ -5,7 +5,7 @@ mod state;
 #[cfg(test)]
 mod tests;
 use crate::runtime::config::Settings;
-use crate::runtime::ipc::QueryResult;
+use crate::runtime::protocol::QueryResult;
 use crate::runtime::session::records::{CommandRecord, command_query};
 use crate::runtime::session::support::{lock_mutex, start_reader};
 use crate::runtime::temp;

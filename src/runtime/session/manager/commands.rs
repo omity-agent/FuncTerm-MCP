@@ -1,6 +1,6 @@
 use super::lifecycle::{release_shell, reserve_shell};
 use super::{Manager, ShellSession};
-use crate::runtime::ipc::{EndReason, QueryResult};
+use crate::runtime::protocol::{EndReason, QueryResult};
 use crate::runtime::session::records::{
     CommandRecord, command_query, create_record, wait_for_done,
 };

@@ -1,10 +1,12 @@
 use super::command::{CLI_COMMAND_TIMEOUT, exe};
 use super::process::ChildGuard;
+#[path = "../../../src/runtime/iceoryx/shared.rs"]
+mod iceoryx_shared;
+#[path = "../../../src/runtime/protocol/wire.rs"]
+mod protocol_wire;
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::time::Duration;
-use iceoryx2::config::Config;
 use iceoryx2::prelude::*;
-use iceoryx2_bb_system_types::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::{Mutex, MutexGuard};
 use std::thread;
@@ -94,29 +96,25 @@ fn wait_for_daemon(child: &mut ChildGuard, service_name: &str) {
     }
 }
 fn has_daemon_server(service_name: &str) -> bool {
-    let Some(config) = iceoryx_config() else {
+    let Ok(config) = iceoryx_shared::config() else {
         return false;
     };
-    let Ok(node) = NodeBuilder::new().config(&config).create::<ipc::Service>() else {
+    let Ok(node) = NodeBuilder::new()
+        .config(&config)
+        .create::<ipc_threadsafe::Service>()
+    else {
         return false;
     };
     let Ok(service) = node
         .service_builder(&service_name.try_into().unwrap())
         .request_response::<[u8], [u8]>()
+        .request_user_header::<protocol_wire::RequestHeader>()
+        .response_user_header::<protocol_wire::ResponseHeader>()
         .open_or_create()
     else {
         return false;
     };
     service.dynamic_config().number_of_servers() > 0
-}
-fn iceoryx_config() -> Option<Config> {
-    let root = std::env::temp_dir().join("shell-mcp-iceoryx2");
-    std::fs::create_dir_all(&root).ok()?;
-    let root_text = root.to_string_lossy();
-    let root_path = Path::new(root_text.as_bytes()).ok()?;
-    let mut config = Config::default();
-    config.global.set_root_path(&root_path);
-    Some(config)
 }
 fn apply_env(command: &mut Command, env: &[(String, String)]) {
     for pair in env {

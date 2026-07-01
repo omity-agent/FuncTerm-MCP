@@ -1,21 +1,22 @@
 mod types;
 use crate::runtime::client;
 use crate::runtime::config::Settings;
-use crate::runtime::ipc::{Payload, Request};
+use crate::runtime::protocol::{Payload, Request};
 use crate::runtime::working_dir;
 use crate::shell::ShellChoice;
+use alloc::sync::Arc;
 use anyhow::Result;
-use base64_turbo::STANDARD;
 use rmcp::{
     ServerHandler, ServiceExt as _,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     tool, tool_handler, tool_router,
 };
 use std::path::Path;
+use std::sync::Mutex;
 use types::{NewShellRequest, QueryRequest, SendCommandRequest, WriteKeyboardRequest};
 #[derive(Clone, Debug)]
 struct McpServer {
-    settings: Settings,
+    daemon: Arc<Mutex<client::DaemonClient>>,
     tool_router: ToolRouter<Self>,
 }
 #[expect(
@@ -30,15 +31,18 @@ struct McpServer {
 impl ServerHandler for McpServer {}
 # [tool_router (router = tool_router)]
 impl McpServer {
-    fn new(settings: Settings) -> Self {
+    fn new(daemon: client::DaemonClient) -> Self {
         Self {
-            settings,
+            daemon: Arc::new(Mutex::new(daemon)),
             tool_router: Self::tool_router(),
         }
     }
     fn call(&self, request: &Request) -> Result<Payload, String> {
-        client::ensure_daemon(&self.settings.daemon_service_name).map_err(error_text)?;
-        client::call(&self.settings.daemon_service_name, request).map_err(error_text)
+        self.daemon
+            .lock()
+            .map_err(error_text)?
+            .call(request)
+            .map_err(error_text)
     }
     #[tool(name = "new_shell", description = "Create a new interactive shell.")]
     async fn new_shell(
@@ -68,10 +72,9 @@ impl McpServer {
         &self,
         Parameters(request): Parameters<WriteKeyboardRequest>,
     ) -> Result<String, String> {
-        let bytes_base64 = STANDARD.encode(&request.bytes);
         let payload = self.call(&Request::WriteKeyboard {
             shell_id: request.shell_id,
-            bytes_base64,
+            bytes: request.bytes,
         })?;
         match payload {
             Payload::KeyboardWritten => Ok(payload.to_plain_text()),
@@ -119,7 +122,8 @@ impl McpServer {
 }
 pub(crate) async fn run(settings: Settings) -> Result<()> {
     client::ensure_daemon(&settings.daemon_service_name)?;
-    let service = McpServer::new(settings)
+    let daemon = client::DaemonClient::connect(&settings.daemon_service_name)?;
+    let service = McpServer::new(daemon)
         .serve(rmcp::transport::stdio())
         .await?;
     service.waiting().await?;

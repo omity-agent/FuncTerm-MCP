@@ -1,23 +1,28 @@
 use crate::runtime::config::Settings;
-use crate::runtime::ipc::{Payload, Request, Response};
+use crate::runtime::protocol::frame::{RequestFrame, ResponseFrame};
+use crate::runtime::protocol::wire::{RequestHeader, ResponseHeader};
+use crate::runtime::protocol::{Payload, Request, Response};
 use crate::runtime::session::Manager;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
-use base64_turbo::STANDARD;
 use core::time::Duration;
 use iceoryx2::active_request::ActiveRequest;
 use iceoryx2::prelude::*;
 const IPC_CYCLE: Duration = Duration::from_millis(20);
 const INITIAL_SLICE_LEN: usize = 4096;
+type IpcActiveRequest =
+    ActiveRequest<ipc_threadsafe::Service, [u8], RequestHeader, [u8], ResponseHeader>;
 pub(crate) fn run(settings: Settings) -> Result<()> {
     let config = crate::runtime::iceoryx::config()?;
     let node = NodeBuilder::new()
         .config(&config)
-        .create::<ipc::Service>()
+        .create::<ipc_threadsafe::Service>()
         .context("failed to create iceoryx2 daemon node")?;
     let service = node
         .service_builder(&settings.daemon_service_name.as_str().try_into()?)
         .request_response::<[u8], [u8]>()
+        .request_user_header::<RequestHeader>()
+        .response_user_header::<ResponseHeader>()
         .open_or_create()
         .with_context(|| {
             format!(
@@ -42,14 +47,12 @@ pub(crate) fn run(settings: Settings) -> Result<()> {
     }
     Ok(())
 }
-fn handle_request<ServiceType>(
-    manager: &Arc<Manager>,
-    active_request: &ActiveRequest<ServiceType, [u8], (), [u8], ()>,
-) -> Result<()>
-where
-    ServiceType: iceoryx2::service::Service,
-{
-    let response = match sonic_rs::from_slice::<Request>(active_request.payload()) {
+fn handle_request(manager: &Arc<Manager>, active_request: &IpcActiveRequest) -> Result<()> {
+    let request_frame = RequestFrame {
+        header: *active_request.user_header(),
+        payload: active_request.payload().to_vec(),
+    };
+    let response = match request_frame.into_request() {
         Ok(request) => match dispatch(manager, request) {
             Ok(payload) => Response::Ok { payload },
             Err(error) => Response::Err {
@@ -60,11 +63,12 @@ where
             message: format!("failed to parse request: {error:#}"),
         },
     };
-    let response_bytes = sonic_rs::to_vec(&response).context("failed to serialize response")?;
-    let uninit_response = active_request
-        .loan_slice_uninit(response_bytes.len())
+    let frame = ResponseFrame::from_response(&response)?;
+    let mut uninit_response = active_request
+        .loan_slice_uninit(frame.payload.len())
         .context("failed to loan iceoryx2 response sample")?;
-    let response_sample = uninit_response.write_from_slice(&response_bytes);
+    *uninit_response.user_header_mut() = frame.header;
+    let response_sample = uninit_response.write_from_slice(&frame.payload);
     response_sample
         .send()
         .context("failed to send iceoryx2 response")
@@ -76,13 +80,7 @@ fn dispatch(manager: &Arc<Manager>, request: Request) -> Result<Payload> {
             let shell_id = manager.new_shell(&cwd, shell)?;
             Ok(Payload::ShellCreated { shell_id })
         }
-        Request::WriteKeyboard {
-            shell_id,
-            bytes_base64,
-        } => {
-            let bytes = STANDARD
-                .decode(bytes_base64)
-                .context("failed to decode keyboard bytes")?;
+        Request::WriteKeyboard { shell_id, bytes } => {
             manager.write_keyboard(&shell_id, &bytes)?;
             Ok(Payload::KeyboardWritten)
         }

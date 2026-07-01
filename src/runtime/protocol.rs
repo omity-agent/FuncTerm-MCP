@@ -1,8 +1,7 @@
+pub(crate) mod frame;
+pub(crate) mod wire;
 use crate::shell::ShellChoice;
-use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-#[derive(Deserialize, Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
 pub(crate) enum Request {
     Ping,
     NewShell {
@@ -11,7 +10,7 @@ pub(crate) enum Request {
     },
     WriteKeyboard {
         shell_id: String,
-        bytes_base64: String,
+        bytes: Vec<u8>,
     },
     SendCommand {
         shell_id: String,
@@ -22,14 +21,10 @@ pub(crate) enum Request {
         id: String,
     },
 }
-#[derive(Deserialize, Serialize)]
-#[serde(tag = "status", rename_all = "snake_case")]
 pub(crate) enum Response {
     Ok { payload: Payload },
     Err { message: String },
 }
-#[derive(Deserialize, Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
 pub(crate) enum Payload {
     Pong,
     ShellCreated {
@@ -43,14 +38,12 @@ pub(crate) enum Payload {
     },
     Query(QueryResult),
 }
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug)]
 pub(crate) enum EndReason {
     CommandEnded,
     WaitTimeout,
 }
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(tag = "recognized_as", rename_all = "snake_case")]
+#[derive(Debug)]
 pub(crate) enum QueryResult {
     Shell {
         alive: bool,

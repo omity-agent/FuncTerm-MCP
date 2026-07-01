@@ -1,6 +1,6 @@
 use crate::runtime::client;
 use crate::runtime::config;
-use crate::runtime::ipc::{Payload, Request};
+use crate::runtime::protocol::{Payload, Request};
 use crate::runtime::working_dir;
 use crate::shell::ShellChoice;
 use anyhow::{Context as _, Result};
@@ -64,13 +64,9 @@ pub(crate) async fn run() -> Result<()> {
             let bytes = STANDARD
                 .decode(&base64)
                 .context("invalid base64 keyboard input")?;
-            let bytes_base64 = STANDARD.encode(&bytes);
             let payload = client::call(
                 &settings.daemon_service_name,
-                &Request::WriteKeyboard {
-                    shell_id,
-                    bytes_base64,
-                },
+                &Request::WriteKeyboard { shell_id, bytes },
             )?;
             print_payload(&payload);
             Ok(())

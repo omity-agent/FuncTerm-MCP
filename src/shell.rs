@@ -3,10 +3,8 @@ mod bash;
 mod nushell;
 mod powershell;
 use anyhow::{Result, bail};
-use serde::{Deserialize, Serialize};
 use std::path::Path;
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug)]
 pub(crate) enum ShellChoice {
     PowerShell,
     Pwsh,
