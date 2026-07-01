@@ -1,4 +1,5 @@
 mod cli;
+mod commands;
 mod mcp;
 mod runtime;
 mod shell;

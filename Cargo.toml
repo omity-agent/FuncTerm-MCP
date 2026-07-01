@@ -83,6 +83,7 @@ edition = "2024"
 anyhow = "*"
 base64-turbo = "*"
 clap = { version = "*", features = ["derive"] }
+encoding_rs = "*"
 mimalloc = { version = "*", features = ["v3"] }
 portable-pty = "*"
 nanoid = "*"
@@ -93,7 +94,7 @@ rmcp = { version = "*", features = ["server", "macros", "transport-io"] }
 schemars = "*"
 serde = { version = "*", features = ["derive"] }
 sonic-rs = "*"
-thiserror = "*"
 tokio = { version = "*", features = ["full"] }
 toml = "*"
 vt100 = "*"
+which = "*"

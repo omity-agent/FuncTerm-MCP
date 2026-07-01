@@ -1,17 +1,13 @@
 mod types;
 use crate::runtime::client;
 use crate::runtime::config::Settings;
-use crate::runtime::protocol::{Payload, Request, waiting_from_seconds};
-use crate::runtime::working_dir;
-use crate::shell::ShellChoice;
 use alloc::sync::Arc;
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use rmcp::{
     ServerHandler, ServiceExt as _,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     tool, tool_handler, tool_router,
 };
-use std::path::Path;
 use std::sync::Mutex;
 use types::{NewShellRequest, QueryRequest, SendCommandRequest, WriteKeyboardRequest};
 #[derive(Clone, Debug)]
@@ -39,38 +35,31 @@ impl McpServer {
             tool_router: Self::tool_router(),
         }
     }
-    fn call(&self, request: &Request) -> Result<Payload, String> {
-        let mut daemon = self.daemon.lock().map_err(error_text)?;
+    fn call(
+        &self,
+        request: &crate::runtime::protocol::Request,
+    ) -> Result<crate::runtime::protocol::Payload> {
+        let mut daemon = self.daemon.lock().map_err(|error| anyhow!("{error}"))?;
         if daemon.is_none() {
-            client::ensure_daemon(&self.daemon_service_name).map_err(error_text)?;
-            *daemon =
-                Some(client::DaemonClient::connect(&self.daemon_service_name).map_err(error_text)?);
+            client::ensure_daemon(&self.daemon_service_name)?;
+            *daemon = Some(client::DaemonClient::connect(&self.daemon_service_name)?);
         }
         daemon
             .as_ref()
-            .ok_or_else(unexpected_daemon_response)?
+            .ok_or_else(|| anyhow!("daemon returned an unexpected response"))?
             .call(request)
-            .map_err(error_text)
     }
     #[tool(name = "new_shell", description = "打开一个新的 Shell 窗口。")]
     async fn new_shell(
         &self,
         Parameters(request): Parameters<NewShellRequest>,
     ) -> Result<String, String> {
-        let shell = ShellChoice::parse(&request.shell).map_err(error_text)?;
-        let cwd = request.cwd.as_deref().map(Path::new);
-        let resolved_cwd = working_dir::resolve(cwd).map_err(error_text)?;
-        let payload = self.call(&Request::NewShell {
-            cwd: resolved_cwd,
-            shell,
-        })?;
-        match payload {
-            Payload::ShellCreated { .. } => Ok(payload.to_plain_text()),
-            Payload::Pong
-            | Payload::KeyboardWritten
-            | Payload::CommandAccepted { .. }
-            | Payload::Query(_) => Err(unexpected_daemon_response()),
-        }
+        crate::commands::new_shell(
+            |command| self.call(command),
+            request.cwd_path(),
+            &request.shell,
+        )
+        .map_err(error_text)
     }
     #[tool(
         name = "write_keyboard",
@@ -80,17 +69,12 @@ impl McpServer {
         &self,
         Parameters(request): Parameters<WriteKeyboardRequest>,
     ) -> Result<String, String> {
-        let payload = self.call(&Request::WriteKeyboard {
-            shell_id: request.shell_id,
-            bytes: request.bytes,
-        })?;
-        match payload {
-            Payload::KeyboardWritten => Ok(payload.to_plain_text()),
-            Payload::Pong
-            | Payload::ShellCreated { .. }
-            | Payload::CommandAccepted { .. }
-            | Payload::Query(_) => Err(unexpected_daemon_response()),
-        }
+        crate::commands::write_keyboard(
+            |command| self.call(command),
+            request.shell_id,
+            request.bytes,
+        )
+        .map_err(error_text)
     }
     #[tool(
         name = "send_command",
@@ -100,30 +84,17 @@ impl McpServer {
         &self,
         Parameters(request): Parameters<SendCommandRequest>,
     ) -> Result<String, String> {
-        let waiting = waiting_from_seconds(request.waiting).map_err(error_text)?;
-        let payload = self.call(&Request::SendCommand {
-            shell_id: request.shell_id,
-            command: request.command,
-            waiting,
-        })?;
-        match payload {
-            Payload::CommandAccepted { .. } => Ok(payload.to_plain_text()),
-            Payload::Pong
-            | Payload::ShellCreated { .. }
-            | Payload::KeyboardWritten
-            | Payload::Query(_) => Err(unexpected_daemon_response()),
-        }
+        crate::commands::send_command(
+            |command| self.call(command),
+            request.shell_id,
+            request.command,
+            request.waiting,
+        )
+        .map_err(error_text)
     }
     #[tool(name = "query")]
     async fn query(&self, Parameters(request): Parameters<QueryRequest>) -> Result<String, String> {
-        let payload = self.call(&Request::Query { id: request.id })?;
-        match payload {
-            Payload::Query(_) => Ok(payload.to_plain_text()),
-            Payload::Pong
-            | Payload::ShellCreated { .. }
-            | Payload::KeyboardWritten
-            | Payload::CommandAccepted { .. } => Err(unexpected_daemon_response()),
-        }
+        crate::commands::query(|command| self.call(command), request.id).map_err(error_text)
     }
 }
 pub(crate) async fn run(settings: Settings) -> Result<()> {
@@ -135,7 +106,4 @@ pub(crate) async fn run(settings: Settings) -> Result<()> {
 }
 fn error_text(error: impl core::fmt::Display) -> String {
     error.to_string()
-}
-fn unexpected_daemon_response() -> String {
-    "daemon returned an unexpected response".to_owned()
 }

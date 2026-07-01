@@ -58,7 +58,7 @@ impl ShellChoice {
 }
 fn select_available_executable(candidates: &[String]) -> Result<String> {
     for candidate in candidates {
-        if is_command_available(candidate) {
+        if which::which(candidate).is_ok() {
             return Ok(candidate.clone());
         }
     }
@@ -66,16 +66,6 @@ fn select_available_executable(candidates: &[String]) -> Result<String> {
         "none of the configured PowerShell executables are available: {}",
         candidates.join(", ")
     )
-}
-fn is_command_available(candidate: &str) -> bool {
-    let path = Path::new(candidate);
-    if path.components().count() > 1 {
-        return path.is_file();
-    }
-    let Ok(path_value) = std::env::var("PATH") else {
-        return false;
-    };
-    std::env::split_paths(&path_value).any(|directory| directory.join(candidate).is_file())
 }
 #[cfg(test)]
 #[expect(

@@ -1,10 +1,16 @@
 use serde::Deserialize;
+use std::path::Path;
 #[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
 pub(super) struct NewShellRequest {
     #[schemars(description = "初始工作目录。工作目录可以被后续命令改变。")]
     pub(super) cwd: Option<String>,
     #[schemars(description = "选择一种 Shell")]
     pub(super) shell: String,
+}
+impl NewShellRequest {
+    pub(super) fn cwd_path(&self) -> Option<&Path> {
+        self.cwd.as_deref().map(Path::new)
+    }
 }
 #[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
 pub(super) struct WriteKeyboardRequest {
