@@ -1,10 +1,11 @@
 use crate::runtime::protocol::QueryResult;
 use anyhow::{Context as _, Result};
 use core::time::Duration;
+use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher as _};
 use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::thread;
+use std::sync::mpsc;
 use std::time::Instant;
 #[derive(Clone)]
 pub(super) struct CommandRecord {
@@ -35,16 +36,49 @@ pub(super) fn create_record(
         done: command_dir.join("done.json"),
     })
 }
-pub(super) fn wait_for_done(done: &Path, limit: Duration) -> bool {
+pub(super) fn wait_for_done(done: &Path, limit: Duration) -> Result<bool> {
+    wait_for_path(done, limit)
+}
+pub(super) fn wait_for_path(path: &Path, limit: Duration) -> Result<bool> {
+    if path.exists() {
+        return Ok(true);
+    }
+    if limit.is_zero() {
+        return Ok(false);
+    }
+    let parent = path.parent().context("watched path has no parent")?;
+    fs::create_dir_all(parent).with_context(|| {
+        format!(
+            "failed to create watched parent directory {}",
+            parent.display()
+        )
+    })?;
+    let (tx, rx) = mpsc::channel();
+    let mut watcher = RecommendedWatcher::new(tx, Config::default())
+        .context("failed to create filesystem watcher")?;
+    watcher
+        .watch(parent, RecursiveMode::NonRecursive)
+        .with_context(|| format!("failed to watch directory {}", parent.display()))?;
+    if path.exists() {
+        return Ok(true);
+    }
     let start = Instant::now();
     loop {
-        if done.exists() {
-            return true;
+        let Some(remaining) = limit.checked_sub(start.elapsed()) else {
+            return Ok(false);
+        };
+        match rx.recv_timeout(remaining) {
+            Ok(Ok(_event)) => {
+                if path.exists() {
+                    return Ok(true);
+                }
+            }
+            Ok(Err(error)) => return Err(error).context("filesystem watcher failed"),
+            Err(mpsc::RecvTimeoutError::Timeout) => return Ok(path.exists()),
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                anyhow::bail!("filesystem watcher disconnected")
+            }
         }
-        if start.elapsed() >= limit {
-            return false;
-        }
-        thread::sleep(Duration::from_millis(50));
     }
 }
 pub(super) fn command_query(record: &CommandRecord, fallback_cwd: &Path) -> Result<QueryResult> {
@@ -122,7 +156,7 @@ mod tests {
     #[test]
     fn zero_wait_does_not_block_for_missing_done_file() {
         let missing_path = Path::new("Z:\\definitely-missing-command.done");
-        assert!(!wait_for_done(missing_path, Duration::from_millis(0)));
+        assert!(!wait_for_done(missing_path, Duration::from_millis(0)).unwrap());
     }
     #[test]
     fn reads_utf16_little_endian_output() {

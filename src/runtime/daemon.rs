@@ -5,13 +5,18 @@ use crate::runtime::protocol::{Payload, Request, Response};
 use crate::runtime::session::Manager;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
-use core::time::Duration;
 use iceoryx2::active_request::ActiveRequest;
 use iceoryx2::prelude::*;
-const IPC_CYCLE: Duration = Duration::from_millis(20);
 const INITIAL_SLICE_LEN: usize = 4096;
 type IpcActiveRequest =
     ActiveRequest<ipc_threadsafe::Service, [u8], RequestHeader, [u8], ResponseHeader>;
+type IpcServer = iceoryx2::port::server::Server<
+    ipc_threadsafe::Service,
+    [u8],
+    RequestHeader,
+    [u8],
+    ResponseHeader,
+>;
 pub(crate) fn run(settings: Settings) -> Result<()> {
     let config = crate::runtime::iceoryx::config()?;
     let node = NodeBuilder::new()
@@ -36,16 +41,40 @@ pub(crate) fn run(settings: Settings) -> Result<()> {
         .allocation_strategy(AllocationStrategy::PowerOfTwo)
         .create()
         .context("failed to create iceoryx2 daemon server")?;
+    let request_listener =
+        crate::runtime::ipc_events::request_listener(&node, &settings.daemon_service_name)?;
+    let response_notifier =
+        crate::runtime::ipc_events::response_notifier(&node, &settings.daemon_service_name)?;
+    let ready_notifier =
+        crate::runtime::ipc_events::ready_notifier(&node, &settings.daemon_service_name)?;
     let manager = Arc::new(Manager::new(settings)?);
-    while node.wait(IPC_CYCLE).is_ok() {
-        while let Some(active_request) = server
-            .receive()
-            .context("failed to receive iceoryx2 request")?
-        {
-            handle_request(&manager, &active_request)?;
-        }
+    ready_notifier
+        .notify()
+        .context("failed to notify iceoryx2 daemon ready event")?;
+    loop {
+        while receive_one(&server, &manager, &response_notifier)? {}
+        request_listener
+            .blocking_wait_one()
+            .context("failed while waiting for iceoryx2 request event")?;
     }
-    Ok(())
+}
+fn receive_one(
+    server: &IpcServer,
+    manager: &Arc<Manager>,
+    response_notifier: &crate::runtime::ipc_events::IpcNotifier,
+) -> Result<bool> {
+    if let Some(active_request) = server
+        .receive()
+        .context("failed to receive iceoryx2 request")?
+    {
+        handle_request(manager, &active_request)?;
+        response_notifier
+            .notify()
+            .context("failed to notify iceoryx2 response event")?;
+        Ok(true)
+    } else {
+        Ok(false)
+    }
 }
 fn handle_request(manager: &Arc<Manager>, active_request: &IpcActiveRequest) -> Result<()> {
     let request_frame = RequestFrame {

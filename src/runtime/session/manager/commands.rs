@@ -47,7 +47,7 @@ impl Manager {
             return Err(error);
         }
         self.start_monitor(command_id.clone(), Arc::clone(&shell), record.clone());
-        let ended = wait_for_done(&record.done, Duration::from_millis(wait_ms));
+        let ended = wait_for_done(&record.done, Duration::from_millis(wait_ms))?;
         let reason = if ended {
             Self::update_shell_cwd(&shell, &record)?;
             EndReason::CommandEnded
@@ -103,8 +103,9 @@ impl Manager {
     ) {
         let manager = Arc::clone(self);
         thread::spawn(move || {
-            while !record.done.exists() {
-                thread::sleep(Duration::from_millis(100));
+            if let Err(error) = wait_for_done(&record.done, Duration::MAX) {
+                eprintln!("{error:#}");
+                return;
             }
             if let Err(error) = Self::update_shell_cwd(&shell, &record) {
                 eprintln!("{error:#}");
