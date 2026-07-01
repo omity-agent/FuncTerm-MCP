@@ -4,7 +4,7 @@ mod nushell;
 mod powershell;
 use anyhow::{Result, bail};
 use std::path::Path;
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ShellChoice {
     PowerShell,
     Pwsh,

@@ -1,6 +1,8 @@
 mod codec;
 mod request;
 mod response;
+#[cfg(test)]
+mod tests;
 pub(crate) use request::RequestFrame;
 pub(crate) use response::ResponseFrame;
 pub(super) const REQUEST_PING: u8 = 0;

@@ -2,6 +2,7 @@ pub(crate) mod frame;
 pub(crate) mod wire;
 use crate::shell::ShellChoice;
 use std::path::PathBuf;
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Request {
     Ping,
     NewShell {
@@ -21,10 +22,12 @@ pub(crate) enum Request {
         id: String,
     },
 }
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Response {
     Ok { payload: Payload },
     Err { message: String },
 }
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Payload {
     Pong,
     ShellCreated {
@@ -38,12 +41,12 @@ pub(crate) enum Payload {
     },
     Query(QueryResult),
 }
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum EndReason {
     CommandEnded,
     WaitTimeout,
 }
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum QueryResult {
     Shell {
         alive: bool,

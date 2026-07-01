@@ -1,5 +1,5 @@
 use iceoryx2::prelude::ZeroCopySend;
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[repr(C)]
 pub(crate) struct RequestHeader {
     pub(crate) kind: u8,
@@ -12,7 +12,7 @@ pub(crate) struct RequestHeader {
     pub(crate) keyboard_len: u64,
     pub(crate) query_id_len: u64,
 }
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[repr(C)]
 pub(crate) struct ResponseHeader {
     pub(crate) status: u8,
