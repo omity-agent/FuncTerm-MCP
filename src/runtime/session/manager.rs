@@ -29,7 +29,7 @@ pub(crate) struct Manager {
 pub(super) struct ShellSession {
     choice: ShellChoice,
     cwd: Mutex<std::path::PathBuf>,
-    writer: Mutex<Box<dyn Write + Send>>,
+    writer: Arc<Mutex<Box<dyn Write + Send>>>,
     screen: Arc<Mutex<vt100::Parser>>,
     busy: Mutex<Option<String>>,
     command_root: std::path::PathBuf,
@@ -95,21 +95,22 @@ impl Manager {
             .master
             .try_clone_reader()
             .context("failed to clone pty reader")?;
-        let writer = pair
-            .master
-            .take_writer()
-            .context("failed to take pty writer")?;
+        let writer = Arc::new(Mutex::new(
+            pair.master
+                .take_writer()
+                .context("failed to take pty writer")?,
+        ));
         let screen = Arc::new(Mutex::new(vt100::Parser::new(
             self.settings.terminal_rows,
             self.settings.terminal_cols,
             0,
         )));
-        start_reader(Arc::clone(&screen), reader);
+        start_reader(Arc::clone(&screen), Arc::clone(&writer), reader);
         wait_for_shell_startup(&mut child, &ready_file, &screen)?;
         let session = Arc::new(ShellSession {
             choice: shell,
             cwd: Mutex::new(cwd.to_path_buf()),
-            writer: Mutex::new(writer),
+            writer,
             screen,
             busy: Mutex::new(None),
             command_root,

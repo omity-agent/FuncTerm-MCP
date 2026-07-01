@@ -1,12 +1,12 @@
-#[cfg(windows)]
 #[path = "cli/history.rs"]
 mod history;
-#[cfg(windows)]
 #[path = "cli/shell_matrix.rs"]
 mod shell_matrix;
-#[cfg(windows)]
 #[path = "cli/support.rs"]
 mod support;
+#[cfg(unix)]
+#[path = "cli/unix.rs"]
+mod unix;
 #[cfg(windows)]
 #[cfg(test)]
 #[expect(

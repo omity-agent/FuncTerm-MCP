@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::support::{
-        create_shell, locked, locked_with_env, parse_command_query, parse_shell_query, run_cli,
+        create_shell, locked_with_env, parse_command_query, parse_shell_query, run_cli,
         send_command,
     };
     use core::sync::atomic::{AtomicU64, Ordering};
@@ -11,54 +11,57 @@ mod tests {
     struct ShellCase {
         name: &'static str,
         env_var: &'static str,
+        executables: &'static [&'static str],
         expected_exit_code: i32,
     }
     #[test]
     fn cli_runs_commands_for_every_supported_shell() {
-        let _guard = locked();
         for case in shell_cases() {
-            let start = case_dir(case.name, "start dir");
-            let next = case_dir(case.name, "next dir");
-            let created = create_shell(&start, case.name);
-            let shell_before = parse_shell_query(&run_cli(&["query", &created.shell_id]));
-            assert_shell_query(&shell_before, &start, case.name);
-            let command = case_command(case.name, &next);
-            let command_query =
-                parse_command_query(&send_command(&created.shell_id, &command, 10.0));
-            assert_eq!(command_query.recognized_as, "command");
-            assert!(
-                command_query.finished,
-                "{name} command should finish",
-                name = case.name
-            );
-            assert!(
-                command_query.stdout.contains("MCP_PTY_STDOUT"),
-                "{name} stdout should include marker: {stdout}",
-                name = case.name,
-                stdout = command_query.stdout
-            );
-            assert!(
-                command_query.stderr.contains("MCP_PTY_STDERR"),
-                "{name} stderr should include marker: {stderr}",
-                name = case.name,
-                stderr = command_query.stderr
-            );
-            assert_eq!(
-                command_query.exit_code,
-                Some(case.expected_exit_code),
-                "{name} exit code should be captured",
-                name = case.name
-            );
-            assert_cwd(&command_query.cwd, &next, case.name);
-            let shell_after = parse_shell_query(&run_cli(&["query", &created.shell_id]));
-            assert_shell_query(&shell_after, &next, case.name);
+            if let Some(executable) = available_executable(case.executables) {
+                let _guard = locked_with_env(&[(case.env_var, &executable)]);
+                let start = case_dir(case.name, "start dir");
+                let next = case_dir(case.name, "next dir");
+                let created = create_shell(&start, case.name);
+                let shell_before = parse_shell_query(&run_cli(&["query", &created.shell_id]));
+                assert_shell_query(&shell_before, &start, case.name);
+                let command = case_command(case.name, &next);
+                let command_query =
+                    parse_command_query(&send_command(&created.shell_id, &command, 10.0));
+                assert_eq!(command_query.recognized_as, "command");
+                assert!(
+                    command_query.finished,
+                    "{name} command should finish",
+                    name = case.name
+                );
+                assert!(
+                    command_query.stdout.contains("MCP_PTY_STDOUT"),
+                    "{name} stdout should include marker: {stdout}",
+                    name = case.name,
+                    stdout = command_query.stdout
+                );
+                assert!(
+                    command_query.stderr.contains("MCP_PTY_STDERR"),
+                    "{name} stderr should include marker: {stderr}",
+                    name = case.name,
+                    stderr = command_query.stderr
+                );
+                assert_eq!(
+                    command_query.exit_code,
+                    Some(case.expected_exit_code),
+                    "{name} exit code should be captured",
+                    name = case.name
+                );
+                assert_cwd(&command_query.cwd, &next, case.name);
+                let shell_after = parse_shell_query(&run_cli(&["query", &created.shell_id]));
+                assert_shell_query(&shell_after, &next, case.name);
+            }
         }
     }
     #[test]
     fn cli_reports_startup_failure_for_every_supported_shell() {
         for case in shell_cases() {
             let output = {
-                let _guard = locked_with_env(&[(case.env_var, "where.exe")]);
+                let _guard = locked_with_env(&[(case.env_var, immediately_exiting_executable())]);
                 let cwd = std::env::temp_dir();
                 run_cli(&[
                     "new-shell",
@@ -81,24 +84,47 @@ mod tests {
             );
         }
     }
-    const fn shell_cases() -> [ShellCase; 3] {
+    const fn shell_cases() -> [ShellCase; 4] {
         [
             ShellCase {
                 name: "powershell",
                 env_var: "SHELL_MCP_PTY_POWERSHELL",
+                executables: &["pwsh", "pwsh.exe", "powershell", "powershell.exe"],
                 expected_exit_code: 7,
             },
             ShellCase {
                 name: "bash",
                 env_var: "SHELL_MCP_PTY_BASH",
+                executables: &["bash", "bash.exe"],
                 expected_exit_code: 1,
             },
             ShellCase {
                 name: "nu",
                 env_var: "SHELL_MCP_PTY_NUSHELL",
+                executables: &["nu", "nu.exe"],
                 expected_exit_code: 0,
             },
+            ShellCase {
+                name: "zsh",
+                env_var: "SHELL_MCP_PTY_ZSH",
+                executables: &["zsh"],
+                expected_exit_code: 1,
+            },
         ]
+    }
+    fn available_executable(executables: &[&str]) -> Option<String> {
+        executables
+            .iter()
+            .find_map(|executable| which::which(executable).ok())
+            .map(|path| path.to_string_lossy().into_owned())
+    }
+    #[cfg(windows)]
+    fn immediately_exiting_executable() -> &'static str {
+        "where.exe"
+    }
+    #[cfg(not(windows))]
+    fn immediately_exiting_executable() -> &'static str {
+        "false"
     }
     fn case_dir(shell: &str, leaf: &str) -> PathBuf {
         let unique = CASE_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -116,7 +142,7 @@ mod tests {
                 "Write-Output 'MCP_PTY_STDOUT'; Write-Error 'MCP_PTY_STDERR'; Set-Location -LiteralPath {}; cmd /c exit 7",
                 ps_quote(next)
             ),
-            "bash" => format!(
+            "bash" | "zsh" => format!(
                 "printf 'MCP_PTY_STDOUT\\n'; printf 'MCP_PTY_STDERR\\n' >&2; cd {}; false",
                 sh_quote(&bash_path(next))
             ),

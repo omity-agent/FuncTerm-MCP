@@ -3,7 +3,7 @@ use super::codec::PayloadVec;
 use super::codec::{Cursor, PayloadSink, PayloadSize, PayloadWriter};
 use super::{
     REQUEST_NEW_SHELL, REQUEST_PING, REQUEST_QUERY, REQUEST_SEND_COMMAND, REQUEST_WRITE_KEYBOARD,
-    SHELL_BASH, SHELL_NUSHELL, SHELL_POWERSHELL,
+    SHELL_BASH, SHELL_NUSHELL, SHELL_POWERSHELL, SHELL_ZSH,
 };
 use crate::runtime::protocol::Request;
 use crate::runtime::protocol::wire::RequestHeader;
@@ -153,6 +153,7 @@ const fn encode_shell(shell: ShellChoice) -> u8 {
         ShellChoice::PowerShell => SHELL_POWERSHELL,
         ShellChoice::Bash => SHELL_BASH,
         ShellChoice::NuShell => SHELL_NUSHELL,
+        ShellChoice::Zsh => SHELL_ZSH,
     }
 }
 fn decode_shell(value: u8) -> Result<ShellChoice> {
@@ -160,6 +161,7 @@ fn decode_shell(value: u8) -> Result<ShellChoice> {
         SHELL_POWERSHELL => Ok(ShellChoice::PowerShell),
         SHELL_BASH => Ok(ShellChoice::Bash),
         SHELL_NUSHELL => Ok(ShellChoice::NuShell),
+        SHELL_ZSH => Ok(ShellChoice::Zsh),
         other => bail!("unknown shell kind {other}"),
     }
 }

@@ -8,6 +8,9 @@ use portable_pty::{Child, CommandBuilder};
 use std::path::Path;
 use std::sync::Mutex;
 pub(super) fn apply_startup(command: &mut CommandBuilder, startup: ShellStartup) {
+    for (name, value) in startup.env {
+        command.env(name, value);
+    }
     command.args(startup.args);
 }
 pub(super) fn wait_for_shell_startup(

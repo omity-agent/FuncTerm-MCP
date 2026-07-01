@@ -1,7 +1,9 @@
 use crate::runtime::config::Settings;
 mod bash;
 mod nushell;
+mod posix;
 mod powershell;
+mod zsh;
 use anyhow::{Result, bail};
 use std::path::Path;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -9,9 +11,11 @@ pub(crate) enum ShellChoice {
     PowerShell,
     Bash,
     NuShell,
+    Zsh,
 }
 pub(crate) struct ShellStartup {
     pub(crate) args: Vec<String>,
+    pub(crate) env: Vec<(String, String)>,
     pub(crate) ready_file: std::path::PathBuf,
 }
 impl ShellChoice {
@@ -20,16 +24,25 @@ impl ShellChoice {
             Self::PowerShell => select_available_executable(&settings.powershell),
             Self::Bash => Ok(settings.bash.clone()),
             Self::NuShell => Ok(settings.nushell.clone()),
+            Self::Zsh => Ok(settings.zsh.clone()),
         }
     }
     pub(crate) fn startup(self, cwd: &Path, session_root: &Path) -> Result<ShellStartup> {
         let ready_file = session_root.join("startup.ready");
-        let args = match self {
-            Self::PowerShell => powershell::startup_args(cwd, &ready_file),
-            Self::Bash => bash::startup_args(cwd, session_root, &ready_file)?,
-            Self::NuShell => nushell::startup_args(cwd, &ready_file),
+        let (args, env) = match self {
+            Self::PowerShell => (powershell::startup_args(cwd, &ready_file), Vec::new()),
+            Self::Bash => (
+                bash::startup_args(cwd, session_root, &ready_file)?,
+                Vec::new(),
+            ),
+            Self::NuShell => (nushell::startup_args(cwd, &ready_file), Vec::new()),
+            Self::Zsh => zsh::startup(cwd, session_root, &ready_file)?,
         };
-        Ok(ShellStartup { args, ready_file })
+        Ok(ShellStartup {
+            args,
+            env,
+            ready_file,
+        })
     }
     pub(crate) fn invocation(
         self,
@@ -42,6 +55,7 @@ impl ShellChoice {
             Self::PowerShell => powershell::invocation(command_id, command, directory, cwd),
             Self::Bash => bash::invocation(command_id, command, directory, cwd),
             Self::NuShell => nushell::invocation(command_id, command, directory, cwd),
+            Self::Zsh => zsh::invocation(command_id, command, directory, cwd),
         }
     }
     pub(crate) fn parse(value: &str) -> Result<Self> {
@@ -50,8 +64,9 @@ impl ShellChoice {
             | "windows_powershell" => Ok(Self::PowerShell),
             "bash" | "bash.exe" => Ok(Self::Bash),
             "nu" | "nu.exe" | "nushell" | "nushell.exe" => Ok(Self::NuShell),
+            "zsh" => Ok(Self::Zsh),
             other => bail!(
-                "unsupported shell `{other}`; supported shells are powershell, bash, and nushell"
+                "unsupported shell `{other}`; supported shells are powershell, bash, nushell, and zsh"
             ),
         }
     }
@@ -75,7 +90,7 @@ fn select_available_executable(candidates: &[String]) -> Result<String> {
 mod tests {
     use super::ShellChoice;
     #[test]
-    fn shell_aliases_parse_to_three_choices() {
+    fn shell_aliases_parse_to_supported_choices() {
         assert_eq!(
             ShellChoice::parse("powershell.exe").unwrap(),
             ShellChoice::PowerShell
@@ -87,5 +102,6 @@ mod tests {
             ShellChoice::parse("nushell.exe").unwrap(),
             ShellChoice::NuShell
         );
+        assert_eq!(ShellChoice::parse("zsh").unwrap(), ShellChoice::Zsh);
     }
 }

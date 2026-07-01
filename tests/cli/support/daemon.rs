@@ -30,6 +30,7 @@ impl Drop for TestGuard {
             .clear();
     }
 }
+#[cfg(windows)]
 pub(crate) fn locked() -> TestGuard {
     locked_with_env(&[])
 }

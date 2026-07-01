@@ -1,6 +1,8 @@
 use super::daemon;
 use super::parse::{ShellCreated, parse_shell_created};
-use super::process::{output_from_parts, read_pipe, wait_for_status};
+#[cfg(windows)]
+use super::process::read_pipe;
+use super::process::{output_from_parts, wait_for_status};
 use base64_turbo::STANDARD;
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::time::Duration;
@@ -8,6 +10,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 pub(crate) const CLI_COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
+#[cfg(windows)]
 const PIPE_CLOSE_TIMEOUT: Duration = Duration::from_secs(5);
 static OUTPUT_COUNTER: AtomicU64 = AtomicU64::new(0);
 pub(crate) fn exe() -> PathBuf {
@@ -19,6 +22,7 @@ pub(crate) fn run_cli(arguments: &[&str]) -> Output {
     daemon::apply_active_env(&mut command);
     output_to_files(command, CLI_COMMAND_TIMEOUT)
 }
+#[cfg(windows)]
 pub(crate) fn run_cli_with_pipes(arguments: &[&str]) -> Output {
     let mut command = Command::new(exe());
     command
@@ -52,6 +56,7 @@ pub(crate) fn write_keyboard(shell_id: &str, bytes: &[u8]) -> Output {
     let encoded = STANDARD.encode(bytes);
     run_cli(&["write-keyboard", shell_id, "--base64", &encoded])
 }
+#[cfg(windows)]
 pub(crate) fn send_test_command(shell_id: &str) -> Output {
     send_command(shell_id, "Write-Output 'MCP_PTY_TEST'", 5.0)
 }
@@ -70,6 +75,7 @@ fn output_to_files(mut command: Command, timeout: Duration) -> Output {
     fs::remove_file(&stderr_path).unwrap();
     output
 }
+#[cfg(windows)]
 fn output_from_pipes(mut command: Command, timeout: Duration) -> Output {
     let mut child = command.spawn().unwrap();
     let stdout = child.stdout.take().unwrap();

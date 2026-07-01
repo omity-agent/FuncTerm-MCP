@@ -15,3 +15,6 @@ bash = "bash.exe"
 
 # NuShell 可执行文件名称。
 nushell = "nu.exe"
+
+# Zsh 可执行文件名称。
+zsh = "zsh"

@@ -15,6 +15,10 @@ fn request_frames_round_trip_in_both_directions() {
             cwd: PathBuf::from("/tmp/shell-mcp"),
             shell: ShellChoice::Bash,
         },
+        Request::NewShell {
+            cwd: PathBuf::from("/tmp/shell-mcp-zsh"),
+            shell: ShellChoice::Zsh,
+        },
         Request::WriteKeyboard {
             shell_id: "shell-keyboard".to_owned(),
             bytes: vec![0, b'a', b'\r', b'\n', 255],

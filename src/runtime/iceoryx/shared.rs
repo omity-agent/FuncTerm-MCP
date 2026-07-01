@@ -12,8 +12,16 @@ pub(crate) fn config() -> Result<Config> {
     Ok(config)
 }
 fn root() -> Result<PathBuf> {
-    let root = std::env::temp_dir().join(ICEORYX_ROOT);
+    let root = temp_root().join(ICEORYX_ROOT);
     std::fs::create_dir_all(&root)
         .with_context(|| format!("failed to create temporary directory {}", root.display()))?;
     Ok(root)
+}
+#[cfg(unix)]
+fn temp_root() -> PathBuf {
+    PathBuf::from("/tmp")
+}
+#[cfg(not(unix))]
+fn temp_root() -> PathBuf {
+    std::env::temp_dir()
 }

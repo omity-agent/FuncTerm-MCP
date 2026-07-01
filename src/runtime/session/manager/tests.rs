@@ -10,6 +10,7 @@ fn test_settings() -> Settings {
         powershell: vec!["powershell.exe".to_owned()],
         bash: "bash.exe".to_owned(),
         nushell: "nu.exe".to_owned(),
+        zsh: "zsh".to_owned(),
     }
 }
 #[test]
@@ -30,12 +31,20 @@ fn missing_cwd_is_rejected_before_shell_creation() {
 #[test]
 fn immediately_exiting_shell_is_rejected_before_registration() {
     let mut settings = test_settings();
-    settings.powershell = vec!["where.exe".to_owned()];
+    settings.powershell = vec![immediately_exiting_executable().to_owned()];
     let manager = Manager::new(settings).unwrap();
     let error = manager
         .new_shell(std::env::temp_dir().as_path(), ShellChoice::PowerShell)
         .unwrap_err();
     assert!(error.to_string().contains("startup"));
+}
+#[cfg(windows)]
+fn immediately_exiting_executable() -> &'static str {
+    "where.exe"
+}
+#[cfg(not(windows))]
+fn immediately_exiting_executable() -> &'static str {
+    "false"
 }
 #[test]
 fn generated_ids_have_kind_prefixes_and_base36_suffixes() {

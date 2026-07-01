@@ -9,6 +9,7 @@ pub(crate) struct Settings {
     pub(crate) powershell: Vec<String>,
     pub(crate) bash: String,
     pub(crate) nushell: String,
+    pub(crate) zsh: String,
 }
 pub(crate) fn load() -> Result<Settings> {
     let mut settings =
@@ -20,6 +21,7 @@ pub(crate) fn load() -> Result<Settings> {
     apply_list_override("SHELL_MCP_PTY_POWERSHELL", &mut settings.powershell);
     apply_string_override("SHELL_MCP_PTY_BASH", &mut settings.bash);
     apply_string_override("SHELL_MCP_PTY_NUSHELL", &mut settings.nushell);
+    apply_string_override("SHELL_MCP_PTY_ZSH", &mut settings.zsh);
     Ok(settings)
 }
 fn apply_list_override(name: &str, value: &mut Vec<String>) {

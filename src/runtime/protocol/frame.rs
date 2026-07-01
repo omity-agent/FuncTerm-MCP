@@ -19,6 +19,7 @@ pub(super) const REQUEST_QUERY: u8 = 4;
 pub(super) const SHELL_POWERSHELL: u8 = 0;
 pub(super) const SHELL_BASH: u8 = 1;
 pub(super) const SHELL_NUSHELL: u8 = 2;
+pub(super) const SHELL_ZSH: u8 = 3;
 pub(super) const RESPONSE_OK: u8 = 0;
 pub(super) const RESPONSE_ERR: u8 = 1;
 pub(super) const PAYLOAD_PONG: u8 = 0;

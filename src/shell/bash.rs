@@ -1,3 +1,4 @@
+use super::posix::{sh_path, sh_quote};
 use anyhow::{Context as _, Result};
 use base64_turbo::STANDARD;
 use std::fs;
@@ -13,7 +14,7 @@ pub(super) fn startup_args(
     Ok(vec![
         "--noprofile".to_owned(),
         "--rcfile".to_owned(),
-        bash_path(&init_path),
+        sh_path(&init_path),
         "-i".to_owned(),
     ])
 }
@@ -23,23 +24,17 @@ pub(super) fn invocation(command_id: &str, command: &str, directory: &Path, cwd:
         "mcp_pty_command {} {} {} {}\n",
         sh_quote(command_id),
         sh_quote(&payload),
-        sh_quote(&bash_path(directory)),
-        sh_quote(&bash_path(cwd))
+        sh_quote(&sh_path(directory)),
+        sh_quote(&sh_path(cwd))
     )
 }
 fn initialization_script(cwd: &Path, ready_file: &Path) -> String {
     format!(
         "{}\ncd {}\n: > {}\n",
         include_str!("bash_init.sh"),
-        sh_quote(&bash_path(cwd)),
-        sh_quote(&bash_path(ready_file))
+        sh_quote(&sh_path(cwd)),
+        sh_quote(&sh_path(ready_file))
     )
-}
-fn bash_path(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
-}
-fn sh_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\\''"))
 }
 #[cfg(test)]
 #[expect(
@@ -49,13 +44,19 @@ fn sh_quote(value: &str) -> String {
 mod tests {
     use std::path::Path;
     #[test]
-    fn converts_windows_paths_for_bash() {
-        let converted = super::bash_path(Path::new("F:\\dir\\child"));
-        assert_eq!(converted, "F:/dir/child");
+    fn initialization_converts_windows_paths_for_bash() {
+        let script =
+            super::initialization_script(Path::new("F:\\dir\\child"), Path::new("F:\\ready"));
+        assert!(script.contains("cd 'F:/dir/child'"));
     }
     #[test]
-    fn quotes_single_quotes_for_shell() {
-        let quoted = super::sh_quote("a'b");
-        assert_eq!(quoted, "'a'\\''b'");
+    fn invocation_converts_windows_paths_for_bash() {
+        let converted = super::invocation(
+            "command",
+            "printf ok",
+            Path::new("F:\\dir\\child"),
+            Path::new("F:\\cwd"),
+        );
+        assert!(converted.contains("'F:/dir/child'"));
     }
 }

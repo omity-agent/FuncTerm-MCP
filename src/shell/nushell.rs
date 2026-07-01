@@ -10,13 +10,23 @@ pub(super) fn startup_args(cwd: &Path, ready_file: &Path) -> Vec<String> {
 }
 pub(super) fn invocation(command_id: &str, command: &str, directory: &Path, cwd: &Path) -> String {
     let payload = STANDARD.encode(command.as_bytes());
+    let line_ending = invocation_line_ending();
     format!(
-        "mcp_pty_command {} {} {} {}\r\n",
+        "mcp_pty_command {} {} {} {}{}",
         nu_quote(command_id),
         nu_quote(&payload),
         nu_quote(&directory.to_string_lossy()),
-        nu_quote(&cwd.to_string_lossy())
+        nu_quote(&cwd.to_string_lossy()),
+        line_ending
     )
+}
+#[cfg(windows)]
+const fn invocation_line_ending() -> &'static str {
+    "\r\n"
+}
+#[cfg(not(windows))]
+const fn invocation_line_ending() -> &'static str {
+    "\n"
 }
 fn initialization_script(cwd: &Path, ready_file: &Path) -> String {
     format!(

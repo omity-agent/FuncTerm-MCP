@@ -1,6 +1,8 @@
 use core::time::Duration;
+#[cfg(windows)]
 use std::io::Read;
 use std::process::{Child, ExitStatus, Output};
+#[cfg(windows)]
 use std::sync::mpsc;
 use std::thread;
 use std::time::Instant;
@@ -41,6 +43,7 @@ pub(crate) fn wait_for_status(child: &mut Child, timeout: Duration) -> ExitStatu
         thread::sleep(Duration::from_millis(50));
     }
 }
+#[cfg(windows)]
 pub(crate) fn read_pipe(mut pipe: impl Read + Send + 'static) -> mpsc::Receiver<Vec<u8>> {
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
