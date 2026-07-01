@@ -1,6 +1,8 @@
 pub(crate) mod frame;
 pub(crate) mod wire;
 use crate::shell::ShellChoice;
+use anyhow::{Context as _, Result};
+use core::time::Duration;
 use std::path::PathBuf;
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Request {
@@ -16,7 +18,7 @@ pub(crate) enum Request {
     SendCommand {
         shell_id: String,
         command: String,
-        wait_ms: u64,
+        waiting: Duration,
     },
     Query {
         id: String,
@@ -107,4 +109,8 @@ impl QueryResult {
             }
         }
     }
+}
+pub(crate) fn waiting_from_seconds(seconds: f64) -> Result<Duration> {
+    Duration::try_from_secs_f64(seconds)
+        .context("waiting must be a finite non-negative number of seconds")
 }

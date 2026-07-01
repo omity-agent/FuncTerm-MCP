@@ -116,10 +116,10 @@ fn dispatch(manager: &Arc<Manager>, request: Request) -> Result<Payload> {
         Request::SendCommand {
             shell_id,
             command,
-            wait_ms,
+            waiting,
         } => {
             let (command_id, end_reason, query) =
-                manager.send_command(&shell_id, &command, wait_ms)?;
+                manager.send_command(&shell_id, &command, waiting)?;
             Ok(Payload::CommandAccepted {
                 command_id,
                 end_reason,

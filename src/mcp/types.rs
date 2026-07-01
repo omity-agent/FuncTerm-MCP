@@ -16,9 +16,9 @@ pub(super) struct SendCommandRequest {
     pub(super) shell_id: String,
     pub(super) command: String,
     #[schemars(
-        description = "等待时长。输入 0 代表不等待命令执行。等待结束后命令不会被终止，仍可通过 Query 查看进展。"
+        description = "等待时长，单位为秒。输入 0 代表不等待命令执行。等待结束后命令不会被终止，仍可通过 Query 查看进展。"
     )]
-    pub(super) wait_ms: u64,
+    pub(super) waiting: f64,
 }
 #[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
 pub(super) struct QueryRequest {

@@ -109,7 +109,7 @@ mod tests {
         let alive_query =
             super::support::parse_shell_query(&run_cli(&["query", &created.shell_id]));
         assert!(alive_query.alive, "new shell should be alive");
-        let _closed = super::support::send_command(&created.shell_id, "exit", 200);
+        let _closed = super::support::send_command(&created.shell_id, "exit", 0.2);
         let mut dead_query =
             super::support::parse_shell_query(&run_cli(&["query", &created.shell_id]));
         for _attempt in 0_usize..20 {

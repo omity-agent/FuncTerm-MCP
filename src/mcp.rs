@@ -1,7 +1,7 @@
 mod types;
 use crate::runtime::client;
 use crate::runtime::config::Settings;
-use crate::runtime::protocol::{Payload, Request};
+use crate::runtime::protocol::{Payload, Request, waiting_from_seconds};
 use crate::runtime::working_dir;
 use crate::shell::ShellChoice;
 use alloc::sync::Arc;
@@ -16,7 +16,8 @@ use std::sync::Mutex;
 use types::{NewShellRequest, QueryRequest, SendCommandRequest, WriteKeyboardRequest};
 #[derive(Clone, Debug)]
 struct McpServer {
-    daemon: Arc<Mutex<client::DaemonClient>>,
+    daemon_service_name: String,
+    daemon: Arc<Mutex<Option<client::DaemonClient>>>,
     tool_router: ToolRouter<Self>,
 }
 #[expect(
@@ -31,16 +32,23 @@ struct McpServer {
 impl ServerHandler for McpServer {}
 # [tool_router (router = tool_router)]
 impl McpServer {
-    fn new(daemon: client::DaemonClient) -> Self {
+    fn new(daemon_service_name: String) -> Self {
         Self {
-            daemon: Arc::new(Mutex::new(daemon)),
+            daemon_service_name,
+            daemon: Arc::new(Mutex::new(None)),
             tool_router: Self::tool_router(),
         }
     }
     fn call(&self, request: &Request) -> Result<Payload, String> {
-        self.daemon
-            .lock()
-            .map_err(error_text)?
+        let mut daemon = self.daemon.lock().map_err(error_text)?;
+        if daemon.is_none() {
+            client::ensure_daemon(&self.daemon_service_name).map_err(error_text)?;
+            *daemon =
+                Some(client::DaemonClient::connect(&self.daemon_service_name).map_err(error_text)?);
+        }
+        daemon
+            .as_ref()
+            .ok_or_else(unexpected_daemon_response)?
             .call(request)
             .map_err(error_text)
     }
@@ -84,15 +92,19 @@ impl McpServer {
             | Payload::Query(_) => Err(unexpected_daemon_response()),
         }
     }
-    #[tool(name = "send_command", description = "向特定 Shell 发送命令。并获得等待时间结束前该命令产生的所有输出。")]
+    #[tool(
+        name = "send_command",
+        description = "向特定 Shell 发送命令。并获得等待时间结束前该命令产生的所有输出。"
+    )]
     async fn send_command(
         &self,
         Parameters(request): Parameters<SendCommandRequest>,
     ) -> Result<String, String> {
+        let waiting = waiting_from_seconds(request.waiting).map_err(error_text)?;
         let payload = self.call(&Request::SendCommand {
             shell_id: request.shell_id,
             command: request.command,
-            wait_ms: request.wait_ms,
+            waiting,
         })?;
         match payload {
             Payload::CommandAccepted { .. } => Ok(payload.to_plain_text()),
@@ -115,9 +127,7 @@ impl McpServer {
     }
 }
 pub(crate) async fn run(settings: Settings) -> Result<()> {
-    client::ensure_daemon(&settings.daemon_service_name)?;
-    let daemon = client::DaemonClient::connect(&settings.daemon_service_name)?;
-    let service = McpServer::new(daemon)
+    let service = McpServer::new(settings.daemon_service_name)
         .serve(rmcp::transport::stdio())
         .await?;
     service.waiting().await?;

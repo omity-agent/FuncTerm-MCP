@@ -31,7 +31,7 @@ impl Manager {
         self: &Arc<Self>,
         shell_id: &str,
         command: &str,
-        wait_ms: u64,
+        waiting: Duration,
     ) -> Result<(String, EndReason, QueryResult)> {
         let shell = self.shell(shell_id)?;
         self.ensure_shell_running(shell_id, &shell)?;
@@ -47,7 +47,7 @@ impl Manager {
             return Err(error);
         }
         self.start_monitor(command_id.clone(), Arc::clone(&shell), record.clone());
-        let ended = wait_for_done(&record.done, Duration::from_millis(wait_ms))?;
+        let ended = wait_for_done(&record.done, waiting)?;
         let reason = if ended {
             Self::update_shell_cwd(&shell, &record)?;
             EndReason::CommandEnded

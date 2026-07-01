@@ -24,7 +24,7 @@ mod tests {
             assert_shell_query(&shell_before, &start, case.name);
             let command = case_command(case.name, &next);
             let command_query =
-                parse_command_query(&send_command(&created.shell_id, &command, 10_000));
+                parse_command_query(&send_command(&created.shell_id, &command, 10.0));
             assert_eq!(command_query.recognized_as, "command");
             assert!(
                 command_query.finished,

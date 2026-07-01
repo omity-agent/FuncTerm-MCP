@@ -38,14 +38,14 @@ pub(crate) fn create_shell(cwd: &Path, shell: &str) -> ShellCreated {
         shell,
     ]))
 }
-pub(crate) fn send_command(shell_id: &str, command: &str, wait_ms: u64) -> Output {
+pub(crate) fn send_command(shell_id: &str, command: &str, waiting: f64) -> Output {
     run_cli(&[
         "send-command",
         shell_id,
         "--command",
         command,
-        "--wait-ms",
-        &wait_ms.to_string(),
+        "--waiting",
+        &waiting.to_string(),
     ])
 }
 pub(crate) fn write_keyboard(shell_id: &str, bytes: &[u8]) -> Output {
@@ -53,7 +53,7 @@ pub(crate) fn write_keyboard(shell_id: &str, bytes: &[u8]) -> Output {
     run_cli(&["write-keyboard", shell_id, "--base64", &encoded])
 }
 pub(crate) fn send_test_command(shell_id: &str) -> Output {
-    send_command(shell_id, "Write-Output 'MCP_PTY_TEST'", 5000)
+    send_command(shell_id, "Write-Output 'MCP_PTY_TEST'", 5.0)
 }
 fn output_to_files(mut command: Command, timeout: Duration) -> Output {
     let (stdout_path, stderr_path) = output_paths();

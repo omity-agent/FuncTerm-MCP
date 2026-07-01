@@ -5,7 +5,7 @@ pub(crate) struct RequestHeader {
     pub(crate) kind: u8,
     pub(crate) shell: u8,
     pub(crate) reserved: [u8; 6],
-    pub(crate) wait_ms: u64,
+    pub(crate) waiting_ns: u64,
     pub(crate) cwd_len: u64,
     pub(crate) shell_id_len: u64,
     pub(crate) command_len: u64,
@@ -34,7 +34,7 @@ pub(crate) struct ResponseHeader {
 }
 unsafe impl ZeroCopySend for RequestHeader {
     unsafe fn type_name() -> &'static str {
-        "shell_mcp_pty.protocol.RequestHeader.v1"
+        "shell_mcp_pty.protocol.RequestHeader.v2"
     }
     fn __is_zero_copy_send(&self) {}
 }

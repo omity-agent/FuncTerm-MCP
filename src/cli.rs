@@ -1,6 +1,6 @@
 use crate::runtime::client;
 use crate::runtime::config;
-use crate::runtime::protocol::{Payload, Request};
+use crate::runtime::protocol::{Payload, Request, waiting_from_seconds};
 use crate::runtime::working_dir;
 use crate::shell::ShellChoice;
 use anyhow::{Context as _, Result};
@@ -32,8 +32,8 @@ enum CliCommand {
         shell_id: String,
         #[arg(long)]
         command: String,
-        #[arg(long, default_value_t = 0)]
-        wait_ms: u64,
+        #[arg(long, default_value_t = 0.0)]
+        waiting: f64,
     },
     Query {
         id: String,
@@ -74,15 +74,16 @@ pub(crate) async fn run() -> Result<()> {
         CliCommand::SendCommand {
             shell_id,
             command,
-            wait_ms,
+            waiting: waiting_seconds,
         } => {
             client::ensure_daemon(&settings.daemon_service_name)?;
+            let waiting = waiting_from_seconds(waiting_seconds)?;
             let payload = client::call(
                 &settings.daemon_service_name,
                 &Request::SendCommand {
                     shell_id,
                     command,
-                    wait_ms,
+                    waiting,
                 },
             )?;
             print_payload(&payload);

@@ -1,6 +1,7 @@
 use super::{RequestFrame, ResponseFrame};
 use crate::runtime::protocol::{EndReason, Payload, QueryResult, Request, Response};
 use crate::shell::ShellChoice;
+use core::time::Duration;
 use std::path::PathBuf;
 #[test]
 fn request_frames_round_trip_in_both_directions() {
@@ -21,7 +22,7 @@ fn request_frames_round_trip_in_both_directions() {
         Request::SendCommand {
             shell_id: "shell-command".to_owned(),
             command: "Write-Output 'hello'; Set-Location F:\\".to_owned(),
-            wait_ms: 1234,
+            waiting: Duration::from_millis(1234),
         },
         Request::Query {
             id: "command-query".to_owned(),

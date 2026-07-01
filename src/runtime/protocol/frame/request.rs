@@ -6,7 +6,8 @@ use super::{
 use crate::runtime::protocol::Request;
 use crate::runtime::protocol::wire::RequestHeader;
 use crate::shell::ShellChoice;
-use anyhow::{Result, bail};
+use anyhow::{Context as _, Result, bail};
+use core::time::Duration;
 pub(crate) struct RequestFrame {
     pub(crate) header: RequestHeader,
     pub(crate) payload: Vec<u8>,
@@ -34,10 +35,10 @@ impl RequestFrame {
             Request::SendCommand {
                 shell_id,
                 command,
-                wait_ms,
+                waiting,
             } => {
                 header.kind = REQUEST_SEND_COMMAND;
-                header.wait_ms = *wait_ms;
+                header.waiting_ns = encode_waiting(*waiting)?;
                 header.shell_id_len = append_text(&mut payload, shell_id)?;
                 header.command_len = append_text(&mut payload, command)?;
             }
@@ -63,7 +64,7 @@ impl RequestFrame {
             REQUEST_SEND_COMMAND => Request::SendCommand {
                 shell_id: cursor.take_text(self.header.shell_id_len)?,
                 command: cursor.take_text(self.header.command_len)?,
-                wait_ms: self.header.wait_ms,
+                waiting: Duration::from_nanos(self.header.waiting_ns),
             },
             REQUEST_QUERY => Request::Query {
                 id: cursor.take_text(self.header.query_id_len)?,
@@ -88,4 +89,7 @@ fn decode_shell(value: u8) -> Result<ShellChoice> {
         SHELL_NUSHELL => Ok(ShellChoice::NuShell),
         other => bail!("unknown shell kind {other}"),
     }
+}
+fn encode_waiting(waiting: Duration) -> Result<u64> {
+    u64::try_from(waiting.as_nanos()).context("waiting is too large for an IPC request")
 }
