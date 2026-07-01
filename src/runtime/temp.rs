@@ -1,6 +1,6 @@
 use anyhow::{Context as _, Result};
 use std::path::PathBuf;
-const DAEMON_ROOT: &str = "shell-mcp-pty";
+const DAEMON_ROOT: &str = "functerm";
 pub(crate) fn daemon_root() -> Result<PathBuf> {
     create_root(DAEMON_ROOT)
 }

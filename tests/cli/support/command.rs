@@ -11,7 +11,7 @@ pub(crate) const CLI_COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
 const PIPE_CLOSE_TIMEOUT: Duration = Duration::from_secs(5);
 static OUTPUT_COUNTER: AtomicU64 = AtomicU64::new(0);
 pub(crate) fn exe() -> PathBuf {
-    PathBuf::from(env!("CARGO_BIN_EXE_shell-mcp-pty"))
+    PathBuf::from(env!("CARGO_BIN_EXE_functerm"))
 }
 pub(crate) fn run_cli(arguments: &[&str]) -> Output {
     let mut command = Command::new(exe());

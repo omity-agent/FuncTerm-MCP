@@ -75,7 +75,7 @@ codegen-units = 1
 rpath = false
 
 [package]
-name = "shell-mcp-pty"
+name = "functerm"
 version = "0.0.0"
 edition = "2024"
 

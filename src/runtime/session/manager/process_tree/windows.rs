@@ -1,14 +1,13 @@
 use anyhow::{Context as _, Error, Result};
 use core::ffi::c_void;
 use portable_pty::Child;
-use windows_sys::Win32::Foundation::{BOOL, CloseHandle, HANDLE};
+use windows_sys::Win32::Foundation::{CloseHandle, FALSE, HANDLE};
 use windows_sys::Win32::System::JobObjects::{
     AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
     SetInformationJobObject, TerminateJobObject,
 };
-const FALSE: BOOL = 0;
-const NULL_HANDLE: HANDLE = 0;
+const NULL_HANDLE: HANDLE = core::ptr::null_mut();
 pub(crate) struct ProcessTree {
     job: HANDLE,
 }
@@ -27,15 +26,11 @@ impl ProcessTree {
         }
         Ok(tree)
     }
-    #[expect(
-        clippy::as_conversions,
-        reason = "windows-sys 0.48 models HANDLE as isize while RawHandle is a pointer"
-    )]
     pub(crate) fn attach(&self, child: &dyn Child) -> Result<()> {
         let process = child
             .as_raw_handle()
             .context("shell child does not expose a process handle")?;
-        let assigned = unsafe { AssignProcessToJobObject(self.job, process as HANDLE) };
+        let assigned = unsafe { AssignProcessToJobObject(self.job, process) };
         if assigned == FALSE {
             return Err(last_error("failed to assign shell child to cleanup job"));
         }
@@ -93,18 +88,21 @@ fn last_error(message: &str) -> Error {
 )]
 mod tests {
     use super::ProcessTree;
+    use core::time::Duration;
     use std::process::Command;
+    use std::time::Instant;
     #[test]
     fn closing_job_terminates_attached_process() {
         let mut child = Command::new("cmd.exe")
-            .args(["/C", "ping -n 30 127.0.0.1 > nul"])
+            .args(["/C", "ping -n 10 127.0.0.1 > nul"])
             .spawn()
             .unwrap();
+        let started_at = Instant::now();
         {
             let tree = ProcessTree::new().unwrap();
             tree.attach(&child).unwrap();
         }
-        let status = child.wait().unwrap();
-        assert!(!status.success());
+        child.wait().unwrap();
+        assert!(started_at.elapsed() < Duration::from_secs(5));
     }
 }

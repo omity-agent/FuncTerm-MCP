@@ -122,7 +122,7 @@ mod tests {
             writer: Mutex::new(writer),
             screen: Arc::new(Mutex::new(vt100::Parser::new(30, 120, 0))),
             busy: Mutex::new(busy.map(str::to_owned)),
-            command_root: std::env::temp_dir().join("shell-mcp-pty-test-commands"),
+            command_root: std::env::temp_dir().join("functerm-test-commands"),
             process_tree: crate::runtime::session::manager::process_tree::ProcessTree::new()
                 .unwrap(),
             child: Mutex::new(child),
