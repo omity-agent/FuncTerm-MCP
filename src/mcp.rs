@@ -37,8 +37,8 @@ impl McpServer {
         }
     }
     fn call(&self, request: &Request) -> Result<Payload, String> {
-        client::ensure_daemon(&self.settings.daemon_address).map_err(error_text)?;
-        client::call(&self.settings.daemon_address, request).map_err(error_text)
+        client::ensure_daemon(&self.settings.daemon_service_name).map_err(error_text)?;
+        client::call(&self.settings.daemon_service_name, request).map_err(error_text)
     }
     #[tool(name = "new_shell", description = "Create a new interactive shell.")]
     async fn new_shell(
@@ -118,7 +118,7 @@ impl McpServer {
     }
 }
 pub(crate) async fn run(settings: Settings) -> Result<()> {
-    client::ensure_daemon(&settings.daemon_address)?;
+    client::ensure_daemon(&settings.daemon_service_name)?;
     let service = McpServer::new(settings)
         .serve(rmcp::transport::stdio())
         .await?;

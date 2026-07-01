@@ -4,44 +4,70 @@ use crate::runtime::session::Manager;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use base64_turbo::STANDARD;
-use std::io::{BufRead as _, BufReader, Write as _};
-use std::net::{TcpListener, TcpStream};
-use std::thread;
+use core::time::Duration;
+use iceoryx2::active_request::ActiveRequest;
+use iceoryx2::prelude::*;
+const IPC_CYCLE: Duration = Duration::from_millis(20);
+const INITIAL_SLICE_LEN: usize = 4096;
 pub(crate) fn run(settings: Settings) -> Result<()> {
-    let listener = TcpListener::bind(&settings.daemon_address)
-        .with_context(|| format!("failed to bind {}", settings.daemon_address))?;
+    let config = crate::runtime::iceoryx::config()?;
+    let node = NodeBuilder::new()
+        .config(&config)
+        .create::<ipc::Service>()
+        .context("failed to create iceoryx2 daemon node")?;
+    let service = node
+        .service_builder(&settings.daemon_service_name.as_str().try_into()?)
+        .request_response::<[u8], [u8]>()
+        .open_or_create()
+        .with_context(|| {
+            format!(
+                "failed to open iceoryx2 service {}",
+                settings.daemon_service_name
+            )
+        })?;
+    let server = service
+        .server_builder()
+        .initial_max_slice_len(INITIAL_SLICE_LEN)
+        .allocation_strategy(AllocationStrategy::PowerOfTwo)
+        .create()
+        .context("failed to create iceoryx2 daemon server")?;
     let manager = Arc::new(Manager::new(settings)?);
-    for incoming_stream in listener.incoming() {
-        let accepted_stream = incoming_stream.context("failed to accept daemon connection")?;
-        let shared_manager = Arc::clone(&manager);
-        thread::spawn(move || {
-            if let Err(error) = handle_connection(accepted_stream, &shared_manager) {
-                eprintln!("{error:#}");
-            }
-        });
+    while node.wait(IPC_CYCLE).is_ok() {
+        while let Some(active_request) = server
+            .receive()
+            .context("failed to receive iceoryx2 request")?
+        {
+            handle_request(&manager, &active_request)?;
+        }
     }
     Ok(())
 }
-fn handle_connection(stream: TcpStream, manager: &Arc<Manager>) -> Result<()> {
-    let mut reader = BufReader::new(stream.try_clone().context("failed to clone stream")?);
-    let mut request_line = String::new();
-    reader
-        .read_line(&mut request_line)
-        .context("failed to read request line")?;
-    let request =
-        sonic_rs::from_str::<Request>(&request_line).context("failed to parse request")?;
-    let response = match dispatch(manager, request) {
-        Ok(payload) => Response::Ok { payload },
+fn handle_request<ServiceType>(
+    manager: &Arc<Manager>,
+    active_request: &ActiveRequest<ServiceType, [u8], (), [u8], ()>,
+) -> Result<()>
+where
+    ServiceType: iceoryx2::service::Service,
+{
+    let response = match sonic_rs::from_slice::<Request>(active_request.payload()) {
+        Ok(request) => match dispatch(manager, request) {
+            Ok(payload) => Response::Ok { payload },
+            Err(error) => Response::Err {
+                message: format!("{error:#}"),
+            },
+        },
         Err(error) => Response::Err {
-            message: format!("{error:#}"),
+            message: format!("failed to parse request: {error:#}"),
         },
     };
-    let mut writer = stream;
-    let line = sonic_rs::to_string(&response).context("failed to serialize response")?;
-    writer
-        .write_all(line.as_bytes())
-        .context("failed to write response")?;
-    writer.write_all(b"\n").context("failed to finish response")
+    let response_bytes = sonic_rs::to_vec(&response).context("failed to serialize response")?;
+    let uninit_response = active_request
+        .loan_slice_uninit(response_bytes.len())
+        .context("failed to loan iceoryx2 response sample")?;
+    let response_sample = uninit_response.write_from_slice(&response_bytes);
+    response_sample
+        .send()
+        .context("failed to send iceoryx2 response")
 }
 fn dispatch(manager: &Arc<Manager>, request: Request) -> Result<Payload> {
     match request {

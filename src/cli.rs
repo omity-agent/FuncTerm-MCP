@@ -46,11 +46,11 @@ pub(crate) async fn run() -> Result<()> {
         CliCommand::Mcp => crate::mcp::run(settings).await,
         CliCommand::Daemon => crate::runtime::daemon::run(settings),
         CliCommand::NewShell { cwd, shell } => {
-            client::ensure_daemon(&settings.daemon_address)?;
+            client::ensure_daemon(&settings.daemon_service_name)?;
             let shell_choice = ShellChoice::parse(&shell)?;
             let resolved_cwd = working_dir::resolve(cwd.as_deref())?;
             let payload = client::call(
-                &settings.daemon_address,
+                &settings.daemon_service_name,
                 &Request::NewShell {
                     cwd: resolved_cwd,
                     shell: shell_choice,
@@ -60,13 +60,13 @@ pub(crate) async fn run() -> Result<()> {
             Ok(())
         }
         CliCommand::WriteKeyboard { shell_id, base64 } => {
-            client::ensure_daemon(&settings.daemon_address)?;
+            client::ensure_daemon(&settings.daemon_service_name)?;
             let bytes = STANDARD
                 .decode(&base64)
                 .context("invalid base64 keyboard input")?;
             let bytes_base64 = STANDARD.encode(&bytes);
             let payload = client::call(
-                &settings.daemon_address,
+                &settings.daemon_service_name,
                 &Request::WriteKeyboard {
                     shell_id,
                     bytes_base64,
@@ -80,9 +80,9 @@ pub(crate) async fn run() -> Result<()> {
             command,
             wait_ms,
         } => {
-            client::ensure_daemon(&settings.daemon_address)?;
+            client::ensure_daemon(&settings.daemon_service_name)?;
             let payload = client::call(
-                &settings.daemon_address,
+                &settings.daemon_service_name,
                 &Request::SendCommand {
                     shell_id,
                     command,
@@ -93,8 +93,8 @@ pub(crate) async fn run() -> Result<()> {
             Ok(())
         }
         CliCommand::Query { id } => {
-            client::ensure_daemon(&settings.daemon_address)?;
-            let payload = client::call(&settings.daemon_address, &Request::Query { id })?;
+            client::ensure_daemon(&settings.daemon_service_name)?;
+            let payload = client::call(&settings.daemon_service_name, &Request::Query { id })?;
             print_payload(&payload);
             Ok(())
         }

@@ -1,5 +1,5 @@
-# 本地 Daemon 监听地址；MCP 与 CLI 均通过它复用同一个 Shell 管理实例。
-daemon_address = "127.0.0.1:43875"
+# 本地 Daemon 的 iceoryx2 服务名；MCP 与 CLI 均通过它复用同一个 Shell 管理实例。
+daemon_service_name = "shell_mcp_pty/daemon"
 
 # Shell PTY 的默认行数。
 terminal_rows = 30

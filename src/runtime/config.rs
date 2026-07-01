@@ -3,7 +3,7 @@ use serde::Deserialize;
 const SETTINGS: &str = include_str!("../../settings.toml");
 #[derive(Clone, Debug, Deserialize)]
 pub(crate) struct Settings {
-    pub(crate) daemon_address: String,
+    pub(crate) daemon_service_name: String,
     pub(crate) terminal_rows: u16,
     pub(crate) terminal_cols: u16,
     pub(crate) windows_powershell: String,
@@ -14,7 +14,10 @@ pub(crate) struct Settings {
 pub(crate) fn load() -> Result<Settings> {
     let mut settings =
         toml::from_str::<Settings>(SETTINGS).context("failed to parse embedded settings")?;
-    apply_string_override("SHELL_MCP_PTY_DAEMON_ADDRESS", &mut settings.daemon_address);
+    apply_string_override(
+        "SHELL_MCP_PTY_DAEMON_SERVICE_NAME",
+        &mut settings.daemon_service_name,
+    );
     apply_string_override(
         "SHELL_MCP_PTY_WINDOWS_POWERSHELL",
         &mut settings.windows_powershell,
