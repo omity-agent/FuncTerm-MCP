@@ -1,7 +1,5 @@
 use super::{Manager, ShellSession};
 use crate::runtime::session::records::{CommandRecord, read_done};
-use crate::runtime::session::support::lock_mutex;
-use crate::shell::shims;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use std::path::{Path, PathBuf};
@@ -25,12 +23,9 @@ impl Manager {
             }
         }
     }
-    pub(super) fn shell_cwd(shell: &ShellSession) -> Result<PathBuf> {
-        Ok(lock_mutex(&shell.cwd, "cwd")?.clone())
-    }
     pub(super) fn command_fallback_cwd(&self, record: &CommandRecord) -> Result<PathBuf> {
         if let Some(shell) = self.find_shell(&record.tab_id)? {
-            return Self::shell_cwd(&shell);
+            return shell.cwd();
         }
         Ok(record.initial_cwd.clone())
     }
@@ -39,19 +34,13 @@ impl Manager {
         record: &CommandRecord,
     ) -> Result<()> {
         if let Some(done) = read_done(&record.done)? {
-            *lock_mutex(&shell.cwd, "cwd")? = PathBuf::from(done.cwd);
-        }
-        Ok(())
-    }
-    pub(super) fn refresh_shell_choice(shell: &ShellSession) -> Result<()> {
-        if let Some(choice) = shims::read_active_shell(&shell.active_shell_file)? {
-            *lock_mutex(&shell.choice, "choice")? = choice;
+            shell.set_cwd(PathBuf::from(done.cwd))?;
         }
         Ok(())
     }
     fn id_exists(&self, id: &str) -> Result<bool> {
-        let shell_exists = lock_mutex(&self.shells, "shell")?.contains_key(id);
-        let command_exists = lock_mutex(&self.commands, "command")?.contains_key(id);
+        let shell_exists = self.tabs.shell_id_exists(id)?;
+        let command_exists = self.commands.id_exists(id)?;
         let tab_id_exists = self.generated_tab_id_exists(id)?;
         Ok(shell_exists || command_exists || tab_id_exists)
     }

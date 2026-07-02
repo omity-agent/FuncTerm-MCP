@@ -9,15 +9,44 @@ use alloc::sync::Arc;
 use anyhow::{Context as _, Result, bail};
 use base64_turbo::STANDARD;
 use core::time::Duration;
+use std::collections::HashMap;
 use std::fs;
 use std::io::Write as _;
+use std::sync::Mutex;
 use std::thread;
+#[derive(Default)]
+pub(super) struct CommandRegistry {
+    records: Mutex<HashMap<String, CommandRecord>>,
+}
+impl CommandRegistry {
+    pub(super) fn insert(&self, command_id: String, record: CommandRecord) -> Result<()> {
+        lock_mutex(&self.records, "command")?.insert(command_id, record);
+        Ok(())
+    }
+    pub(super) fn remove(&self, command_id: &str) -> Result<Option<CommandRecord>> {
+        Ok(lock_mutex(&self.records, "command")?.remove(command_id))
+    }
+    pub(super) fn find(&self, command_id: &str) -> Result<Option<CommandRecord>> {
+        Ok(lock_mutex(&self.records, "command")?
+            .get(command_id)
+            .cloned())
+    }
+    pub(super) fn id_exists(&self, command_id: &str) -> Result<bool> {
+        Ok(lock_mutex(&self.records, "command")?.contains_key(command_id))
+    }
+    pub(super) fn insert_if_absent(&self, command_id: String, record: CommandRecord) -> Result<()> {
+        lock_mutex(&self.records, "command")?
+            .entry(command_id)
+            .or_insert(record);
+        Ok(())
+    }
+}
 impl Manager {
     pub(crate) fn manual_write(&self, tab_id: &str, bytes: &[u8]) -> Result<()> {
         let shell = self.shell(tab_id)?;
         self.ensure_shell_running(tab_id, &shell)?;
-        Self::refresh_shell_choice(&shell)?;
-        let choice = *lock_mutex(&shell.choice, "choice")?;
+        shell.refresh_choice()?;
+        let choice = shell.current_choice()?;
         let keyboard_bytes = choice.keyboard_bytes(bytes);
         let write_result = Self::write_keyboard(&shell, &keyboard_bytes);
         if let Err(error) = write_result {
@@ -34,17 +63,17 @@ impl Manager {
     ) -> Result<(String, EndReason, ViewResult)> {
         let shell = self.shell(tab_id)?;
         self.ensure_shell_running(tab_id, &shell)?;
-        Self::refresh_shell_choice(&shell)?;
+        shell.refresh_choice()?;
         *lock_mutex(&shell.last_command, "last command")? = Some(command.to_owned());
         self.remember_tab(tab_id, &shell)?;
         let command_id = self.next_command_id()?;
         reserve_shell(&shell, &command_id)?;
-        let initial_cwd = Self::shell_cwd(&shell)?;
+        let initial_cwd = shell.cwd()?;
         let record = create_record(&shell.command_root, &command_id, tab_id, &initial_cwd)?;
-        lock_mutex(&self.commands, "command")?.insert(command_id.clone(), record.clone());
+        self.commands.insert(command_id.clone(), record.clone())?;
         if let Err(error) = Self::write_invocation(&shell, &command_id, command, &record) {
             release_shell(&shell, &command_id)?;
-            lock_mutex(&self.commands, "command")?.remove(&command_id);
+            self.commands.remove(&command_id)?;
             self.remove_shell(tab_id)?;
             return Err(error);
         }
@@ -56,7 +85,7 @@ impl Manager {
         } else {
             EndReason::WaitTimeout
         };
-        let cwd = Self::shell_cwd(&shell)?;
+        let cwd = shell.cwd()?;
         let query = command_query(&record, &cwd)?;
         Ok((command_id, reason, query))
     }
@@ -70,24 +99,16 @@ impl Manager {
         bail!("unknown tab id {tab_id}")
     }
     fn remove_shell(&self, tab_id: &str) -> Result<()> {
-        let removed_shell = {
-            let mut shells = lock_mutex(&self.shells, "shell")?;
-            shells.remove(tab_id)
-        };
+        let removed_shell = self.tabs.remove_shell(tab_id)?;
         if let Some(shell) = removed_shell {
             self.remember_tab(tab_id, &shell)?;
         }
         Ok(())
     }
     fn ensure_shell_running(&self, tab_id: &str, shell: &ShellSession) -> Result<()> {
-        let status = lock_mutex(&shell.child, "child")?
-            .try_wait()
-            .context("failed to poll shell child")?;
-        if let Some(exit_status) = status {
+        if !shell.is_alive()? {
             self.remove_shell(tab_id)?;
-            bail!(
-                "tab id {tab_id} was generated, but its shell is gone; exit status {exit_status}"
-            );
+            bail!("tab id {tab_id} was generated, but its shell is gone");
         }
         Ok(())
     }
@@ -142,14 +163,9 @@ impl Manager {
             if let Ok(mut busy) = shell.busy.lock() {
                 *busy = None;
             }
-            if let Ok(mut commands) = manager.commands.lock() {
-                commands.entry(command_id).or_insert(record);
+            if let Err(error) = manager.commands.insert_if_absent(command_id, record) {
+                eprintln!("{error:#}");
             }
         });
-    }
-}
-impl ShellSession {
-    fn current_choice(&self) -> Result<crate::shell::ShellChoice> {
-        Ok(*lock_mutex(&self.choice, "choice")?)
     }
 }

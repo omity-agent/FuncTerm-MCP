@@ -21,8 +21,8 @@ impl Manager {
         bail!("unknown id {id}")
     }
     fn tab_view(&self, tab_id: &str, shell: &Arc<ShellSession>) -> Result<ViewResult> {
-        let alive = Self::shell_alive(shell)?;
-        Self::refresh_shell_choice(shell)?;
+        let alive = shell.is_alive()?;
+        shell.refresh_choice()?;
         let snapshot = self.remember_tab(tab_id, shell)?;
         Ok(snapshot.into_view(alive))
     }
