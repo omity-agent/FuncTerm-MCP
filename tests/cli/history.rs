@@ -36,7 +36,7 @@ mod tests {
         ));
         assert!(command.stdout.contains("MCP_PTY_HISTORY_TEST"));
         exit_shell(&shell.shell_id);
-        assert_file_does_not_contain(&history_file, "mcp_pty_command");
+        assert_file_does_not_contain(&history_file, "functerm_run_command");
     }
     #[cfg(unix)]
     #[test]
@@ -64,7 +64,7 @@ mod tests {
         ));
         assert!(command.stdout.contains("MCP_PTY_HISTORY_TEST"));
         exit_shell(&shell.shell_id);
-        assert_file_does_not_contain(&history_file, "mcp_pty_command");
+        assert_file_does_not_contain(&history_file, "functerm_run_command");
     }
     #[cfg(windows)]
     #[test]
@@ -92,7 +92,7 @@ mod tests {
         exit_shell(&shell.shell_id);
         for history_text in text_files_under(&app_data) {
             assert!(
-                !history_text.contains("Invoke-McpPtyCommand"),
+                !history_text.contains("Invoke-FuncTermCommand"),
                 "PowerShell history should not contain internal invocation: {history_text}"
             );
         }

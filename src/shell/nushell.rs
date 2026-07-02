@@ -10,7 +10,7 @@ pub(super) fn startup_args(cwd: &Path, ready_file: &Path) -> Vec<String> {
 pub(super) fn invocation(command_id: &str, directory: &Path, cwd: &Path) -> String {
     let line_ending = invocation_line_ending();
     format!(
-        "mcp_pty_command {} {} {}{}",
+        "functerm_run_command {} {} {}{}",
         nu_quote(command_id),
         nu_quote(&directory.to_string_lossy()),
         nu_quote(&cwd.to_string_lossy()),
@@ -54,7 +54,7 @@ mod tests {
             std::path::Path::new("F:\\dir with ' quote"),
             std::path::Path::new("F:\\ready'file"),
         );
-        assert!(script.contains("def mcp_pty_command"));
+        assert!(script.contains("def functerm_run_command"));
         assert!(script.contains("cd \"F:\\\\dir with ' quote\""));
         assert!(script.contains("save --force --raw \"F:\\\\ready'file\""));
     }

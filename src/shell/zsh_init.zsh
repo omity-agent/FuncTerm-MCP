@@ -7,7 +7,7 @@ setopt no_inc_append_history
 fc -p /dev/null 0 0 2> /dev/null || true
 unset HISTFILE
 
-mcp_pty_command() {
+functerm_run_command() {
     emulate -L zsh
     local command_id="$1"
     local directory="$2"
@@ -21,9 +21,9 @@ mcp_pty_command() {
     : >| "$stdout_file"
     : >| "$stderr_file"
     local script
-    if ! script="$(mcp_pty_decode_payload_file "$payload_file" "$stderr_file")"; then
+    if ! script="$(functerm_decode_payload_file "$payload_file" "$stderr_file")"; then
         local cwd_json
-        cwd_json="$(mcp_pty_json_string "$PWD")"
+        cwd_json="$(functerm_json_string "$PWD")"
         printf '{"command_id":"%s","exit_code":1,"cwd":%s,"completed_at":"%s"}\n' \
             "$command_id" "$cwd_json" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >| "$done_temp_file"
         mv -f -- "$done_temp_file" "$done_file"
@@ -34,14 +34,14 @@ mcp_pty_command() {
     { eval "$script"; } > >(tee "$stdout_file") 2> >(tee "$stderr_file" >&2)
     local exit_code=$?
     local cwd_json
-    cwd_json="$(mcp_pty_json_string "$PWD")"
+    cwd_json="$(functerm_json_string "$PWD")"
     printf '{"command_id":"%s","exit_code":%s,"cwd":%s,"completed_at":"%s"}\n' \
         "$command_id" "$exit_code" "$cwd_json" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >| "$done_temp_file"
     mv -f -- "$done_temp_file" "$done_file"
     return "$exit_code"
 }
 
-mcp_pty_json_string() {
+functerm_json_string() {
     emulate -L zsh
     local value="$1"
     value="${value//\\/\\\\}"
@@ -51,7 +51,7 @@ mcp_pty_json_string() {
     printf '"%s"' "$value"
 }
 
-mcp_pty_decode_payload_file() {
+functerm_decode_payload_file() {
     emulate -L zsh
     local payload_file="$1"
     local stderr_file="$2"

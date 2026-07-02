@@ -17,7 +17,7 @@ pub(super) fn invocation(command_id: &str, directory: &Path, cwd: &Path) -> Stri
     let quoted_directory = ps_quote(directory);
     let quoted_cwd = ps_quote(cwd);
     format!(
-        "Invoke-McpPtyCommand -CommandId '{command_id}' -Directory {quoted_directory} -WorkingDirectory {quoted_cwd}\r\n"
+        "Invoke-FuncTermCommand -CommandId '{command_id}' -Directory {quoted_directory} -WorkingDirectory {quoted_cwd}\r\n"
     )
 }
 pub(super) fn keyboard_bytes(bytes: &[u8]) -> Cow<'_, [u8]> {
@@ -72,7 +72,7 @@ mod tests {
             Path::new("F:\\dir with ' quote"),
             Path::new("F:\\ready'file"),
         );
-        assert!(script.contains("Invoke-McpPtyCommand"));
+        assert!(script.contains("Invoke-FuncTermCommand"));
         assert!(script.contains("Set-Location -LiteralPath 'F:\\dir with '' quote'"));
         assert!(script.contains("Set-Content -LiteralPath 'F:\\ready''file'"));
     }

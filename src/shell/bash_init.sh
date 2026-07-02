@@ -4,7 +4,7 @@ export HISTSIZE=0
 export HISTFILESIZE=0
 history -c
 
-mcp_pty_command() {
+functerm_run_command() {
     local command_id="$1"
     local directory="$2"
     local working_directory="$3"
@@ -17,9 +17,9 @@ mcp_pty_command() {
     : > "$stdout_file"
     : > "$stderr_file"
     local script
-    if ! script="$(mcp_pty_decode_payload_file "$payload_file" "$stderr_file")"; then
+    if ! script="$(functerm_decode_payload_file "$payload_file" "$stderr_file")"; then
         local cwd_json
-        cwd_json="$(mcp_pty_json_string "$PWD")"
+        cwd_json="$(functerm_json_string "$PWD")"
         printf '{"command_id":"%s","exit_code":1,"cwd":%s,"completed_at":"%s"}\n' \
             "$command_id" "$cwd_json" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$done_temp_file"
         mv "$done_temp_file" "$done_file"
@@ -30,14 +30,14 @@ mcp_pty_command() {
     { eval "$script"; } > >(tee "$stdout_file") 2> >(tee "$stderr_file" >&2)
     local exit_code=$?
     local cwd_json
-    cwd_json="$(mcp_pty_json_string "$PWD")"
+    cwd_json="$(functerm_json_string "$PWD")"
     printf '{"command_id":"%s","exit_code":%s,"cwd":%s,"completed_at":"%s"}\n' \
         "$command_id" "$exit_code" "$cwd_json" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$done_temp_file"
     mv "$done_temp_file" "$done_file"
     return "$exit_code"
 }
 
-mcp_pty_json_string() {
+functerm_json_string() {
     local value="$1"
     value="${value//\\/\\\\}"
     value="${value//\"/\\\"}"
@@ -46,7 +46,7 @@ mcp_pty_json_string() {
     printf '"%s"' "$value"
 }
 
-mcp_pty_decode_payload_file() {
+functerm_decode_payload_file() {
     local payload_file="$1"
     local stderr_file="$2"
     if base64 --decode < "$payload_file" 2> "$stderr_file"; then

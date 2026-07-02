@@ -1,4 +1,4 @@
-def mcp_pty_command [command_id: string, directory: path, working_directory: path] {
+def functerm_run_command [command_id: string, directory: path, working_directory: path] {
     mkdir $directory
     let stdout_file = ($directory | path join 'stdout.txt')
     let stderr_file = ($directory | path join 'stderr.txt')

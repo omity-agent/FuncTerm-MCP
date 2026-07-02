@@ -19,7 +19,7 @@ pub(super) fn startup_args(
 }
 pub(super) fn invocation(command_id: &str, directory: &Path, cwd: &Path) -> String {
     format!(
-        "mcp_pty_command {} {} {}\n",
+        "functerm_run_command {} {} {}\n",
         sh_quote(command_id),
         sh_quote(&sh_path(directory)),
         sh_quote(&sh_path(cwd))

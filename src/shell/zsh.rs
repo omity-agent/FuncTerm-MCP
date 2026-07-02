@@ -14,7 +14,7 @@ pub(super) fn startup(cwd: &Path, session_root: &Path, ready_file: &Path) -> Res
 }
 pub(super) fn invocation(command_id: &str, directory: &Path, cwd: &Path) -> String {
     format!(
-        "mcp_pty_command {} {} {}\n",
+        "functerm_run_command {} {} {}\n",
         sh_quote(command_id),
         sh_quote(&sh_path(directory)),
         sh_quote(&sh_path(cwd))
@@ -50,7 +50,7 @@ mod tests {
     fn initialization_defines_function_and_cwd() {
         let script =
             super::initialization_script(Path::new("F:\\dir with ' quote"), Path::new("F:\\ready"));
-        assert!(script.contains("mcp_pty_command()"));
+        assert!(script.contains("functerm_run_command()"));
         assert!(script.contains("cd 'F:/dir with '\\'' quote'"));
         assert!(script.contains(": >| 'F:/ready'"));
     }

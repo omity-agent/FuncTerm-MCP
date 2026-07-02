@@ -10,7 +10,7 @@ if (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue) {
 }
 Clear-History
 
-function Invoke-McpPtyCommand {
+function Invoke-FuncTermCommand {
     param(
         [Parameter(Mandatory = $true)][string]$CommandId,
         [Parameter(Mandatory = $true)][string]$Directory,
