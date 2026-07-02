@@ -11,27 +11,27 @@ mod unix;
 #[cfg(test)]
 mod tests {
     use super::support::{
-        create_shell, locked, parse_command_query, run_cli, run_cli_with_pipes, send_test_command,
-        write_keyboard,
+        create_tab, locked, manual_write, parse_command_query, run_cli, run_cli_with_pipes,
+        send_test_command,
     };
     use core::time::Duration;
     use std::thread;
     use std::time::Instant;
     #[test]
-    fn cli_rejects_missing_cwd() {
+    fn cli_rejects_missing_starting_directory() {
         let _guard = locked();
         let missing = std::env::temp_dir().join("definitely-missing-mcp-pty-cli-cwd");
         let output = run_cli(&[
-            "new-shell",
-            "--cwd",
+            "new-tab",
+            "--starting-directory",
             missing.to_str().unwrap(),
-            "--shell",
+            "--starting-shell",
             "powershell",
         ]);
         assert!(!output.status.success());
         assert!(
             String::from_utf8_lossy(&output.stderr)
-                .contains("cwd does not exist or is not a directory")
+                .contains("starting_directory does not exist or is not a directory")
         );
     }
     #[test]
@@ -39,21 +39,21 @@ mod tests {
         let _guard = locked();
         let cwd = std::env::temp_dir();
         let output = run_cli_with_pipes(&[
-            "new-shell",
-            "--cwd",
+            "new-tab",
+            "--starting-directory",
             cwd.to_str().unwrap(),
-            "--shell",
+            "--starting-shell",
             "powershell",
         ]);
         assert!(output.status.success());
-        assert!(String::from_utf8_lossy(&output.stdout).contains("shell_id: "));
+        assert!(String::from_utf8_lossy(&output.stdout).contains("tab_id: "));
     }
     #[test]
     fn cli_query_returns_command_output() {
         let _guard = locked();
         let cwd = std::env::temp_dir();
-        let created = create_shell(&cwd, "powershell");
-        let accepted_output = send_test_command(&created.shell_id);
+        let created = create_tab(&cwd, "powershell");
+        let accepted_output = send_test_command(&created.tab_id);
         let query = parse_command_query(&accepted_output);
         assert_eq!(
             query.recognized_as, "command",
@@ -72,9 +72,9 @@ mod tests {
     fn cli_keyboard_input_is_reflected_on_pty_screen() {
         let _guard = locked();
         let cwd = std::env::temp_dir();
-        let created = create_shell(&cwd, "powershell");
+        let created = create_tab(&cwd, "powershell");
         let marker = "MCP_PTY_TYPED_INPUT";
-        let written = write_keyboard(&created.shell_id, marker.as_bytes());
+        let written = manual_write(&created.tab_id, marker.as_bytes());
         assert!(
             written.status.success(),
             "stdout: {}\nstderr: {}",
@@ -82,64 +82,62 @@ mod tests {
             String::from_utf8_lossy(&written.stderr)
         );
         assert_eq!(String::from_utf8(written.stdout).unwrap().trim(), "ok");
-        let query = wait_for_screen_contains(&created.shell_id, marker);
-        assert_eq!(query.recognized_as, "shell", "query kind should be shell");
+        let query = wait_for_screen_contains(&created.tab_id, marker);
+        assert_eq!(query.recognized_as, "tab", "query kind should be tab");
     }
     #[test]
     fn cli_keyboard_enter_runs_command_through_pty() {
         let _guard = locked();
         let cwd = std::env::temp_dir();
-        let created = create_shell(&cwd, "powershell");
+        let created = create_tab(&cwd, "powershell");
         let marker = "MCP_PTY_KEYBOARD_EVENT";
         let command = format!("Write-Output '{marker}'\r\n");
-        let written = write_keyboard(&created.shell_id, command.as_bytes());
+        let written = manual_write(&created.tab_id, command.as_bytes());
         assert!(
             written.status.success(),
             "stdout: {}\nstderr: {}",
             String::from_utf8_lossy(&written.stdout),
             String::from_utf8_lossy(&written.stderr)
         );
-        wait_for_screen_contains(&created.shell_id, marker);
+        wait_for_screen_contains(&created.tab_id, marker);
     }
     #[test]
     fn cli_query_reports_shell_liveness() {
         let _guard = locked();
         let cwd = std::env::temp_dir();
-        let created = create_shell(&cwd, "powershell");
-        let alive_query =
-            super::support::parse_shell_query(&run_cli(&["query", &created.shell_id]));
-        assert!(alive_query.alive, "new shell should be alive");
-        let _closed = super::support::send_command(&created.shell_id, "exit", 0.2);
-        let mut dead_query =
-            super::support::parse_shell_query(&run_cli(&["query", &created.shell_id]));
+        let created = create_tab(&cwd, "powershell");
+        let alive_query = super::support::parse_tab_query(&run_cli(&["query", &created.tab_id]));
+        assert!(alive_query.alive, "new tab should be alive");
+        let _closed = super::support::send_command(&created.tab_id, "exit", 0.2);
+        let mut dead_query = super::support::parse_tab_query(&run_cli(&["query", &created.tab_id]));
         for _attempt in 0_usize..20 {
             if !dead_query.alive {
                 return;
             }
             thread::sleep(Duration::from_millis(100));
-            dead_query = super::support::parse_shell_query(&run_cli(&["query", &created.shell_id]));
+            dead_query = super::support::parse_tab_query(&run_cli(&["query", &created.tab_id]));
         }
-        panic!("query should report exited shell as not alive");
+        panic!("query should report exited tab as not alive");
     }
     #[test]
     fn cli_waiting_command_does_not_block_other_requests() {
         let _guard = locked();
         let cwd = std::env::temp_dir();
-        let first = create_shell(&cwd, "powershell");
-        let second = create_shell(&cwd, "powershell");
-        let first_shell_id = first.shell_id;
+        let first = create_tab(&cwd, "powershell");
+        let second = create_tab(&cwd, "powershell");
+        let first_tab_id = first.tab_id;
         let worker = thread::spawn(move || {
             super::support::send_command(
-                &first_shell_id,
+                &first_tab_id,
                 "Start-Sleep -Seconds 5; Write-Output 'MCP_PTY_WAIT_DONE'",
                 6.0,
             )
         });
         thread::sleep(Duration::from_millis(500));
         let start = Instant::now();
-        let query = super::support::parse_shell_query(&run_cli(&["query", &second.shell_id]));
+        let query = super::support::parse_tab_query(&run_cli(&["query", &second.tab_id]));
         let elapsed = start.elapsed();
-        assert!(query.alive, "second shell should remain alive");
+        assert!(query.alive, "second tab should remain alive");
         assert!(
             elapsed < Duration::from_secs(2),
             "query should not wait for unrelated command; elapsed {elapsed:?}"
@@ -152,10 +150,10 @@ mod tests {
             "stdout should include long command marker"
         );
     }
-    fn wait_for_screen_contains(shell_id: &str, expected: &str) -> super::support::ShellQuery {
+    fn wait_for_screen_contains(tab_id: &str, expected: &str) -> super::support::TabQuery {
         let mut last_screen = String::new();
         for _attempt in 0_usize..50 {
-            let query = super::support::parse_shell_query(&run_cli(&["query", shell_id]));
+            let query = super::support::parse_tab_query(&run_cli(&["query", tab_id]));
             if query.screen.contains(expected) {
                 return query;
             }

@@ -9,7 +9,7 @@ use std::sync::mpsc;
 use std::time::Instant;
 #[derive(Clone)]
 pub(super) struct CommandRecord {
-    pub(super) shell_id: String,
+    pub(super) tab_id: String,
     pub(super) initial_cwd: PathBuf,
     pub(super) stdout: PathBuf,
     pub(super) stderr: PathBuf,
@@ -24,13 +24,13 @@ pub(super) struct DoneFile {
 pub(super) fn create_record(
     command_root: &Path,
     command_id: &str,
-    shell_id: &str,
+    tab_id: &str,
     initial_cwd: &Path,
 ) -> Result<CommandRecord> {
     let command_dir = command_root.join(command_id);
     fs::create_dir_all(&command_dir).context("failed to create command directory")?;
     Ok(CommandRecord {
-        shell_id: shell_id.to_owned(),
+        tab_id: tab_id.to_owned(),
         initial_cwd: initial_cwd.to_path_buf(),
         stdout: command_dir.join("stdout.txt"),
         stderr: command_dir.join("stderr.txt"),

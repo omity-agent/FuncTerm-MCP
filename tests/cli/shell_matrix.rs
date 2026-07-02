@@ -1,8 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::support::{
-        create_shell, locked_with_env, parse_command_query, parse_shell_query, run_cli,
-        send_command,
+        create_tab, locked_with_env, parse_command_query, parse_tab_query, run_cli, send_command,
     };
     use core::sync::atomic::{AtomicU64, Ordering};
     use std::fs;
@@ -21,12 +20,12 @@ mod tests {
                 let _guard = locked_with_env(&[(case.env_var, &executable)]);
                 let start = case_dir(case.name, "start dir");
                 let next = case_dir(case.name, "next dir");
-                let created = create_shell(&start, case.name);
-                let shell_before = parse_shell_query(&run_cli(&["query", &created.shell_id]));
+                let created = create_tab(&start, case.name);
+                let shell_before = parse_tab_query(&run_cli(&["query", &created.tab_id]));
                 assert_shell_query(&shell_before, &start, case.name);
                 let command = case_command(case.name, &next);
                 let command_query =
-                    parse_command_query(&send_command(&created.shell_id, &command, 10.0));
+                    parse_command_query(&send_command(&created.tab_id, &command, 10.0));
                 assert_eq!(command_query.recognized_as, "command");
                 assert!(
                     command_query.finished,
@@ -52,7 +51,7 @@ mod tests {
                     name = case.name
                 );
                 assert_cwd(&command_query.cwd, &next, case.name);
-                let shell_after = parse_shell_query(&run_cli(&["query", &created.shell_id]));
+                let shell_after = parse_tab_query(&run_cli(&["query", &created.tab_id]));
                 assert_shell_query(&shell_after, &next, case.name);
             }
         }
@@ -64,10 +63,10 @@ mod tests {
                 let _guard = locked_with_env(&[(case.env_var, immediately_exiting_executable())]);
                 let cwd = std::env::temp_dir();
                 run_cli(&[
-                    "new-shell",
-                    "--cwd",
+                    "new-tab",
+                    "--starting-directory",
                     cwd.to_str().unwrap(),
-                    "--shell",
+                    "--starting-shell",
                     case.name,
                 ])
             };
@@ -153,10 +152,10 @@ mod tests {
             other => panic!("unsupported shell case {other}"),
         }
     }
-    fn assert_shell_query(query: &crate::support::ShellQuery, cwd: &Path, shell: &str) {
+    fn assert_shell_query(query: &crate::support::TabQuery, cwd: &Path, shell: &str) {
         assert_eq!(
-            query.recognized_as, "shell",
-            "{shell} query kind should be shell"
+            query.recognized_as, "tab",
+            "{shell} query kind should be tab"
         );
         assert!(query.alive, "{shell} query should report live shell");
         assert_cwd(&query.cwd, cwd, shell);

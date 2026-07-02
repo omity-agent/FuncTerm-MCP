@@ -10,8 +10,8 @@ const ID_ALPHABET: [char; 36] = [
     'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
 ];
 impl Manager {
-    pub(super) fn next_shell_id(&self) -> Result<String> {
-        self.next_id("shell-")
+    pub(super) fn next_tab_id(&self) -> Result<String> {
+        self.next_id("tab-")
     }
     pub(super) fn next_command_id(&self) -> Result<String> {
         self.next_id("command-")
@@ -28,7 +28,7 @@ impl Manager {
         Ok(lock_mutex(&shell.cwd, "cwd")?.clone())
     }
     pub(super) fn command_fallback_cwd(&self, record: &CommandRecord) -> Result<PathBuf> {
-        if let Some(shell) = self.find_shell(&record.shell_id)? {
+        if let Some(shell) = self.find_shell(&record.tab_id)? {
             return Self::shell_cwd(&shell);
         }
         Ok(record.initial_cwd.clone())

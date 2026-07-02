@@ -6,7 +6,7 @@ mod daemon;
 mod parse;
 #[path = "support/process.rs"]
 mod process;
-pub(crate) use command::{create_shell, run_cli, send_command, write_keyboard};
+pub(crate) use command::{create_tab, manual_write, run_cli, send_command};
 #[cfg(windows)]
 pub(crate) use command::{run_cli_with_pipes, send_test_command};
 #[cfg(windows)]
@@ -14,4 +14,4 @@ pub(crate) use daemon::locked;
 pub(crate) use daemon::locked_with_env;
 #[cfg(unix)]
 pub(crate) use parse::CommandQuery;
-pub(crate) use parse::{ShellQuery, parse_command_query, parse_shell_query};
+pub(crate) use parse::{TabQuery, parse_command_query, parse_tab_query};

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::support::{
-        create_shell, locked_with_env, parse_command_query, run_cli, send_command, write_keyboard,
+        create_tab, locked_with_env, manual_write, parse_command_query, run_cli, send_command,
     };
     use core::sync::atomic::{AtomicU64, Ordering};
     use core::time::Duration;
@@ -20,9 +20,9 @@ mod tests {
             ("HISTFILE", history_file.to_str().unwrap()),
             ("SHELL_MCP_PTY_BASH", &bash_text),
         ]);
-        let shell = create_shell(&std::env::temp_dir(), "bash");
+        let shell = create_tab(&std::env::temp_dir(), "bash");
         let options = parse_command_query(&send_command(
-            &shell.shell_id,
+            &shell.tab_id,
             "set -o | grep '^history'; printf 'HISTFILE=%s\\n' \"${HISTFILE-unset}\"",
             5.0,
         ));
@@ -30,12 +30,12 @@ mod tests {
         assert!(options.stdout.contains("off"));
         assert!(options.stdout.contains("HISTFILE=unset"));
         let command = parse_command_query(&send_command(
-            &shell.shell_id,
+            &shell.tab_id,
             "printf 'MCP_PTY_HISTORY_TEST\\n'",
             5.0,
         ));
         assert!(command.stdout.contains("MCP_PTY_HISTORY_TEST"));
-        exit_shell(&shell.shell_id);
+        exit_shell(&shell.tab_id);
         assert_file_does_not_contain(&history_file, "functerm_run_command");
     }
     #[cfg(unix)]
@@ -48,9 +48,9 @@ mod tests {
             ("HISTFILE", history_file.to_str().unwrap()),
             ("SHELL_MCP_PTY_ZSH", &zsh_text),
         ]);
-        let shell = create_shell(&std::env::temp_dir(), "zsh");
+        let shell = create_tab(&std::env::temp_dir(), "zsh");
         let options = parse_command_query(&send_command(
-            &shell.shell_id,
+            &shell.tab_id,
             "print -r -- \"HISTFILE=${HISTFILE-unset}\"; print -r -- \"HISTSIZE=$HISTSIZE\"; print -r -- \"SAVEHIST=$SAVEHIST\"",
             5.0,
         ));
@@ -58,12 +58,12 @@ mod tests {
         assert!(options.stdout.contains("HISTSIZE=0"));
         assert!(options.stdout.contains("SAVEHIST=0"));
         let command = parse_command_query(&send_command(
-            &shell.shell_id,
+            &shell.tab_id,
             "print -r -- 'MCP_PTY_HISTORY_TEST'",
             5.0,
         ));
         assert!(command.stdout.contains("MCP_PTY_HISTORY_TEST"));
-        exit_shell(&shell.shell_id);
+        exit_shell(&shell.tab_id);
         assert_file_does_not_contain(&history_file, "functerm_run_command");
     }
     #[cfg(windows)]
@@ -72,9 +72,9 @@ mod tests {
         let app_data = history_root("powershell").join("appdata");
         fs::create_dir_all(&app_data).unwrap();
         let _guard = locked_with_env(&[("APPDATA", app_data.to_str().unwrap())]);
-        let shell = create_shell(&std::env::temp_dir(), "powershell");
+        let shell = create_tab(&std::env::temp_dir(), "powershell");
         let options = parse_command_query(&send_command(
-            &shell.shell_id,
+            &shell.tab_id,
             "if (Get-Command Get-PSReadLineOption -ErrorAction SilentlyContinue) { (Get-PSReadLineOption).HistorySaveStyle } else { 'Unavailable' }",
             5.0,
         ));
@@ -84,12 +84,12 @@ mod tests {
             options.stdout
         );
         let command = parse_command_query(&send_command(
-            &shell.shell_id,
+            &shell.tab_id,
             "Write-Output 'MCP_PTY_HISTORY_TEST'",
             5.0,
         ));
         assert!(command.stdout.contains("MCP_PTY_HISTORY_TEST"));
-        exit_shell(&shell.shell_id);
+        exit_shell(&shell.tab_id);
         for history_text in text_files_under(&app_data) {
             assert!(
                 !history_text.contains("Invoke-FuncTermCommand"),
@@ -105,8 +105,8 @@ mod tests {
         fs::create_dir_all(&root).unwrap();
         root
     }
-    fn exit_shell(shell_id: &str) {
-        let written = write_keyboard(shell_id, b"exit\n");
+    fn exit_shell(tab_id: &str) {
+        let written = manual_write(tab_id, b"exit\n");
         assert!(
             written.status.success(),
             "stdout: {}\nstderr: {}",
@@ -114,7 +114,7 @@ mod tests {
             String::from_utf8_lossy(&written.stderr)
         );
         for _attempt in 0_usize..30 {
-            let output = run_cli(&["query", shell_id]);
+            let output = run_cli(&["query", tab_id]);
             let text = String::from_utf8_lossy(&output.stdout);
             if text.contains("alive: false") {
                 return;

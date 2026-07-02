@@ -77,21 +77,24 @@ fn handle_request(manager: &Arc<Manager>, request: Request) -> Response {
 fn dispatch(manager: &Arc<Manager>, request: Request) -> Result<Payload> {
     match request {
         Request::Ping => Ok(Payload::Pong),
-        Request::NewShell { cwd, shell } => {
-            let shell_id = manager.new_shell(&cwd, shell)?;
-            Ok(Payload::ShellCreated { shell_id })
+        Request::NewTab {
+            starting_directory,
+            starting_shell,
+        } => {
+            let tab_id = manager.new_tab(&starting_directory, starting_shell)?;
+            Ok(Payload::TabCreated { tab_id })
         }
-        Request::WriteKeyboard { shell_id, bytes } => {
-            manager.write_keyboard(&shell_id, &bytes)?;
+        Request::ManualWrite { tab_id, bytes } => {
+            manager.manual_write(&tab_id, &bytes)?;
             Ok(Payload::KeyboardWritten)
         }
         Request::SendCommand {
-            shell_id,
+            tab_id,
             command,
             waiting,
         } => {
             let (command_id, end_reason, query) =
-                manager.send_command(&shell_id, &command, waiting)?;
+                manager.send_command(&tab_id, &command, waiting)?;
             Ok(Payload::CommandAccepted {
                 command_id,
                 end_reason,

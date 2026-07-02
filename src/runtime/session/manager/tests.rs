@@ -14,10 +14,10 @@ fn test_settings() -> Settings {
     }
 }
 #[test]
-fn missing_cwd_is_rejected_before_shell_creation() {
+fn missing_starting_directory_is_rejected_before_tab_creation() {
     let manager = Manager::new(test_settings()).unwrap();
     let error = manager
-        .new_shell(
+        .new_tab(
             Path::new("Z:\\definitely-missing-mcp-pty-cwd"),
             ShellChoice::PowerShell,
         )
@@ -25,7 +25,7 @@ fn missing_cwd_is_rejected_before_shell_creation() {
     assert!(
         error
             .to_string()
-            .contains("cwd does not exist or is not a directory")
+            .contains("starting_directory does not exist or is not a directory")
     );
 }
 #[test]
@@ -34,7 +34,7 @@ fn immediately_exiting_shell_is_rejected_before_registration() {
     settings.powershell = vec![immediately_exiting_executable().to_owned()];
     let manager = Manager::new(settings).unwrap();
     let error = manager
-        .new_shell(std::env::temp_dir().as_path(), ShellChoice::PowerShell)
+        .new_tab(std::env::temp_dir().as_path(), ShellChoice::PowerShell)
         .unwrap_err();
     assert!(error.to_string().contains("startup"));
 }
@@ -49,7 +49,7 @@ fn immediately_exiting_executable() -> &'static str {
 #[test]
 fn generated_ids_have_kind_prefixes_and_base36_suffixes() {
     let manager = Manager::new(test_settings()).unwrap();
-    assert_id(&manager.next_shell_id().unwrap(), "shell-");
+    assert_id(&manager.next_tab_id().unwrap(), "tab-");
     assert_id(&manager.next_command_id().unwrap(), "command-");
 }
 fn assert_id(id: &str, prefix: &str) {

@@ -6,16 +6,16 @@ use std::path::PathBuf;
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) enum Request {
     Ping,
-    NewShell {
-        cwd: PathBuf,
-        shell: ShellChoice,
+    NewTab {
+        starting_directory: PathBuf,
+        starting_shell: ShellChoice,
     },
-    WriteKeyboard {
-        shell_id: String,
+    ManualWrite {
+        tab_id: String,
         bytes: Vec<u8>,
     },
     SendCommand {
-        shell_id: String,
+        tab_id: String,
         command: String,
         waiting: Duration,
     },
@@ -31,8 +31,8 @@ pub(crate) enum Response {
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) enum Payload {
     Pong,
-    ShellCreated {
-        shell_id: String,
+    TabCreated {
+        tab_id: String,
     },
     KeyboardWritten,
     CommandAccepted {
@@ -49,7 +49,7 @@ pub(crate) enum EndReason {
 }
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) enum QueryResult {
-    Shell {
+    Tab {
         alive: bool,
         cwd: String,
         screen: String,
@@ -66,7 +66,7 @@ impl Payload {
     pub(crate) fn into_plain_text(self) -> String {
         match self {
             Self::Pong => "pong".to_owned(),
-            Self::ShellCreated { shell_id } => format!("shell_id: {shell_id}"),
+            Self::TabCreated { tab_id } => format!("tab_id: {tab_id}"),
             Self::KeyboardWritten => "ok".to_owned(),
             Self::CommandAccepted {
                 command_id, query, ..
@@ -82,8 +82,8 @@ impl Payload {
 impl QueryResult {
     pub(crate) fn into_plain_text(self) -> String {
         match self {
-            Self::Shell { alive, cwd, screen } => {
-                format!("recognized_as: shell\nalive: {alive}\ncwd: {cwd}\nscreen:\n{screen}")
+            Self::Tab { alive, cwd, screen } => {
+                format!("recognized_as: tab\nalive: {alive}\ncwd: {cwd}\nscreen:\n{screen}")
             }
             Self::Command {
                 cwd,

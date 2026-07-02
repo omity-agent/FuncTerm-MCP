@@ -1,30 +1,30 @@
 #[cfg(test)]
 mod tests {
     use crate::support::{
-        create_shell, locked_with_env, parse_command_query, parse_shell_query, run_cli,
-        send_command, write_keyboard,
+        create_tab, locked_with_env, manual_write, parse_command_query, parse_tab_query, run_cli,
+        send_command,
     };
     use core::time::Duration;
     use std::thread;
     use std::time::Instant;
     #[test]
-    fn cli_rejects_missing_cwd_on_unix_shell() {
+    fn cli_rejects_missing_starting_directory_on_unix_shell() {
         let Some(bash) = executable("bash") else {
             return;
         };
         let _guard = locked_with_env(&[("SHELL_MCP_PTY_BASH", &bash)]);
         let missing = std::env::temp_dir().join("definitely-missing-functerm-unix-cwd");
         let output = run_cli(&[
-            "new-shell",
-            "--cwd",
+            "new-tab",
+            "--starting-directory",
             missing.to_str().unwrap(),
-            "--shell",
+            "--starting-shell",
             "bash",
         ]);
         assert!(!output.status.success());
         assert!(
             String::from_utf8_lossy(&output.stderr)
-                .contains("cwd does not exist or is not a directory")
+                .contains("starting_directory does not exist or is not a directory")
         );
     }
     #[test]
@@ -34,17 +34,17 @@ mod tests {
                 continue;
             };
             let _guard = locked_with_env(&[(case.env_var, &path)]);
-            let shell = create_shell(&std::env::temp_dir(), case.shell);
+            let shell = create_tab(&std::env::temp_dir(), case.shell);
             let marker = format!("MCP_PTY_KEYBOARD_{}", case.shell);
             let command = keyboard_command(case.shell, &marker);
-            let written = write_keyboard(&shell.shell_id, command.as_bytes());
+            let written = manual_write(&shell.tab_id, command.as_bytes());
             assert!(
                 written.status.success(),
                 "stdout: {}\nstderr: {}",
                 String::from_utf8_lossy(&written.stdout),
                 String::from_utf8_lossy(&written.stderr)
             );
-            wait_for_screen_contains(&shell.shell_id, &marker);
+            wait_for_screen_contains(&shell.tab_id, &marker);
         }
     }
     #[test]
@@ -53,17 +53,17 @@ mod tests {
             return;
         };
         let _guard = locked_with_env(&[("SHELL_MCP_PTY_BASH", &bash)]);
-        let shell = create_shell(&std::env::temp_dir(), "bash");
-        let alive = parse_shell_query(&run_cli(&["query", &shell.shell_id]));
+        let shell = create_tab(&std::env::temp_dir(), "bash");
+        let alive = parse_tab_query(&run_cli(&["query", &shell.tab_id]));
         assert!(alive.alive);
-        let written = write_keyboard(&shell.shell_id, b"exit\n");
+        let written = manual_write(&shell.tab_id, b"exit\n");
         assert!(
             written.status.success(),
             "stdout: {}\nstderr: {}",
             String::from_utf8_lossy(&written.stdout),
             String::from_utf8_lossy(&written.stderr)
         );
-        wait_for_shell_dead(&shell.shell_id);
+        wait_for_shell_dead(&shell.tab_id);
     }
     #[test]
     fn cli_waiting_unix_command_does_not_block_other_requests() {
@@ -71,19 +71,15 @@ mod tests {
             return;
         };
         let _guard = locked_with_env(&[("SHELL_MCP_PTY_BASH", &bash)]);
-        let first = create_shell(&std::env::temp_dir(), "bash");
-        let second = create_shell(&std::env::temp_dir(), "bash");
-        let first_shell_id = first.shell_id;
+        let first = create_tab(&std::env::temp_dir(), "bash");
+        let second = create_tab(&std::env::temp_dir(), "bash");
+        let first_tab_id = first.tab_id;
         let worker = thread::spawn(move || {
-            send_command(
-                &first_shell_id,
-                "sleep 2; printf 'MCP_PTY_WAIT_DONE\\n'",
-                5.0,
-            )
+            send_command(&first_tab_id, "sleep 2; printf 'MCP_PTY_WAIT_DONE\\n'", 5.0)
         });
         thread::sleep(Duration::from_millis(300));
         let start = Instant::now();
-        let query = parse_shell_query(&run_cli(&["query", &second.shell_id]));
+        let query = parse_tab_query(&run_cli(&["query", &second.tab_id]));
         let elapsed = start.elapsed();
         assert!(query.alive);
         assert!(
@@ -101,9 +97,9 @@ mod tests {
             return;
         };
         let _guard = locked_with_env(&[("SHELL_MCP_PTY_BASH", &bash)]);
-        let shell = create_shell(&std::env::temp_dir(), "bash");
+        let shell = create_tab(&std::env::temp_dir(), "bash");
         let accepted = send_command(
-            &shell.shell_id,
+            &shell.tab_id,
             "sleep 1; printf 'MCP_PTY_TIMEOUT_DONE\\n'",
             0.05,
         );
@@ -146,10 +142,10 @@ mod tests {
             .ok()
             .map(|path| path.to_string_lossy().into_owned())
     }
-    fn wait_for_screen_contains(shell_id: &str, expected: &str) {
+    fn wait_for_screen_contains(tab_id: &str, expected: &str) {
         let mut last_screen = String::new();
         for _attempt in 0_usize..50 {
-            let query = parse_shell_query(&run_cli(&["query", shell_id]));
+            let query = parse_tab_query(&run_cli(&["query", tab_id]));
             if query.screen.contains(expected) {
                 return;
             }
@@ -158,9 +154,9 @@ mod tests {
         }
         panic!("screen should contain {expected:?}; last screen:\n{last_screen}");
     }
-    fn wait_for_shell_dead(shell_id: &str) {
+    fn wait_for_shell_dead(tab_id: &str) {
         for _attempt in 0_usize..30 {
-            let query = parse_shell_query(&run_cli(&["query", shell_id]));
+            let query = parse_tab_query(&run_cli(&["query", tab_id]));
             if !query.alive {
                 return;
             }

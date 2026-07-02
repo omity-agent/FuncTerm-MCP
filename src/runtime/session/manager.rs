@@ -47,17 +47,21 @@ impl Manager {
             commands: Mutex::new(HashMap::new()),
         })
     }
-    pub(crate) fn new_shell(&self, cwd: &Path, shell: ShellChoice) -> Result<String> {
-        if !cwd.is_dir() {
+    pub(crate) fn new_tab(
+        &self,
+        starting_directory: &Path,
+        starting_shell: ShellChoice,
+    ) -> Result<String> {
+        if !starting_directory.is_dir() {
             bail!(
-                "cwd does not exist or is not a directory: {}",
-                cwd.display()
+                "starting_directory does not exist or is not a directory: {}",
+                starting_directory.display()
             );
         }
-        let shell_id = self.next_shell_id()?;
-        let command_root = self.root.join("commands").join(&shell_id);
+        let tab_id = self.next_tab_id()?;
+        let command_root = self.root.join("commands").join(&tab_id);
         std::fs::create_dir_all(&command_root).context("failed to create command root")?;
-        let startup = shell.startup(cwd, &command_root)?;
+        let startup = starting_shell.startup(starting_directory, &command_root)?;
         let pty_system = native_pty_system();
         let size = PtySize {
             rows: self.settings.terminal_rows,
@@ -66,11 +70,11 @@ impl Manager {
             pixel_height: 0,
         };
         let pair = pty_system.openpty(size).context("failed to open pty")?;
-        let executable = shell.executable(&self.settings)?;
+        let executable = starting_shell.executable(&self.settings)?;
         let mut command = CommandBuilder::new(executable);
         let ready_file = startup.ready_file.clone();
         apply_startup(&mut command, startup);
-        command.cwd(cwd);
+        command.cwd(starting_directory);
         let process_tree =
             process_tree::ProcessTree::new().context("failed to create shell cleanup guard")?;
         let mut child = pair
@@ -101,8 +105,8 @@ impl Manager {
         start_reader(Arc::clone(&screen), Arc::clone(&writer), reader);
         wait_for_shell_startup(&mut child, &ready_file, &screen)?;
         let session = Arc::new(ShellSession {
-            choice: shell,
-            cwd: Mutex::new(cwd.to_path_buf()),
+            choice: starting_shell,
+            cwd: Mutex::new(starting_directory.to_path_buf()),
             writer,
             screen,
             busy: Mutex::new(None),
@@ -111,15 +115,15 @@ impl Manager {
             child: Mutex::new(child),
             _slave: Mutex::new(pair.slave),
         });
-        lock_mutex(&self.shells, "shell")?.insert(shell_id.clone(), session);
-        Ok(shell_id)
+        lock_mutex(&self.shells, "shell")?.insert(tab_id.clone(), session);
+        Ok(tab_id)
     }
     pub(crate) fn query(&self, id: &str) -> Result<QueryResult> {
         if let Some(shell) = self.find_shell(id)? {
             let alive = Self::shell_alive(&shell)?;
             let screen = lock_mutex(&shell.screen, "screen")?.screen().contents();
             let cwd = path_text(&Self::shell_cwd(&shell)?)?;
-            return Ok(QueryResult::Shell { alive, cwd, screen });
+            return Ok(QueryResult::Tab { alive, cwd, screen });
         }
         if let Some(record) = self.find_command(id)? {
             let fallback_cwd = self.command_fallback_cwd(&record)?;

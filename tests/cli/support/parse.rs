@@ -1,6 +1,6 @@
 use std::process::Output;
-pub(crate) struct ShellCreated {
-    pub(crate) shell_id: String,
+pub(crate) struct TabCreated {
+    pub(crate) tab_id: String,
 }
 pub(crate) struct CommandQuery {
     pub(crate) recognized_as: String,
@@ -10,7 +10,7 @@ pub(crate) struct CommandQuery {
     pub(crate) stderr: String,
     pub(crate) exit_code: Option<i32>,
 }
-pub(crate) struct ShellQuery {
+pub(crate) struct TabQuery {
     pub(crate) recognized_as: String,
     pub(crate) alive: bool,
     pub(crate) cwd: String,
@@ -29,20 +29,20 @@ pub(crate) fn parse_command_query(output: &Output) -> CommandQuery {
         stderr: stderr.trim_end().to_owned(),
     }
 }
-pub(crate) fn parse_shell_query(output: &Output) -> ShellQuery {
+pub(crate) fn parse_tab_query(output: &Output) -> TabQuery {
     let text = checked_stdout(output);
     let (_, screen) = text.split_once("screen:\n").unwrap();
-    ShellQuery {
+    TabQuery {
         recognized_as: field(&text, "recognized_as"),
         alive: field(&text, "alive").parse().unwrap(),
         cwd: field(&text, "cwd"),
         screen: screen.to_owned(),
     }
 }
-pub(super) fn parse_shell_created(output: &Output) -> ShellCreated {
+pub(super) fn parse_tab_created(output: &Output) -> TabCreated {
     let text = checked_stdout(output);
-    ShellCreated {
-        shell_id: field(&text, "shell_id"),
+    TabCreated {
+        tab_id: field(&text, "tab_id"),
     }
 }
 fn checked_stdout(output: &Output) -> String {

@@ -13,19 +13,19 @@ struct Args {
 enum CliCommand {
     Mcp,
     Daemon,
-    NewShell {
+    NewTab {
         #[arg(long)]
-        cwd: Option<PathBuf>,
+        starting_directory: Option<PathBuf>,
         #[arg(long, default_value = "powershell")]
-        shell: String,
+        starting_shell: String,
     },
-    WriteKeyboard {
-        shell_id: String,
+    ManualWrite {
+        tab_id: String,
         #[arg(long)]
         base64: String,
     },
     SendCommand {
-        shell_id: String,
+        tab_id: String,
         #[arg(long)]
         command: String,
         #[arg(long, default_value_t = 0.0)]
@@ -41,26 +41,29 @@ pub(crate) async fn run() -> Result<()> {
     match args.command.unwrap_or(CliCommand::Mcp) {
         CliCommand::Mcp => crate::mcp::run(settings).await,
         CliCommand::Daemon => crate::runtime::daemon::run(settings),
-        CliCommand::NewShell { cwd, shell } => print_result(crate::commands::with_daemon(
+        CliCommand::NewTab {
+            starting_directory,
+            starting_shell,
+        } => print_result(crate::commands::with_daemon(
             &settings.daemon_service_name,
-            |call| crate::commands::new_shell(call, cwd.as_deref(), &shell),
+            |call| crate::commands::new_tab(call, starting_directory.as_deref(), &starting_shell),
         )),
-        CliCommand::WriteKeyboard { shell_id, base64 } => {
+        CliCommand::ManualWrite { tab_id, base64 } => {
             let bytes = STANDARD
                 .decode(&base64)
                 .context("invalid base64 keyboard input")?;
             print_result(crate::commands::with_daemon(
                 &settings.daemon_service_name,
-                |call| crate::commands::write_keyboard(call, shell_id, bytes),
+                |call| crate::commands::manual_write(call, tab_id, bytes),
             ))
         }
         CliCommand::SendCommand {
-            shell_id,
+            tab_id,
             command,
             waiting: waiting_seconds,
         } => print_result(crate::commands::with_daemon(
             &settings.daemon_service_name,
-            |call| crate::commands::send_command(call, shell_id, command, waiting_seconds),
+            |call| crate::commands::send_command(call, tab_id, command, waiting_seconds),
         )),
         CliCommand::Query { id } => print_result(crate::commands::with_daemon(
             &settings.daemon_service_name,

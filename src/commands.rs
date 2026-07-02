@@ -4,36 +4,36 @@ use crate::shell::ShellChoice;
 use anyhow::{Result, bail};
 use std::path::Path;
 type DaemonCall<'callback> = dyn Fn(&Request) -> Result<Payload> + 'callback;
-pub(crate) fn new_shell(
+pub(crate) fn new_tab(
     call: impl Fn(&Request) -> Result<Payload>,
-    cwd: Option<&Path>,
-    shell: &str,
+    starting_directory: Option<&Path>,
+    starting_shell: &str,
 ) -> Result<String> {
-    let shell_choice = ShellChoice::parse(shell)?;
-    let resolved_cwd = working_dir::resolve(cwd)?;
-    let payload = call(&Request::NewShell {
-        cwd: resolved_cwd,
-        shell: shell_choice,
+    let shell_choice = ShellChoice::parse(starting_shell)?;
+    let resolved_directory = working_dir::resolve(starting_directory)?;
+    let payload = call(&Request::NewTab {
+        starting_directory: resolved_directory,
+        starting_shell: shell_choice,
     })?;
-    text_from_payload(payload, ExpectedPayload::ShellCreated)
+    text_from_payload(payload, ExpectedPayload::TabCreated)
 }
-pub(crate) fn write_keyboard(
+pub(crate) fn manual_write(
     call: impl Fn(&Request) -> Result<Payload>,
-    shell_id: String,
+    tab_id: String,
     bytes: Vec<u8>,
 ) -> Result<String> {
-    let payload = call(&Request::WriteKeyboard { shell_id, bytes })?;
+    let payload = call(&Request::ManualWrite { tab_id, bytes })?;
     text_from_payload(payload, ExpectedPayload::KeyboardWritten)
 }
 pub(crate) fn send_command(
     call: impl Fn(&Request) -> Result<Payload>,
-    shell_id: String,
+    tab_id: String,
     command: String,
     waiting_seconds: f64,
 ) -> Result<String> {
     let waiting = waiting_from_seconds(waiting_seconds)?;
     let payload = call(&Request::SendCommand {
-        shell_id,
+        tab_id,
         command,
         waiting,
     })?;
@@ -52,7 +52,7 @@ pub(crate) fn with_daemon(
 }
 #[derive(Clone, Copy)]
 enum ExpectedPayload {
-    ShellCreated,
+    TabCreated,
     KeyboardWritten,
     CommandAccepted,
     Query,
@@ -60,7 +60,7 @@ enum ExpectedPayload {
 fn text_from_payload(payload: Payload, expected: ExpectedPayload) -> Result<String> {
     let matches_expected = matches!(
         (&payload, expected),
-        (Payload::ShellCreated { .. }, ExpectedPayload::ShellCreated)
+        (Payload::TabCreated { .. }, ExpectedPayload::TabCreated)
             | (Payload::KeyboardWritten, ExpectedPayload::KeyboardWritten)
             | (
                 Payload::CommandAccepted { .. },

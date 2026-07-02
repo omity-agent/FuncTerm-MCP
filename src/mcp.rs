@@ -9,7 +9,7 @@ use rmcp::{
     tool, tool_handler, tool_router,
 };
 use std::sync::Mutex;
-use types::{NewShellRequest, QueryRequest, SendCommandRequest, WriteKeyboardRequest};
+use types::{ManualWriteRequest, NewTabRequest, QueryRequest, SendCommandRequest};
 #[derive(Clone, Debug)]
 struct McpServer {
     daemon_service_name: String,
@@ -45,36 +45,33 @@ impl McpServer {
             .ok_or_else(|| anyhow!("daemon returned an unexpected response"))?
             .call(request)
     }
-    #[tool(name = "new_shell", description = "打开一个新的 Shell 窗口。")]
-    async fn new_shell(
+    #[tool(name = "new_tab", description = "打开一个新的终端标签页。")]
+    async fn new_tab(
         &self,
-        Parameters(request): Parameters<NewShellRequest>,
+        Parameters(request): Parameters<NewTabRequest>,
     ) -> Result<String, String> {
-        crate::commands::new_shell(
+        crate::commands::new_tab(
             |command| self.call(command),
-            request.cwd_path(),
-            &request.shell,
+            request.starting_directory_path(),
+            &request.starting_shell,
         )
         .map_err(error_text)
     }
     #[tool(
-        name = "write_keyboard",
-        description = "Write keyboard input bytes to the PTY master of a shell."
+        name = "manual_write",
+        description = "手动写入键盘输入。该工具用于使用 TUI 程序、发送快捷键等 send_command 无法覆盖的场景。使用时需在 text 和 bytes 中选择一个传入。"
     )]
-    async fn write_keyboard(
+    async fn manual_write(
         &self,
-        Parameters(request): Parameters<WriteKeyboardRequest>,
+        Parameters(request): Parameters<ManualWriteRequest>,
     ) -> Result<String, String> {
-        crate::commands::write_keyboard(
-            |command| self.call(command),
-            request.shell_id,
-            request.bytes,
-        )
-        .map_err(error_text)
+        let (tab_id, bytes) = request.into_parts().map_err(error_text)?;
+        crate::commands::manual_write(|command| self.call(command), tab_id, bytes)
+            .map_err(error_text)
     }
     #[tool(
         name = "send_command",
-        description = "向特定 Shell 发送命令。并获得等待时间结束前该命令产生的所有输出。"
+        description = "执行命令。获得等待时间结束前该命令产生的所有输出。"
     )]
     async fn send_command(
         &self,
@@ -82,7 +79,7 @@ impl McpServer {
     ) -> Result<String, String> {
         crate::commands::send_command(
             |command| self.call(command),
-            request.shell_id,
+            request.tab_id,
             request.command,
             request.waiting,
         )
