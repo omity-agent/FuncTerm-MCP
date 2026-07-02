@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::support::{
-        create_tab, manual_write, parse_command_query, parse_tab_query, run_cli, send_command,
+        create_tab, manual_write, parse_command_result, parse_tab_view, run_cli, send_command,
     };
     use core::time::Duration;
     use std::thread;
@@ -12,10 +12,10 @@ mod tests {
         let created = create_tab(&cwd, "powershell");
         let command = "Write-Output 'MCP_PTY_LAST_COMMAND'";
         let accepted_output = send_command(&created.tab_id, command, 5.0);
-        let command_query = parse_command_query(&accepted_output);
-        assert!(command_query.finished);
-        let tab_query = parse_tab_query(&run_cli(&["view", &created.tab_id]));
-        assert_eq!(tab_query.last_command, command);
+        let command_result = parse_command_result(&accepted_output);
+        assert!(command_result.finished);
+        let tab_view = parse_tab_view(&run_cli(&["view", &created.tab_id]));
+        assert_eq!(tab_view.last_command, command);
     }
     #[test]
     fn cli_view_keeps_closed_tab_snapshot_after_operation_detects_exit() {
@@ -24,7 +24,7 @@ mod tests {
         let created = create_tab(&cwd, "powershell");
         let command = "Write-Output 'MCP_PTY_BEFORE_CLOSE'";
         let close_output = send_command(&created.tab_id, command, 5.0);
-        let close_query = parse_command_query(&close_output);
+        let close_query = parse_command_result(&close_output);
         assert!(close_query.finished);
         let written = manual_write(&created.tab_id, b"exit\n");
         assert!(written.status.success());
@@ -35,18 +35,18 @@ mod tests {
             String::from_utf8_lossy(&failed.stderr)
                 .contains("was generated, but its shell is gone")
         );
-        let tab_query = parse_tab_query(&run_cli(&["view", &created.tab_id]));
-        assert!(!tab_query.alive);
-        assert_eq!(tab_query.last_command, command);
+        let tab_view = parse_tab_view(&run_cli(&["view", &created.tab_id]));
+        assert!(!tab_view.alive);
+        assert_eq!(tab_view.last_command, command);
         assert!(
-            tab_query.screen.contains("MCP_PTY_BEFORE_CLOSE"),
+            tab_view.screen.contains("MCP_PTY_BEFORE_CLOSE"),
             "closed tab should retain last screen: {}",
-            tab_query.screen
+            tab_view.screen
         );
     }
     fn wait_for_shell_exit(tab_id: &str) {
         for _attempt in 0_usize..20 {
-            let query = parse_tab_query(&run_cli(&["view", tab_id]));
+            let query = parse_tab_view(&run_cli(&["view", tab_id]));
             if !query.alive {
                 return;
             }

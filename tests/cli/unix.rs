@@ -2,7 +2,7 @@
 mod tests {
     use crate::support::{
         create_tab, create_tab_from_directory_argument, locked_with_env, manual_write,
-        parse_command_id, parse_command_query, parse_tab_query, run_cli, send_command,
+        parse_command_id, parse_command_result, parse_tab_view, run_cli, send_command,
     };
     use core::time::Duration;
     use std::thread;
@@ -39,7 +39,7 @@ mod tests {
             ("FUNCTERM_TEST_STARTING_DIRECTORY", cwd_text),
         ]);
         let shell = create_tab_from_directory_argument("$FUNCTERM_TEST_STARTING_DIRECTORY", "bash");
-        let query = parse_tab_query(&run_cli(&["view", &shell.tab_id]));
+        let query = parse_tab_view(&run_cli(&["view", &shell.tab_id]));
         assert_eq!(query.last_command, "");
         assert!(
             query
@@ -77,7 +77,7 @@ mod tests {
         };
         let _guard = locked_with_env(&[("SHELL_MCP_PTY_BASH", &bash)]);
         let shell = create_tab(&std::env::temp_dir(), "bash");
-        let alive = parse_tab_query(&run_cli(&["view", &shell.tab_id]));
+        let alive = parse_tab_view(&run_cli(&["view", &shell.tab_id]));
         assert!(alive.alive);
         let written = manual_write(&shell.tab_id, b"exit\n");
         assert!(
@@ -102,7 +102,7 @@ mod tests {
         });
         thread::sleep(Duration::from_millis(300));
         let start = Instant::now();
-        let query = parse_tab_query(&run_cli(&["view", &second.tab_id]));
+        let query = parse_tab_view(&run_cli(&["view", &second.tab_id]));
         let elapsed = start.elapsed();
         assert!(query.alive);
         assert!(
@@ -110,9 +110,9 @@ mod tests {
             "view should not wait for unrelated command; elapsed {elapsed:?}"
         );
         let accepted = worker.join().unwrap();
-        let command_query = parse_command_query(&accepted);
-        assert!(command_query.finished);
-        assert!(command_query.stdout.contains("MCP_PTY_WAIT_DONE"));
+        let command_result = parse_command_result(&accepted);
+        assert!(command_result.finished);
+        assert!(command_result.stdout.contains("MCP_PTY_WAIT_DONE"));
     }
     #[test]
     fn cli_unix_command_timeout_can_be_queried_after_completion() {
@@ -126,7 +126,7 @@ mod tests {
             "sleep 1; printf 'MCP_PTY_TIMEOUT_DONE\\n'",
             0.05,
         );
-        let pending = parse_command_query(&accepted);
+        let pending = parse_command_result(&accepted);
         assert!(!pending.finished);
         assert_eq!(pending.exit_code, None);
         let command_id = parse_command_id(&accepted);
@@ -168,7 +168,7 @@ mod tests {
     fn wait_for_screen_contains(tab_id: &str, expected: &str) {
         let mut last_screen = String::new();
         for _attempt in 0_usize..50 {
-            let query = parse_tab_query(&run_cli(&["view", tab_id]));
+            let query = parse_tab_view(&run_cli(&["view", tab_id]));
             if query.screen.contains(expected) {
                 return;
             }
@@ -179,7 +179,7 @@ mod tests {
     }
     fn wait_for_shell_dead(tab_id: &str) {
         for _attempt in 0_usize..30 {
-            let query = parse_tab_query(&run_cli(&["view", tab_id]));
+            let query = parse_tab_view(&run_cli(&["view", tab_id]));
             if !query.alive {
                 return;
             }
@@ -187,9 +187,9 @@ mod tests {
         }
         panic!("shell should be reported dead");
     }
-    fn wait_for_command_finished(command_id: &str) -> crate::support::CommandQuery {
+    fn wait_for_command_finished(command_id: &str) -> crate::support::CommandResult {
         for _attempt in 0_usize..30 {
-            let query = parse_command_query(&run_cli(&["view", command_id]));
+            let query = parse_command_result(&run_cli(&["view", command_id]));
             if query.finished {
                 return query;
             }

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::support::{
-        create_tab, locked_with_env, manual_write, parse_command_query, parse_tab_query, run_cli,
+        create_tab, locked_with_env, manual_write, parse_command_result, parse_tab_view, run_cli,
         send_command,
     };
     use core::sync::atomic::{AtomicU64, Ordering};
@@ -22,7 +22,7 @@ mod tests {
             ("SHELL_MCP_PTY_BASH", &bash_text),
         ]);
         let shell = create_tab(&std::env::temp_dir(), "bash");
-        let options = parse_command_query(&send_command(
+        let options = parse_command_result(&send_command(
             &shell.tab_id,
             "set -o | grep '^history'; printf 'HISTFILE=%s\\n' \"${HISTFILE-unset}\"",
             5.0,
@@ -30,7 +30,7 @@ mod tests {
         assert!(options.stdout.contains("history"));
         assert!(options.stdout.contains("off"));
         assert!(options.stdout.contains("HISTFILE=unset"));
-        let command = parse_command_query(&send_command(
+        let command = parse_command_result(&send_command(
             &shell.tab_id,
             "printf 'MCP_PTY_HISTORY_TEST\\n'",
             5.0,
@@ -50,7 +50,7 @@ mod tests {
             ("SHELL_MCP_PTY_ZSH", &zsh_text),
         ]);
         let shell = create_tab(&std::env::temp_dir(), "zsh");
-        let options = parse_command_query(&send_command(
+        let options = parse_command_result(&send_command(
             &shell.tab_id,
             "print -r -- \"HISTFILE=${HISTFILE-unset}\"; print -r -- \"HISTSIZE=$HISTSIZE\"; print -r -- \"SAVEHIST=$SAVEHIST\"",
             5.0,
@@ -58,7 +58,7 @@ mod tests {
         assert!(options.stdout.contains("HISTFILE=unset"));
         assert!(options.stdout.contains("HISTSIZE=0"));
         assert!(options.stdout.contains("SAVEHIST=0"));
-        let command = parse_command_query(&send_command(
+        let command = parse_command_result(&send_command(
             &shell.tab_id,
             "print -r -- 'MCP_PTY_HISTORY_TEST'",
             5.0,
@@ -74,7 +74,7 @@ mod tests {
         fs::create_dir_all(&app_data).unwrap();
         let _guard = locked_with_env(&[("APPDATA", app_data.to_str().unwrap())]);
         let shell = create_tab(&std::env::temp_dir(), "powershell");
-        let options = parse_command_query(&send_command(
+        let options = parse_command_result(&send_command(
             &shell.tab_id,
             "if (Get-Command Get-PSReadLineOption -ErrorAction SilentlyContinue) { (Get-PSReadLineOption).HistorySaveStyle } else { 'Unavailable' }",
             5.0,
@@ -84,7 +84,7 @@ mod tests {
             "unexpected PSReadLine history setting: {}",
             options.stdout
         );
-        let command = parse_command_query(&send_command(
+        let command = parse_command_result(&send_command(
             &shell.tab_id,
             "Write-Output 'MCP_PTY_HISTORY_TEST'",
             5.0,
@@ -115,7 +115,7 @@ mod tests {
             String::from_utf8_lossy(&written.stderr)
         );
         for _attempt in 0_usize..30 {
-            let query = parse_tab_query(&run_cli(&["view", tab_id]));
+            let query = parse_tab_view(&run_cli(&["view", tab_id]));
             if !query.alive {
                 return;
             }

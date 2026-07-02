@@ -2,22 +2,22 @@ use std::process::Output;
 pub(crate) struct TabCreated {
     pub(crate) tab_id: String,
 }
-pub(crate) struct CommandQuery {
+pub(crate) struct CommandResult {
     pub(crate) cwd: String,
     pub(crate) finished: bool,
     pub(crate) stdout: String,
     pub(crate) stderr: String,
     pub(crate) exit_code: Option<i32>,
 }
-pub(crate) struct TabQuery {
+pub(crate) struct TabView {
     pub(crate) alive: bool,
     pub(crate) cwd: String,
     pub(crate) last_command: String,
     pub(crate) screen: String,
 }
-pub(crate) fn parse_command_query(output: &Output) -> CommandQuery {
+pub(crate) fn parse_command_result(output: &Output) -> CommandResult {
     let text = checked_stdout(output);
-    CommandQuery {
+    CommandResult {
         cwd: element(&text, "CWD"),
         finished: element(&text, "FINISHED").parse().unwrap(),
         exit_code: parse_exit_code(&element(&text, "EXIT_CODE")),
@@ -28,9 +28,9 @@ pub(crate) fn parse_command_query(output: &Output) -> CommandQuery {
 pub(crate) fn parse_command_id(output: &Output) -> String {
     element(&checked_stdout(output), "COMMAND_ID")
 }
-pub(crate) fn parse_tab_query(output: &Output) -> TabQuery {
+pub(crate) fn parse_tab_view(output: &Output) -> TabView {
     let text = checked_stdout(output);
-    TabQuery {
+    TabView {
         alive: element(&text, "ALIVE").parse().unwrap(),
         cwd: element(&text, "CWD"),
         last_command: element(&text, "LAST_COMMAND"),

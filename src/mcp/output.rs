@@ -72,7 +72,7 @@ pub(super) fn send_command(payload: Payload) -> Result<CallToolResult, String> {
     let Payload::CommandAccepted {
         command_id,
         end_reason,
-        query,
+        view,
     } = payload
     else {
         return Err(unexpected_response());
@@ -82,7 +82,7 @@ pub(super) fn send_command(payload: Payload) -> Result<CallToolResult, String> {
         SendCommandOutput {
             command_id,
             end_reason: end_reason.into(),
-            view: query.into(),
+            view: view.into(),
         },
     )
 }
@@ -152,7 +152,7 @@ mod tests {
         let result = match send_command(Payload::CommandAccepted {
             command_id: "cmd".to_owned(),
             end_reason: EndReason::CommandEnded,
-            query: ViewResult::Command {
+            view: ViewResult::Command {
                 cwd: "F:\\workspace".to_owned(),
                 finished: true,
                 stdout: "ok".to_owned(),

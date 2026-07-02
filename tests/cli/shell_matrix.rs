@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::support::{
-        create_tab, locked_with_env, manual_write, parse_command_query, parse_tab_query, run_cli,
+        create_tab, locked_with_env, manual_write, parse_command_result, parse_tab_view, run_cli,
         send_command,
     };
     use core::sync::atomic::{AtomicU64, Ordering};
@@ -22,36 +22,36 @@ mod tests {
                 let start = case_dir(case.name, "start dir");
                 let next = case_dir(case.name, "next dir");
                 let created = create_tab(&start, case.name);
-                let shell_before = parse_tab_query(&run_cli(&["view", &created.tab_id]));
+                let shell_before = parse_tab_view(&run_cli(&["view", &created.tab_id]));
                 assert_shell_query(&shell_before, &start, case.name);
                 let command = case_command(case.name, &next);
-                let command_query =
-                    parse_command_query(&send_command(&created.tab_id, &command, 10.0));
+                let command_result =
+                    parse_command_result(&send_command(&created.tab_id, &command, 10.0));
                 assert!(
-                    command_query.finished,
+                    command_result.finished,
                     "{name} command should finish",
                     name = case.name
                 );
                 assert!(
-                    command_query.stdout.contains("MCP_PTY_STDOUT"),
+                    command_result.stdout.contains("MCP_PTY_STDOUT"),
                     "{name} stdout should include marker: {stdout}",
                     name = case.name,
-                    stdout = command_query.stdout
+                    stdout = command_result.stdout
                 );
                 assert!(
-                    command_query.stderr.contains("MCP_PTY_STDERR"),
+                    command_result.stderr.contains("MCP_PTY_STDERR"),
                     "{name} stderr should include marker: {stderr}",
                     name = case.name,
-                    stderr = command_query.stderr
+                    stderr = command_result.stderr
                 );
                 assert_eq!(
-                    command_query.exit_code,
+                    command_result.exit_code,
                     Some(case.expected_exit_code),
                     "{name} exit code should be captured",
                     name = case.name
                 );
-                assert_cwd(&command_query.cwd, &next, case.name);
-                let shell_after = parse_tab_query(&run_cli(&["view", &created.tab_id]));
+                assert_cwd(&command_result.cwd, &next, case.name);
+                let shell_after = parse_tab_view(&run_cli(&["view", &created.tab_id]));
                 assert_shell_query(&shell_after, &next, case.name);
             }
         }
@@ -90,7 +90,7 @@ mod tests {
                 let _guard = locked_with_env(&[(case.env_var, &executable)]);
                 let start = case_dir(case.name, "nested start");
                 let created = create_tab(&start, case.name);
-                let launch = parse_command_query(&send_command(
+                let launch = parse_command_result(&send_command(
                     &created.tab_id,
                     nested_launch_command(case.name),
                     10.0,
@@ -102,7 +102,7 @@ mod tests {
                 );
                 assert_eq!(launch.exit_code, Some(0_i32));
                 let marker = format!("MCP_PTY_NESTED_{}", case.name.to_ascii_uppercase());
-                let nested = parse_command_query(&send_command(
+                let nested = parse_command_result(&send_command(
                     &created.tab_id,
                     &nested_marker_command(case.name, &marker),
                     10.0,
@@ -208,7 +208,7 @@ mod tests {
             other => panic!("unsupported shell case {other}"),
         }
     }
-    fn assert_shell_query(query: &crate::support::TabQuery, cwd: &Path, shell: &str) {
+    fn assert_shell_query(query: &crate::support::TabView, cwd: &Path, shell: &str) {
         assert!(query.alive, "{shell} view should report live shell");
         assert_cwd(&query.cwd, cwd, shell);
         assert!(

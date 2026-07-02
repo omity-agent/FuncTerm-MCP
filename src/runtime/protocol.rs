@@ -39,7 +39,7 @@ pub(crate) enum Payload {
     CommandAccepted {
         command_id: String,
         end_reason: EndReason,
-        query: ViewResult,
+        view: ViewResult,
     },
     View(ViewResult),
 }
@@ -71,14 +71,14 @@ impl Payload {
             Self::TabCreated { tab_id } => element("TAB_ID", &tab_id),
             Self::KeyboardWritten => element("OK", ""),
             Self::CommandAccepted {
-                command_id, query, ..
+                command_id, view, ..
             } => {
                 let mut text = element("COMMAND_ID", &command_id);
                 text.push('\n');
-                text.push_str(&query.into_plain_text());
+                text.push_str(&view.into_plain_text());
                 text
             }
-            Self::View(query) => query.into_plain_text(),
+            Self::View(view) => view.into_plain_text(),
         }
     }
 }

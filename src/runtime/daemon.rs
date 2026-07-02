@@ -146,12 +146,12 @@ fn dispatch(manager: &Arc<Manager>, request: Request) -> Result<Payload> {
             command,
             waiting,
         } => {
-            let (command_id, end_reason, query) =
+            let (command_id, end_reason, view) =
                 manager.send_command(&tab_id, &command, waiting)?;
             Ok(Payload::CommandAccepted {
                 command_id,
                 end_reason,
-                query,
+                view,
             })
         }
         Request::View { id, waiting } => Ok(Payload::View(manager.view(&id, waiting)?)),

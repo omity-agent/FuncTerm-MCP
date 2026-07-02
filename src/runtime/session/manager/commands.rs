@@ -1,7 +1,7 @@
 use super::{Manager, tabs::Tab};
 use crate::runtime::protocol::{EndReason, ViewResult};
 use crate::runtime::session::records::{
-    CommandRecord, command_query, create_record, wait_for_done,
+    CommandRecord, create_record, read_command_result, wait_for_done,
 };
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
@@ -92,7 +92,7 @@ impl Tab {
             self.remember(&session)?;
         }
         let fallback_cwd = self.command_fallback_cwd(&record)?;
-        command_query(&record, &fallback_cwd)
+        read_command_result(&record, &fallback_cwd)
     }
     pub(super) fn find_command_for_view(&self, command_id: &str) -> Result<Option<CommandRecord>> {
         self.find_command(command_id)
@@ -137,7 +137,7 @@ impl StartedCommand {
             EndReason::WaitTimeout
         };
         let fallback_cwd = self.tab.command_fallback_cwd(&self.record)?;
-        let query = command_query(&self.record, &fallback_cwd)?;
-        Ok((self.command_id, reason, query))
+        let result = read_command_result(&self.record, &fallback_cwd)?;
+        Ok((self.command_id, reason, result))
     }
 }

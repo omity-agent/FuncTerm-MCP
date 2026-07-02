@@ -15,5 +15,5 @@ pub(crate) use command::{run_cli_with_pipes, send_test_command};
 pub(crate) use daemon::locked;
 pub(crate) use daemon::locked_with_env;
 #[cfg(unix)]
-pub(crate) use parse::CommandQuery;
-pub(crate) use parse::{TabQuery, parse_command_id, parse_command_query, parse_tab_query};
+pub(crate) use parse::CommandResult;
+pub(crate) use parse::{TabView, parse_command_id, parse_command_result, parse_tab_view};

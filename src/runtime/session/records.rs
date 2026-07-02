@@ -81,7 +81,10 @@ pub(super) fn wait_for_path(path: &Path, limit: Duration) -> Result<bool> {
         }
     }
 }
-pub(super) fn command_query(record: &CommandRecord, fallback_cwd: &Path) -> Result<ViewResult> {
+pub(super) fn read_command_result(
+    record: &CommandRecord,
+    fallback_cwd: &Path,
+) -> Result<ViewResult> {
     let stdout = read_optional(&record.stdout)?;
     let stderr = read_optional(&record.stderr)?;
     let done = read_done(&record.done)?;
