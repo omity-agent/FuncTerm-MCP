@@ -12,7 +12,7 @@ fn command_record_places_payload_next_to_output_files() {
         .join("functerm-record-payload-test")
         .join(std::process::id().to_string());
     let _ignored = std::fs::remove_dir_all(&root);
-    let record = create_record(&root, "command-test", "shell-test", Path::new("F:\\cwd")).unwrap();
+    let record = create_record(&root, "command-test", Path::new("F:\\cwd")).unwrap();
     assert_eq!(
         record.payload,
         root.join("command-test").join("command.b64")

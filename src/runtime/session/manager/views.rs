@@ -1,63 +1,39 @@
-use super::{Manager, ShellSession};
+use super::{Manager, tabs::Tab};
 use crate::runtime::protocol::ViewResult;
-use crate::runtime::session::records::{CommandRecord, command_query, wait_for_done};
-use crate::runtime::session::support::lock_mutex;
-use alloc::sync::Arc;
-use anyhow::{Context as _, Result, bail};
+use crate::runtime::session::records::wait_for_done;
+use anyhow::Result;
 use std::thread;
 impl Manager {
     pub(crate) fn view(&self, id: &str, waiting: core::time::Duration) -> Result<ViewResult> {
-        if let Some(shell) = self.find_shell(id)? {
-            self.wait_for_shell_view(&shell, waiting)?;
-            return self.tab_view(id, &shell);
-        }
-        if let Some(snapshot) = self.find_tab_snapshot(id)? {
-            return Ok(snapshot.into_view(false));
-        }
-        if let Some(record) = self.find_command(id)? {
-            self.wait_for_command_view(&record, waiting)?;
-            return self.command_view(&record);
-        }
-        bail!("unknown id {id}")
+        self.tabs.view(id, waiting)
     }
-    fn tab_view(&self, tab_id: &str, shell: &Arc<ShellSession>) -> Result<ViewResult> {
-        let alive = shell.is_alive()?;
-        shell.refresh_choice()?;
-        let snapshot = self.remember_tab(tab_id, shell)?;
-        Ok(snapshot.into_view(alive))
-    }
-    fn command_view(&self, record: &CommandRecord) -> Result<ViewResult> {
-        let fallback_cwd = self.command_fallback_cwd(record)?;
-        command_query(record, &fallback_cwd)
-    }
-    fn wait_for_shell_view(
-        &self,
-        shell: &Arc<ShellSession>,
-        waiting: core::time::Duration,
-    ) -> Result<()> {
-        let busy_command_id = lock_mutex(&shell.busy, "busy")?.clone();
+}
+impl Tab {
+    pub(super) fn view(&self, waiting: core::time::Duration) -> Result<ViewResult> {
+        let Ok(session) = self.live_session() else {
+            return self.snapshot_view();
+        };
+        let busy_command_id = session.busy_command_id()?;
         let Some(command_id) = busy_command_id else {
             thread::sleep(waiting);
-            return Ok(());
+            return self.tab_view(&session);
         };
-        let record = self
-            .find_command(&command_id)?
-            .with_context(|| format!("busy shell command is missing: {command_id}"))?;
-        if wait_for_done(&record.done, waiting)? {
-            Self::update_shell_cwd(shell, &record)?;
-        }
-        Ok(())
-    }
-    fn wait_for_command_view(
-        &self,
-        record: &CommandRecord,
-        waiting: core::time::Duration,
-    ) -> Result<()> {
-        if wait_for_done(&record.done, waiting)?
-            && let Some(shell) = self.find_shell(&record.tab_id)?
+        if let Some(record) = self.find_command_for_view(&command_id)?
+            && wait_for_done(&record.done, waiting)?
         {
-            Self::update_shell_cwd(&shell, record)?;
+            session.update_cwd_from_done(&record)?;
         }
-        Ok(())
+        self.tab_view(&session)
+    }
+    fn tab_view(&self, session: &super::session::ShellSession) -> Result<ViewResult> {
+        let alive = session.is_alive()?;
+        session.refresh_choice()?;
+        if alive {
+            let snapshot = self.remember(session)?;
+            Ok(snapshot.into_view(true))
+        } else {
+            self.close_session(session)?;
+            self.snapshot_view()
+        }
     }
 }

@@ -41,6 +41,17 @@ mod tests {
         );
     }
     #[test]
+    fn cli_daemon_refuses_second_instance() {
+        let _guard = locked();
+        let output = run_cli(&["daemon"]);
+        assert!(!output.status.success());
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("daemon is already running"),
+            "stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    #[test]
     fn cli_expands_starting_directory_environment_variables() {
         let cwd = std::env::temp_dir();
         let cwd_text = cwd.to_str().unwrap();

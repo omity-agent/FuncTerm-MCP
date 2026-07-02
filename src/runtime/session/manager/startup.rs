@@ -1,4 +1,7 @@
-use super::{ShellSession, process_tree};
+use super::{
+    process_tree,
+    session::{ShellSession, ShellSessionParts},
+};
 use crate::runtime::config::Settings;
 use crate::runtime::session::records::wait_for_path;
 use crate::runtime::session::support::{lock_mutex, start_reader};
@@ -79,19 +82,19 @@ impl ShellLauncher {
         wait_for_shell_startup(&mut child, &ready_file, &screen)?;
         let active_shell_file = command_root.join("active-shell.txt");
         shims::write_active_shell(&active_shell_file, starting_shell)?;
-        Ok(Arc::new(ShellSession {
-            choice: Mutex::new(starting_shell),
-            cwd: Mutex::new(starting_directory.to_path_buf()),
+        Ok(Arc::new(ShellSession::new(ShellSessionParts {
+            choice: starting_shell,
+            cwd: starting_directory.to_path_buf(),
             writer,
             screen,
-            last_command: Mutex::new(None),
-            busy: Mutex::new(None),
+            last_command: None,
+            busy: None,
             command_root,
             active_shell_file,
             process_tree,
-            child: Mutex::new(child),
-            _slave: Mutex::new(pair.slave),
-        }))
+            child,
+            slave: pair.slave,
+        })))
     }
 }
 pub(super) fn apply_startup(command: &mut CommandBuilder, startup: ShellStartup) {

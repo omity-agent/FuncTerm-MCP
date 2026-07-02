@@ -1,14 +1,11 @@
+use crate::runtime::daemon::startup::{READY_ENDPOINT_ENV, StartupReply};
 use crate::runtime::daemon::{BootstrapReply, DaemonRequest};
 use crate::runtime::protocol::{Payload, Request, Response};
 use anyhow::{Context as _, Result, bail};
 use core::time::Duration;
-use ipc_channel::ipc::{self, IpcSender};
+use ipc_channel::ipc::{self, IpcOneShotServer, IpcSender};
 use std::process::{Command, Stdio};
-use std::time::Instant;
 const IPC_TIMEOUT: Duration = Duration::from_secs(15);
-const CONNECT_RETRY_TIMEOUT: Duration = Duration::from_secs(2);
-const DAEMON_STARTUP_TIMEOUT: Duration = Duration::from_secs(15);
-const STARTUP_RETRY_DELAY: Duration = Duration::from_millis(50);
 pub(crate) struct DaemonClient {
     sender: IpcSender<DaemonRequest>,
 }
@@ -19,16 +16,8 @@ impl core::fmt::Debug for DaemonClient {
 }
 impl DaemonClient {
     pub(crate) fn connect(service_name: &str) -> Result<Self> {
-        let start = Instant::now();
-        loop {
-            let endpoint_name = crate::runtime::ipc_endpoint::read(service_name)?;
-            match connect_to_endpoint(service_name, endpoint_name) {
-                Ok(client) => return Ok(client),
-                Err(error) if start.elapsed() >= CONNECT_RETRY_TIMEOUT => return Err(error),
-                Err(_error) => {}
-            }
-            std::thread::park_timeout(STARTUP_RETRY_DELAY);
-        }
+        let endpoint_name = crate::runtime::ipc_endpoint::read(service_name)?;
+        connect_to_endpoint(service_name, endpoint_name)
     }
     pub(crate) fn call(&self, request: &Request) -> Result<Payload> {
         let (response_sender, response_receiver) =
@@ -69,27 +58,58 @@ pub(crate) fn ensure_daemon(service_name: &str) -> Result<()> {
     if call(service_name, &Request::Ping).is_ok() {
         return Ok(());
     }
+    let _startup_lock = crate::runtime::daemon_lock::acquire_startup(service_name)?;
+    if call(service_name, &Request::Ping).is_ok() {
+        return Ok(());
+    }
+    spawn_daemon()
+}
+fn spawn_daemon() -> Result<()> {
+    let (startup_server, startup_endpoint) =
+        IpcOneShotServer::<StartupReply>::new().context("failed to create startup IPC server")?;
     let current_exe = std::env::current_exe().context("failed to locate current executable")?;
     let mut command = Command::new(current_exe);
     command
         .arg("daemon")
+        .env(READY_ENDPOINT_ENV, startup_endpoint)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
     apply_detached_flags(&mut command);
-    let mut child = command.spawn().context("failed to spawn daemon")?;
-    let start = Instant::now();
-    loop {
-        if call(service_name, &Request::Ping).is_ok() {
-            return Ok(());
+    let child = command.spawn().context("failed to spawn daemon")?;
+    wait_for_daemon_startup(startup_server, child)
+}
+enum StartupEvent {
+    Reply(Result<StartupReply>),
+    Exit(Result<std::process::ExitStatus>),
+}
+fn wait_for_daemon_startup(
+    startup_server: IpcOneShotServer<StartupReply>,
+    mut child: std::process::Child,
+) -> Result<()> {
+    let (event_sender, event_receiver) = std::sync::mpsc::channel();
+    let reply_sender = event_sender.clone();
+    let _reply_worker = std::thread::spawn(move || {
+        let reply = startup_server
+            .accept()
+            .map(|(_receiver, reply)| reply)
+            .context("failed to receive daemon startup status");
+        let _send_result = reply_sender.send(StartupEvent::Reply(reply));
+    });
+    let _exit_worker = std::thread::spawn(move || {
+        let status = child.wait().context("failed to wait for daemon startup");
+        let _send_result = event_sender.send(StartupEvent::Exit(status));
+    });
+    match event_receiver
+        .recv()
+        .context("failed to receive daemon startup event")?
+    {
+        StartupEvent::Reply(Ok(StartupReply::Ready)) => Ok(()),
+        StartupEvent::Reply(Ok(StartupReply::Failed { message })) => bail!(message),
+        StartupEvent::Reply(Err(error)) | StartupEvent::Exit(Err(error)) => Err(error),
+        StartupEvent::Exit(Ok(status)) => {
+            bail!("daemon exited during startup with status {status}")
         }
-        if let Some(status) = child.try_wait().context("failed to poll daemon startup")? {
-            bail!("daemon exited during startup with status {status}");
-        }
-        if start.elapsed() >= DAEMON_STARTUP_TIMEOUT {
-            bail!("daemon did not become ready within {DAEMON_STARTUP_TIMEOUT:?}");
-        }
-        std::thread::park_timeout(STARTUP_RETRY_DELAY);
     }
 }
 #[cfg(windows)]

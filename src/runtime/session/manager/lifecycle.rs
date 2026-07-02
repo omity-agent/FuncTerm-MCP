@@ -1,30 +1,15 @@
-use super::ShellSession;
-use crate::runtime::session::support::lock_mutex;
-use anyhow::{Result, bail};
+use super::session::ShellSession;
+use anyhow::Result;
 pub(super) fn reserve_shell(shell: &ShellSession, command_id: &str) -> Result<()> {
-    {
-        let mut busy = lock_mutex(&shell.busy, "busy")?;
-        if let Some(existing_id) = busy.as_deref() {
-            bail!("shell is busy with command {existing_id}");
-        }
-        *busy = Some(command_id.to_owned());
-    }
-    Ok(())
+    shell.reserve(command_id)
 }
 pub(super) fn release_shell(shell: &ShellSession, command_id: &str) -> Result<()> {
-    {
-        let mut busy = lock_mutex(&shell.busy, "busy")?;
-        if busy.as_deref() == Some(command_id) {
-            *busy = None;
-        }
-    }
-    Ok(())
+    shell.release(command_id)
 }
 #[cfg(test)]
 mod tests {
     use super::{release_shell, reserve_shell};
-    use crate::runtime::session::manager::ShellSession;
-    use crate::runtime::session::support::lock_mutex;
+    use crate::runtime::session::manager::session::{ShellSession, ShellSessionParts};
     use crate::shell::ShellChoice;
     use alloc::sync::Arc;
     use anyhow::Error;
@@ -41,15 +26,19 @@ mod tests {
                 .to_string()
                 .contains("shell is busy with command command-current")
         );
-        let busy = lock_mutex(&shell.busy, "busy").unwrap();
-        assert_eq!(busy.as_deref(), Some("command-current"));
+        assert_eq!(
+            shell.busy_command_id().unwrap().as_deref(),
+            Some("command-current")
+        );
     }
     #[test]
     fn busy_state_release_keeps_conflicting_owner() {
         let shell = test_shell(Some("command-owner"));
         release_shell(&shell, "command-stranger").unwrap();
-        let busy = lock_mutex(&shell.busy, "busy").unwrap();
-        assert_eq!(busy.as_deref(), Some("command-owner"));
+        assert_eq!(
+            shell.busy_command_id().unwrap().as_deref(),
+            Some("command-owner")
+        );
     }
     #[test]
     fn busy_state_allows_only_one_concurrent_reservation() {
@@ -80,29 +69,31 @@ mod tests {
         assert_eq!(reserved_ids.len(), 1);
         assert_eq!(conflict_count, ATTEMPTS - 1);
         let reserved_id = reserved_ids.first().unwrap();
-        let busy = lock_mutex(&shell.busy, "busy").unwrap();
-        assert_eq!(busy.as_deref(), Some(reserved_id.as_str()));
+        assert_eq!(
+            shell.busy_command_id().unwrap().as_deref(),
+            Some(reserved_id.as_str())
+        );
     }
     fn test_shell(busy: Option<&str>) -> ShellSession {
         let writer: Box<dyn Write + Send> = Box::<Vec<u8>>::default();
         let child: Box<dyn Child + Send + Sync> = Box::new(TestChild);
         let slave: Box<dyn SlavePty + Send> = Box::new(TestSlave);
-        ShellSession {
-            choice: Mutex::new(ShellChoice::PowerShell),
-            cwd: Mutex::new(std::env::temp_dir()),
+        ShellSession::new(ShellSessionParts {
+            choice: ShellChoice::PowerShell,
+            cwd: std::env::temp_dir(),
             writer: Arc::new(Mutex::new(writer)),
             screen: Arc::new(Mutex::new(vt100::Parser::new(30, 120, 0))),
-            last_command: Mutex::new(None),
-            busy: Mutex::new(busy.map(str::to_owned)),
+            last_command: None,
+            busy: busy.map(str::to_owned),
             command_root: std::env::temp_dir().join("functerm-test-commands"),
             active_shell_file: std::env::temp_dir()
                 .join("functerm-test-commands")
                 .join("active-shell.txt"),
             process_tree: crate::runtime::session::manager::process_tree::ProcessTree::new()
                 .unwrap(),
-            child: Mutex::new(child),
-            _slave: Mutex::new(slave),
-        }
+            child,
+            slave,
+        })
     }
     #[derive(Debug)]
     struct TestChild;
