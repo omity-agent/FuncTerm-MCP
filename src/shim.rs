@@ -1,12 +1,12 @@
+mod startup;
+mod stdio;
+use crate::contract::{DONE_FILE, DONE_TEMP_FILE};
 use crate::shell::{ShellChoice, ShellStartup, shims};
 use anyhow::{Context as _, Result};
-use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher as _};
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Stdio};
-use std::sync::mpsc;
-use std::thread;
+use std::process::{Command, ExitStatus};
 pub(crate) fn run_if_requested() -> Result<Option<i32>> {
     let Some(choice) = requested_shell() else {
         return Ok(None);
@@ -44,7 +44,7 @@ fn run_interactive(choice: ShellChoice) -> Result<i32> {
     let startup = choice.startup(&cwd, &session_root)?;
     let ready_file = startup.ready_file.clone();
     let child = spawn_shell(choice, startup)?;
-    let status = run_shell_until_exit(child, &ready_file, || {
+    let status = startup::run_shell_until_exit(child, &ready_file, || {
         shims::write_active_shell(&active_shell_file, choice)?;
         complete_active_command(&cwd)
     })?;
@@ -57,99 +57,10 @@ fn spawn_shell(choice: ShellChoice, startup: ShellStartup) -> Result<std::proces
     for (name, value) in startup.env {
         command.env(name, value);
     }
-    attach_terminal_stdio(&mut command)?;
+    stdio::attach_terminal_stdio(&mut command)?;
     command
         .spawn()
         .with_context(|| format!("failed to spawn {}", choice.canonical_name()))
-}
-#[cfg(unix)]
-fn attach_terminal_stdio(command: &mut Command) -> Result<()> {
-    let input = fs::File::open("/dev/tty").context("failed to open terminal input")?;
-    let output = fs::OpenOptions::new()
-        .write(true)
-        .open("/dev/tty")
-        .context("failed to open terminal output")?;
-    let error = output
-        .try_clone()
-        .context("failed to clone terminal output")?;
-    command
-        .stdin(Stdio::from(input))
-        .stdout(Stdio::from(output))
-        .stderr(Stdio::from(error));
-    Ok(())
-}
-#[cfg(windows)]
-fn attach_terminal_stdio(command: &mut Command) -> Result<()> {
-    let input = fs::File::open("CONIN$").context("failed to open console input")?;
-    let output = fs::OpenOptions::new()
-        .write(true)
-        .open("CONOUT$")
-        .context("failed to open console output")?;
-    let error = output
-        .try_clone()
-        .context("failed to clone console output")?;
-    command
-        .stdin(Stdio::from(input))
-        .stdout(Stdio::from(output))
-        .stderr(Stdio::from(error));
-    Ok(())
-}
-#[cfg(not(any(unix, windows)))]
-fn attach_terminal_stdio(_command: &mut Command) -> Result<()> {
-    anyhow::bail!("interactive shell shims are not supported on this platform")
-}
-fn run_shell_until_exit(
-    mut child: std::process::Child,
-    ready_file: &Path,
-    on_ready: impl FnOnce() -> Result<()>,
-) -> Result<ExitStatus> {
-    let parent = ready_file
-        .parent()
-        .context("nested ready path has no parent")?;
-    let (tx, rx) = mpsc::channel();
-    let notify_tx = tx.clone();
-    let mut watcher = RecommendedWatcher::new(
-        move |event: notify::Result<notify::Event>| {
-            let _sent = notify_tx.send(StartupEvent::Filesystem(event.map(|_| ())));
-        },
-        Config::default(),
-    )
-    .context("failed to create nested shell startup watcher")?;
-    watcher
-        .watch(parent, RecursiveMode::NonRecursive)
-        .with_context(|| {
-            format!(
-                "failed to watch nested shell directory {}",
-                parent.display()
-            )
-        })?;
-    let wait_tx = tx;
-    thread::spawn(move || {
-        let status = child.wait().context("failed to wait for nested shell");
-        let _sent = wait_tx.send(StartupEvent::Exited(status));
-    });
-    let mut ready_handler = Some(on_ready);
-    if ready_file.exists()
-        && let Some(handler) = ready_handler.take()
-    {
-        handler()?;
-    }
-    loop {
-        match rx
-            .recv()
-            .context("nested shell startup watcher disconnected")?
-        {
-            StartupEvent::Filesystem(Ok(())) => {
-                if ready_file.exists()
-                    && let Some(handler) = ready_handler.take()
-                {
-                    handler()?;
-                }
-            }
-            StartupEvent::Filesystem(Err(error)) => return Err(error).context("watcher failed"),
-            StartupEvent::Exited(status) => return status,
-        }
-    }
 }
 fn complete_active_command(cwd: &Path) -> Result<()> {
     let Some(directory) = std::env::var_os(shims::COMMAND_DIRECTORY_ENV) else {
@@ -159,7 +70,7 @@ fn complete_active_command(cwd: &Path) -> Result<()> {
         return Ok(());
     };
     let directory_path = PathBuf::from(directory);
-    let done_path = directory_path.join("done.json");
+    let done_path = directory_path.join(DONE_FILE);
     if done_path.exists() {
         return Ok(());
     }
@@ -169,7 +80,7 @@ fn complete_active_command(cwd: &Path) -> Result<()> {
         cwd: cwd.to_string_lossy().into_owned(),
     };
     let text = sonic_rs::to_string(&done).context("failed to serialize early done file")?;
-    let temp_path = directory_path.join("done.json.tmp");
+    let temp_path = directory_path.join(DONE_TEMP_FILE);
     fs::write(&temp_path, text).context("failed to write early done file")?;
     match fs::rename(&temp_path, &done_path) {
         Ok(()) => Ok(()),
@@ -214,8 +125,4 @@ struct EarlyDone {
     command_id: String,
     exit_code: i32,
     cwd: String,
-}
-enum StartupEvent {
-    Filesystem(notify::Result<()>),
-    Exited(Result<ExitStatus>),
 }

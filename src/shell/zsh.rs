@@ -1,4 +1,9 @@
-use super::posix::{sh_path, sh_quote};
+use super::{
+    generated::zsh_wrapper,
+    posix::{sh_path, sh_quote},
+    shims::CURRENT_SHELL_ENV,
+};
+use crate::contract::POSIX_COMMAND_FUNCTION;
 use anyhow::{Context as _, Result};
 use std::fs;
 use std::path::Path;
@@ -14,7 +19,7 @@ pub(super) fn startup(cwd: &Path, session_root: &Path, ready_file: &Path) -> Res
 }
 pub(super) fn invocation(command_id: &str, directory: &Path, cwd: &Path) -> String {
     format!(
-        "functerm_run_command {} {} {}\n",
+        "{POSIX_COMMAND_FUNCTION} {} {} {}\n",
         sh_quote(command_id),
         sh_quote(&sh_path(directory)),
         sh_quote(&sh_path(cwd))
@@ -22,8 +27,8 @@ pub(super) fn invocation(command_id: &str, directory: &Path, cwd: &Path) -> Stri
 }
 fn initialization_script(cwd: &Path, ready_file: &Path) -> String {
     format!(
-        "export FUNCTERM_CURRENT_SHELL=zsh\n{}\ncd {}\n: >| {}\n",
-        include_str!("zsh_init.zsh"),
+        "export {CURRENT_SHELL_ENV}=zsh\n{}\ncd {}\n: >| {}\n",
+        zsh_wrapper(),
         sh_quote(&sh_path(cwd)),
         sh_quote(&sh_path(ready_file))
     )

@@ -1,3 +1,6 @@
+use super::generated::powershell_wrapper;
+use super::shims::CURRENT_SHELL_ENV;
+use crate::contract::POWERSHELL_COMMAND_FUNCTION;
 use alloc::borrow::Cow;
 use base64_turbo::STANDARD;
 use std::path::Path;
@@ -17,7 +20,7 @@ pub(super) fn invocation(command_id: &str, directory: &Path, cwd: &Path) -> Stri
     let quoted_directory = ps_quote(directory);
     let quoted_cwd = ps_quote(cwd);
     format!(
-        "Invoke-FuncTermCommand -CommandId '{command_id}' -Directory {quoted_directory} -WorkingDirectory {quoted_cwd}\r\n"
+        "{POWERSHELL_COMMAND_FUNCTION} -CommandId '{command_id}' -Directory {quoted_directory} -WorkingDirectory {quoted_cwd}\r\n"
     )
 }
 pub(super) fn keyboard_bytes(bytes: &[u8]) -> Cow<'_, [u8]> {
@@ -37,8 +40,8 @@ pub(super) fn keyboard_bytes(bytes: &[u8]) -> Cow<'_, [u8]> {
 }
 fn initialization_script(cwd: &Path, ready_file: &Path) -> String {
     format!(
-        "$env:FUNCTERM_CURRENT_SHELL = 'powershell'\n{}\nSet-Location -LiteralPath {}\nSet-Content -LiteralPath {} -Value '' -NoNewline",
-        include_str!("./powershell_init.ps1"),
+        "$env:{CURRENT_SHELL_ENV} = 'powershell'\n{}\nSet-Location -LiteralPath {}\nSet-Content -LiteralPath {} -Value '' -NoNewline",
+        powershell_wrapper(),
         ps_quote(cwd),
         ps_quote(ready_file)
     )

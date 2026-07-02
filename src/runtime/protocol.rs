@@ -136,6 +136,7 @@ pub(crate) fn waiting_from_seconds(seconds: f64) -> Result<Duration> {
 #[cfg(test)]
 mod tests {
     use super::ViewResult;
+    #[doc = " 该程序输出的主要消费者为 LLM，如果输出中存在 JSON/XML 转义会增加认知负荷和无意义的上下文占用，使用伪结构化文本可读性更高。"]
     #[test]
     fn command_output_uses_uppercase_tags_without_escaping_content() {
         let text = ViewResult::Command {

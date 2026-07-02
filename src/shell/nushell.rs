@@ -1,3 +1,6 @@
+use super::generated::nushell_wrapper;
+use super::shims::CURRENT_SHELL_ENV;
+use crate::contract::POSIX_COMMAND_FUNCTION;
 use std::path::Path;
 pub(super) fn startup_args(cwd: &Path, ready_file: &Path) -> Vec<String> {
     vec![
@@ -10,7 +13,7 @@ pub(super) fn startup_args(cwd: &Path, ready_file: &Path) -> Vec<String> {
 pub(super) fn invocation(command_id: &str, directory: &Path, cwd: &Path) -> String {
     let line_ending = invocation_line_ending();
     format!(
-        "functerm_run_command {} {} {}{}",
+        "{POSIX_COMMAND_FUNCTION} {} {} {}{}",
         nu_quote(command_id),
         nu_quote(&directory.to_string_lossy()),
         nu_quote(&cwd.to_string_lossy()),
@@ -27,8 +30,8 @@ const fn invocation_line_ending() -> &'static str {
 }
 fn initialization_script(cwd: &Path, ready_file: &Path) -> String {
     format!(
-        "$env.FUNCTERM_CURRENT_SHELL = 'nu'\n{}\ncd {}\n'' | save --force --raw {}\n",
-        include_str!("nushell_init.nu"),
+        "$env.{CURRENT_SHELL_ENV} = 'nu'\n{}\ncd {}\n'' | save --force --raw {}\n",
+        nushell_wrapper(),
         nu_quote(&cwd.to_string_lossy()),
         nu_quote(&ready_file.to_string_lossy())
     )

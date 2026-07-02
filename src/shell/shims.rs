@@ -6,11 +6,10 @@ use std::fs;
 use std::path::Path;
 const SHIM_DIR: &str = "shell-shims";
 pub(crate) const ACTIVE_SHELL_FILE_ENV: &str = "FUNCTERM_ACTIVE_SHELL_FILE";
-pub(crate) const COMMAND_DIRECTORY_ENV: &str = "FUNCTERM_COMMAND_DIRECTORY";
-pub(crate) const COMMAND_ID_ENV: &str = "FUNCTERM_COMMAND_ID";
 pub(crate) const CURRENT_SHELL_ENV: &str = "FUNCTERM_CURRENT_SHELL";
 pub(crate) const SESSION_ROOT_ENV: &str = "FUNCTERM_SESSION_ROOT";
 pub(crate) const SHIM_DIR_ENV: &str = "FUNCTERM_SHIM_DIR";
+pub(crate) use crate::contract::{COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV};
 pub(crate) fn environment(
     settings: &Settings,
     session_root: &Path,

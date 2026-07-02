@@ -1,3 +1,4 @@
+use crate::contract::{COMMAND_PAYLOAD_FILE, DONE_FILE, STDERR_FILE, STDOUT_FILE};
 use crate::runtime::protocol::ViewResult;
 use anyhow::{Context as _, Result, bail};
 use core::time::Duration;
@@ -32,10 +33,10 @@ pub(super) fn create_record(
     Ok(CommandRecord {
         tab_id: tab_id.to_owned(),
         initial_cwd: initial_cwd.to_path_buf(),
-        stdout: command_dir.join("stdout.txt"),
-        stderr: command_dir.join("stderr.txt"),
-        payload: command_dir.join("command.b64"),
-        done: command_dir.join("done.json"),
+        stdout: command_dir.join(STDOUT_FILE),
+        stderr: command_dir.join(STDERR_FILE),
+        payload: command_dir.join(COMMAND_PAYLOAD_FILE),
+        done: command_dir.join(DONE_FILE),
     })
 }
 pub(super) fn wait_for_done(done: &Path, limit: Duration) -> Result<bool> {

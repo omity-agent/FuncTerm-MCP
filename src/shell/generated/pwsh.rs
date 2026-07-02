@@ -1,4 +1,30 @@
-function Set-FuncTermShimPath {
+use crate::contract::{
+    COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV, COMMAND_PAYLOAD_FILE, DONE_FILE, DONE_TEMP_FILE,
+    POWERSHELL_COMMAND_FUNCTION, STDERR_FILE, STDOUT_FILE,
+};
+pub(in crate::shell) fn wrapper() -> String {
+    substitute(
+        TEMPLATE,
+        &[
+            ("@COMMAND_DIR_ENV@", COMMAND_DIRECTORY_ENV),
+            ("@COMMAND_ID_ENV@", COMMAND_ID_ENV),
+            ("@DONE@", DONE_FILE),
+            ("@DONE_TEMP@", DONE_TEMP_FILE),
+            ("@FUNCTION@", POWERSHELL_COMMAND_FUNCTION),
+            ("@PAYLOAD@", COMMAND_PAYLOAD_FILE),
+            ("@STDERR@", STDERR_FILE),
+            ("@STDOUT@", STDOUT_FILE),
+        ],
+    )
+}
+fn substitute(template: &str, pairs: &[(&str, &str)]) -> String {
+    let mut text = template.to_owned();
+    for &(placeholder, value) in pairs {
+        text = text.replace(placeholder, value);
+    }
+    text
+}
+const TEMPLATE : & str = "function Set-FuncTermShimPath {
     if ([string]::IsNullOrEmpty($env:FUNCTERM_SHIM_DIR)) {
         return
     }
@@ -23,22 +49,22 @@ if (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue) {
 }
 Clear-History
 
-function Invoke-FuncTermCommand {
+function @FUNCTION@ {
     param(
         [Parameter(Mandatory = $true)][string]$CommandId,
         [Parameter(Mandatory = $true)][string]$Directory,
         [Parameter(Mandatory = $true)][string]$WorkingDirectory
     )
     New-Item -ItemType Directory -Force -Path $Directory | Out-Null
-    $stdoutFile = Join-Path $Directory 'stdout.txt'
-    $stderrFile = Join-Path $Directory 'stderr.txt'
-    $payloadFile = Join-Path $Directory 'command.b64'
-    $doneFile = Join-Path $Directory 'done.json'
-    $doneTempFile = Join-Path $Directory 'done.json.tmp'
-    $previousCommandId = $env:FUNCTERM_COMMAND_ID
-    $previousCommandDirectory = $env:FUNCTERM_COMMAND_DIRECTORY
-    $env:FUNCTERM_COMMAND_ID = $CommandId
-    $env:FUNCTERM_COMMAND_DIRECTORY = $Directory
+    $stdoutFile = Join-Path $Directory '@STDOUT@'
+    $stderrFile = Join-Path $Directory '@STDERR@'
+    $payloadFile = Join-Path $Directory '@PAYLOAD@'
+    $doneFile = Join-Path $Directory '@DONE@'
+    $doneTempFile = Join-Path $Directory '@DONE_TEMP@'
+    $previousCommandId = $env:@COMMAND_ID_ENV@
+    $previousCommandDirectory = $env:@COMMAND_DIR_ENV@
+    $env:@COMMAND_ID_ENV@ = $CommandId
+    $env:@COMMAND_DIR_ENV@ = $Directory
     Set-Content -LiteralPath $stdoutFile -Value '' -NoNewline -Encoding utf8
     Set-Content -LiteralPath $stderrFile -Value '' -NoNewline -Encoding utf8
     try {
@@ -74,15 +100,16 @@ function Invoke-FuncTermCommand {
     Set-Content -LiteralPath $doneTempFile -Value $done -Encoding utf8
     Move-Item -LiteralPath $doneTempFile -Destination $doneFile -Force
     if ($null -eq $previousCommandId) {
-        Remove-Item Env:FUNCTERM_COMMAND_ID -ErrorAction SilentlyContinue
+        Remove-Item Env:@COMMAND_ID_ENV@ -ErrorAction SilentlyContinue
     }
     else {
-        $env:FUNCTERM_COMMAND_ID = $previousCommandId
+        $env:@COMMAND_ID_ENV@ = $previousCommandId
     }
     if ($null -eq $previousCommandDirectory) {
-        Remove-Item Env:FUNCTERM_COMMAND_DIRECTORY -ErrorAction SilentlyContinue
+        Remove-Item Env:@COMMAND_DIR_ENV@ -ErrorAction SilentlyContinue
     }
     else {
-        $env:FUNCTERM_COMMAND_DIRECTORY = $previousCommandDirectory
+        $env:@COMMAND_DIR_ENV@ = $previousCommandDirectory
     }
 }
+" ;

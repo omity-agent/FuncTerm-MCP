@@ -1,16 +1,42 @@
-def functerm_run_command [command_id: string, directory: path, working_directory: path] {
+use crate::contract::{
+    COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV, COMMAND_PAYLOAD_FILE, DONE_FILE, DONE_TEMP_FILE,
+    POSIX_COMMAND_FUNCTION, STDERR_FILE, STDOUT_FILE,
+};
+pub(in crate::shell) fn wrapper() -> String {
+    substitute(
+        TEMPLATE,
+        &[
+            ("@COMMAND_DIR_ENV@", COMMAND_DIRECTORY_ENV),
+            ("@COMMAND_ID_ENV@", COMMAND_ID_ENV),
+            ("@DONE@", DONE_FILE),
+            ("@DONE_TEMP@", DONE_TEMP_FILE),
+            ("@FUNCTION@", POSIX_COMMAND_FUNCTION),
+            ("@PAYLOAD@", COMMAND_PAYLOAD_FILE),
+            ("@STDERR@", STDERR_FILE),
+            ("@STDOUT@", STDOUT_FILE),
+        ],
+    )
+}
+fn substitute(template: &str, pairs: &[(&str, &str)]) -> String {
+    let mut text = template.to_owned();
+    for &(placeholder, value) in pairs {
+        text = text.replace(placeholder, value);
+    }
+    text
+}
+const TEMPLATE: &str = r#"def @FUNCTION@ [command_id: string, directory: path, working_directory: path] {
     mkdir $directory
-    let stdout_file = ($directory | path join 'stdout.txt')
-    let stderr_file = ($directory | path join 'stderr.txt')
-    let payload_file = ($directory | path join 'command.b64')
-    let done_file = ($directory | path join 'done.json')
-    let done_temp_file = ($directory | path join 'done.json.tmp')
+    let stdout_file = ($directory | path join '@STDOUT@')
+    let stderr_file = ($directory | path join '@STDERR@')
+    let payload_file = ($directory | path join '@PAYLOAD@')
+    let done_file = ($directory | path join '@DONE@')
+    let done_temp_file = ($directory | path join '@DONE_TEMP@')
     let state_file = ($directory | path join 'state.json')
     let script_file = ($directory | path join 'command.nu')
-    let previous_command_id = $env.FUNCTERM_COMMAND_ID?
-    let previous_command_directory = $env.FUNCTERM_COMMAND_DIRECTORY?
-    $env.FUNCTERM_COMMAND_ID = $command_id
-    $env.FUNCTERM_COMMAND_DIRECTORY = ($directory | path expand)
+    let previous_command_id = $env.@COMMAND_ID_ENV@?
+    let previous_command_directory = $env.@COMMAND_DIR_ENV@?
+    $env.@COMMAND_ID_ENV@ = $command_id
+    $env.@COMMAND_DIR_ENV@ = ($directory | path expand)
     '' | save --force --raw $stdout_file
     '' | save --force --raw $stderr_file
     let state = try {
@@ -18,8 +44,8 @@ def functerm_run_command [command_id: string, directory: path, working_directory
         let script = ($payload | decode base64 | decode)
         [
             $"cd ($working_directory | to nuon)"
-            $"$env.FUNCTERM_COMMAND_ID = ($command_id | to nuon)"
-            $"$env.FUNCTERM_COMMAND_DIRECTORY = ($directory | to nuon)"
+            $"$env.@COMMAND_ID_ENV@ = ($command_id | to nuon)"
+            $"$env.@COMMAND_DIR_ENV@ = ($directory | to nuon)"
             $script
             "let mcp_exit_code = if ($env.LAST_EXIT_CODE? | is-empty) { 0 } else { $env.LAST_EXIT_CODE }"
             $"{ cwd: $env.PWD, exit_code: $mcp_exit_code } | to json --raw | save --force ($state_file | to nuon)"
@@ -52,13 +78,14 @@ def functerm_run_command [command_id: string, directory: path, working_directory
     } | to json --raw | save --force $done_temp_file
     mv --force $done_temp_file $done_file
     if ($previous_command_id | is-empty) {
-        hide-env FUNCTERM_COMMAND_ID
+        hide-env @COMMAND_ID_ENV@
     } else {
-        $env.FUNCTERM_COMMAND_ID = $previous_command_id
+        $env.@COMMAND_ID_ENV@ = $previous_command_id
     }
     if ($previous_command_directory | is-empty) {
-        hide-env FUNCTERM_COMMAND_DIRECTORY
+        hide-env @COMMAND_DIR_ENV@
     } else {
-        $env.FUNCTERM_COMMAND_DIRECTORY = $previous_command_directory
+        $env.@COMMAND_DIR_ENV@ = $previous_command_directory
     }
 }
+"#;

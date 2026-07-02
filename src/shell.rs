@@ -1,5 +1,6 @@
 use crate::runtime::config::Settings;
 mod bash;
+mod generated;
 mod nushell;
 mod posix;
 mod powershell;
