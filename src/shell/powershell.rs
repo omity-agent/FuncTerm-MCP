@@ -1,3 +1,4 @@
+use alloc::borrow::Cow;
 use base64_turbo::STANDARD;
 use std::path::Path;
 pub(super) fn startup_args(cwd: &Path, ready_file: &Path) -> Vec<String> {
@@ -19,6 +20,21 @@ pub(super) fn invocation(command_id: &str, command: &str, directory: &Path, cwd:
     format!(
         "Invoke-McpPtyCommand -CommandId '{command_id}' -Payload '{payload}' -Directory {quoted_directory} -WorkingDirectory {quoted_cwd}\r\n"
     )
+}
+pub(super) fn keyboard_bytes(bytes: &[u8]) -> Cow<'_, [u8]> {
+    if !bytes.contains(&b'\n') {
+        return Cow::Borrowed(bytes);
+    }
+    let mut normalized = Vec::with_capacity(bytes.len());
+    let mut previous = None;
+    for byte in bytes {
+        if *byte == b'\n' && previous != Some(b'\r') {
+            normalized.push(b'\r');
+        }
+        normalized.push(*byte);
+        previous = Some(*byte);
+    }
+    Cow::Owned(normalized)
 }
 fn initialization_script(cwd: &Path, ready_file: &Path) -> String {
     format!(
@@ -75,5 +91,16 @@ mod tests {
             .collect::<Vec<_>>();
         let decoded = String::from_utf16(&words).unwrap();
         assert_eq!(decoded, "Write-Output '中文'");
+    }
+    #[test]
+    fn keyboard_input_submits_lone_line_feeds_as_enter() {
+        assert_eq!(
+            super::keyboard_bytes(b"exit\n").as_ref(),
+            b"exit\r\n".as_slice()
+        );
+        assert_eq!(
+            super::keyboard_bytes(b"exit\r\n").as_ref(),
+            b"exit\r\n".as_slice()
+        );
     }
 }

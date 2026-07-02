@@ -14,10 +14,11 @@ impl Manager {
     pub(crate) fn write_keyboard(&self, shell_id: &str, bytes: &[u8]) -> Result<()> {
         let shell = self.shell(shell_id)?;
         self.ensure_shell_running(shell_id, &shell)?;
+        let keyboard_bytes = shell.choice.keyboard_bytes(bytes);
         let write_result = {
             let mut writer = lock_mutex(&shell.writer, "writer")?;
             writer
-                .write_all(bytes)
+                .write_all(&keyboard_bytes)
                 .context("failed to write to pty")
                 .and_then(|()| writer.flush().context("failed to flush pty writer"))
         };

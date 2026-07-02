@@ -1,28 +1,16 @@
-use crate::runtime::protocol::frame::{decode_response, request_header_len, write_request_payload};
-use crate::runtime::protocol::wire::{RequestHeader, ResponseHeader};
+use crate::runtime::daemon::{BootstrapReply, DaemonRequest};
 use crate::runtime::protocol::{Payload, Request, Response};
 use anyhow::{Context as _, Result, bail};
 use core::time::Duration;
-use iceoryx2::pending_response::PendingResponse;
-use iceoryx2::prelude::*;
+use ipc_channel::ipc::{self, IpcSender};
 use std::process::{Command, Stdio};
 use std::time::Instant;
 const IPC_TIMEOUT: Duration = Duration::from_secs(15);
+const CONNECT_RETRY_TIMEOUT: Duration = Duration::from_secs(2);
 const DAEMON_STARTUP_TIMEOUT: Duration = Duration::from_secs(15);
-const INITIAL_SLICE_LEN: usize = 4096;
-type IpcClient = iceoryx2::port::client::Client<
-    ipc_threadsafe::Service,
-    [u8],
-    RequestHeader,
-    [u8],
-    ResponseHeader,
->;
-type IpcPendingResponse =
-    PendingResponse<ipc_threadsafe::Service, [u8], RequestHeader, [u8], ResponseHeader>;
+const STARTUP_RETRY_DELAY: Duration = Duration::from_millis(50);
 pub(crate) struct DaemonClient {
-    client: IpcClient,
-    request_notifier: crate::runtime::ipc_events::IpcNotifier,
-    response_listener: crate::runtime::ipc_events::IpcListener,
+    sender: IpcSender<DaemonRequest>,
 }
 impl core::fmt::Debug for DaemonClient {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -31,91 +19,56 @@ impl core::fmt::Debug for DaemonClient {
 }
 impl DaemonClient {
     pub(crate) fn connect(service_name: &str) -> Result<Self> {
-        let config = crate::runtime::iceoryx::config()?;
-        let node = NodeBuilder::new()
-            .config(&config)
-            .create::<ipc_threadsafe::Service>()
-            .context("failed to create iceoryx2 client node")?;
-        let service = node
-            .service_builder(&service_name.try_into()?)
-            .request_response::<[u8], [u8]>()
-            .request_user_header::<RequestHeader>()
-            .response_user_header::<ResponseHeader>()
-            .open_or_create()
-            .with_context(|| format!("failed to open iceoryx2 service {service_name}"))?;
-        if service.dynamic_config().number_of_servers() == 0 {
-            bail!("daemon is not running on iceoryx2 service {service_name}");
+        let start = Instant::now();
+        loop {
+            let endpoint_name = crate::runtime::ipc_endpoint::read(service_name)?;
+            match connect_to_endpoint(service_name, endpoint_name) {
+                Ok(client) => return Ok(client),
+                Err(error) if start.elapsed() >= CONNECT_RETRY_TIMEOUT => return Err(error),
+                Err(_error) => {}
+            }
+            std::thread::park_timeout(STARTUP_RETRY_DELAY);
         }
-        let client = service
-            .client_builder()
-            .initial_max_slice_len(INITIAL_SLICE_LEN)
-            .allocation_strategy(AllocationStrategy::PowerOfTwo)
-            .create()
-            .context("failed to create iceoryx2 client")?;
-        let request_notifier = crate::runtime::ipc_events::request_notifier(&node, service_name)?;
-        let response_listener = crate::runtime::ipc_events::response_listener(&node, service_name)?;
-        Ok(Self {
-            client,
-            request_notifier,
-            response_listener,
-        })
     }
     pub(crate) fn call(&self, request: &Request) -> Result<Payload> {
-        let (header, payload_len) = request_header_len(request)?;
-        let mut uninit_request = self
-            .client
-            .loan_slice_uninit(payload_len)
-            .context("failed to loan iceoryx2 request sample")?;
-        write_request_payload(request, uninit_request.payload_mut())?;
-        *uninit_request.user_header_mut() = header;
-        let request_sample = unsafe { uninit_request.assume_init() };
-        let pending_response = request_sample
-            .send()
-            .context("failed to send iceoryx2 request")?;
-        self.request_notifier
-            .notify()
-            .context("failed to notify iceoryx2 request event")?;
-        let response = wait_for_response(&self.response_listener, &pending_response)?;
+        let (response_sender, response_receiver) =
+            ipc::channel::<Response>().context("failed to create IPC response channel")?;
+        self.sender
+            .send(DaemonRequest {
+                request: request.clone(),
+                response: response_sender,
+            })
+            .context("failed to send IPC request")?;
+        let response = response_receiver
+            .try_recv_timeout(IPC_TIMEOUT)
+            .context("failed to receive IPC response")?;
         match response {
             Response::Ok { payload } => Ok(payload),
             Response::Err { message } => bail!(message),
         }
     }
 }
+fn connect_to_endpoint(service_name: &str, endpoint_name: String) -> Result<DaemonClient> {
+    let (reply_sender, reply_receiver) =
+        ipc::channel::<IpcSender<DaemonRequest>>().context("failed to create IPC reply")?;
+    let bootstrap = IpcSender::<BootstrapReply>::connect(endpoint_name)
+        .with_context(|| format!("daemon is not running on IPC service {service_name}"))?;
+    bootstrap
+        .send(reply_sender)
+        .context("failed to request daemon IPC channel")?;
+    let sender = reply_receiver
+        .try_recv_timeout(IPC_TIMEOUT)
+        .context("failed to receive daemon IPC channel")?;
+    Ok(DaemonClient { sender })
+}
 pub(crate) fn call(service_name: &str, request: &Request) -> Result<Payload> {
     let client = DaemonClient::connect(service_name)?;
     client.call(request)
-}
-fn wait_for_response(
-    response_listener: &crate::runtime::ipc_events::IpcListener,
-    pending_response: &IpcPendingResponse,
-) -> Result<Response> {
-    let start = Instant::now();
-    loop {
-        if let Some(response) = pending_response
-            .receive()
-            .context("failed to receive iceoryx2 response")?
-        {
-            return decode_response(*response.user_header(), response.payload());
-        }
-        let Some(remaining) = IPC_TIMEOUT.checked_sub(start.elapsed()) else {
-            bail!("daemon did not respond within {IPC_TIMEOUT:?}");
-        };
-        response_listener
-            .timed_wait_one(remaining)
-            .context("failed while waiting for iceoryx2 response event")?;
-    }
 }
 pub(crate) fn ensure_daemon(service_name: &str) -> Result<()> {
     if call(service_name, &Request::Ping).is_ok() {
         return Ok(());
     }
-    let config = crate::runtime::iceoryx::config()?;
-    let node = NodeBuilder::new()
-        .config(&config)
-        .create::<ipc_threadsafe::Service>()
-        .context("failed to create iceoryx2 daemon startup node")?;
-    let ready_listener = crate::runtime::ipc_events::ready_listener(&node, service_name)?;
     let current_exe = std::env::current_exe().context("failed to locate current executable")?;
     let mut command = Command::new(current_exe);
     command
@@ -125,30 +78,18 @@ pub(crate) fn ensure_daemon(service_name: &str) -> Result<()> {
         .stderr(Stdio::null());
     apply_detached_flags(&mut command);
     let mut child = command.spawn().context("failed to spawn daemon")?;
-    wait_for_daemon_startup_event(&ready_listener)?;
-    if let Some(status) = child.try_wait().context("failed to poll daemon startup")? {
-        bail!("daemon exited during startup with status {status}");
-    }
-    if call(service_name, &Request::Ping).is_ok() {
-        return Ok(());
-    }
-    bail!("daemon did not become ready within {DAEMON_STARTUP_TIMEOUT:?}")
-}
-fn wait_for_daemon_startup_event(
-    ready_listener: &crate::runtime::ipc_events::IpcListener,
-) -> Result<()> {
     let start = Instant::now();
     loop {
-        let Some(remaining) = DAEMON_STARTUP_TIMEOUT.checked_sub(start.elapsed()) else {
-            return Ok(());
-        };
-        if ready_listener
-            .timed_wait_one(remaining)
-            .context("failed while waiting for iceoryx2 daemon ready event")?
-            .is_some()
-        {
+        if call(service_name, &Request::Ping).is_ok() {
             return Ok(());
         }
+        if let Some(status) = child.try_wait().context("failed to poll daemon startup")? {
+            bail!("daemon exited during startup with status {status}");
+        }
+        if start.elapsed() >= DAEMON_STARTUP_TIMEOUT {
+            bail!("daemon did not become ready within {DAEMON_STARTUP_TIMEOUT:?}");
+        }
+        std::thread::park_timeout(STARTUP_RETRY_DELAY);
     }
 }
 #[cfg(windows)]

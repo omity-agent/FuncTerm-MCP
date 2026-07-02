@@ -1,12 +1,8 @@
 use super::command::{CLI_COMMAND_TIMEOUT, exe};
 use super::process::ChildGuard;
-#[path = "../../../src/runtime/iceoryx/shared.rs"]
-mod iceoryx_shared;
-#[path = "../../../src/runtime/protocol/wire.rs"]
-mod protocol_wire;
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::time::Duration;
-use iceoryx2::prelude::*;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::{Mutex, MutexGuard};
 use std::thread;
@@ -86,7 +82,7 @@ fn wait_for_daemon(child: &mut ChildGuard, service_name: &str) {
             child.is_running(),
             "daemon exited before accepting connections"
         );
-        if has_daemon_server(service_name) {
+        if has_daemon_endpoint(service_name) {
             return;
         }
         assert!(
@@ -96,26 +92,15 @@ fn wait_for_daemon(child: &mut ChildGuard, service_name: &str) {
         thread::sleep(Duration::from_millis(50));
     }
 }
-fn has_daemon_server(service_name: &str) -> bool {
-    let Ok(config) = iceoryx_shared::config() else {
-        return false;
-    };
-    let Ok(node) = NodeBuilder::new()
-        .config(&config)
-        .create::<ipc_threadsafe::Service>()
-    else {
-        return false;
-    };
-    let Ok(service) = node
-        .service_builder(&service_name.try_into().unwrap())
-        .request_response::<[u8], [u8]>()
-        .request_user_header::<protocol_wire::RequestHeader>()
-        .response_user_header::<protocol_wire::ResponseHeader>()
-        .open_or_create()
-    else {
-        return false;
-    };
-    service.dynamic_config().number_of_servers() > 0
+fn has_daemon_endpoint(service_name: &str) -> bool {
+    endpoint_file(service_name).is_file()
+}
+fn endpoint_file(service_name: &str) -> PathBuf {
+    std::env::temp_dir()
+        .join("functerm")
+        .join("ipc-channel")
+        .join(hex::encode(service_name))
+        .join("endpoint.txt")
 }
 fn apply_env(command: &mut Command, env: &[(String, String)]) {
     for pair in env {

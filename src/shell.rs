@@ -4,9 +4,11 @@ mod nushell;
 mod posix;
 mod powershell;
 mod zsh;
+use alloc::borrow::Cow;
 use anyhow::{Result, bail};
+use serde::{Deserialize, Serialize};
 use std::path::Path;
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) enum ShellChoice {
     PowerShell,
     Bash,
@@ -56,6 +58,12 @@ impl ShellChoice {
             Self::Bash => bash::invocation(command_id, command, directory, cwd),
             Self::NuShell => nushell::invocation(command_id, command, directory, cwd),
             Self::Zsh => zsh::invocation(command_id, command, directory, cwd),
+        }
+    }
+    pub(crate) fn keyboard_bytes(self, bytes: &[u8]) -> Cow<'_, [u8]> {
+        match self {
+            Self::PowerShell => powershell::keyboard_bytes(bytes),
+            Self::Bash | Self::NuShell | Self::Zsh => Cow::Borrowed(bytes),
         }
     }
     pub(crate) fn parse(value: &str) -> Result<Self> {

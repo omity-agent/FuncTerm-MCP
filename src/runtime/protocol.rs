@@ -1,10 +1,9 @@
-pub(crate) mod frame;
-pub(crate) mod wire;
 use crate::shell::ShellChoice;
 use anyhow::{Context as _, Result};
 use core::time::Duration;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) enum Request {
     Ping,
     NewShell {
@@ -24,12 +23,12 @@ pub(crate) enum Request {
         id: String,
     },
 }
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) enum Response {
     Ok { payload: Payload },
     Err { message: String },
 }
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) enum Payload {
     Pong,
     ShellCreated {
@@ -43,12 +42,12 @@ pub(crate) enum Payload {
     },
     Query(QueryResult),
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) enum EndReason {
     CommandEnded,
     WaitTimeout,
 }
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) enum QueryResult {
     Shell {
         alive: bool,

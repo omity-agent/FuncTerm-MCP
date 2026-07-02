@@ -80,24 +80,24 @@ version = "0.0.0"
 edition = "2024"
 
 [dependencies]
-anyhow = "*"
-base64-turbo = "*"
-clap = { version = "*", features = ["derive"] }
-encoding_rs = "*"
-mimalloc = { version = "*", features = ["v3"] }
-portable-pty = "*"
-nanoid = "*"
-iceoryx2 = "*"
-iceoryx2-bb-system-types = "*"
-notify = "*"
-rmcp = { version = "*", features = ["server", "macros", "transport-io"] }
-schemars = "*"
-serde = { version = "*", features = ["derive"] }
-sonic-rs = "*"
-tokio = { version = "*", features = ["full"] }
-toml = "*"
-vt100 = "*"
-which = "*"
+anyhow = ">=1.0.103"
+base64-turbo = ">=0.2.0"
+clap = { version = ">=4.6.1", features = ["derive"] }
+encoding_rs = ">=0.8.35"
+hex = ">=0.4.3"
+ipc-channel = ">=0.22.0"
+mimalloc = { version = ">=0.1.48", features = ["v3"] }
+nanoid = ">=0.5.0"
+notify = ">=8.2.0"
+portable-pty = ">=0.9.0"
+rmcp = { version = ">=2.1.0", features = ["server", "macros", "transport-io"] }
+schemars = ">=1.2.1"
+serde = { version = ">=1.0.228", features = ["derive"] }
+sonic-rs = ">=0.5.8"
+tokio = { version = ">=1.52.3", features = ["full"] }
+toml = ">=1.1.2"
+vt100 = ">=0.16.2"
+which = ">=8.0.4"
 windows-sys = { version = ">=0.61.2", features = [
     "Win32_Foundation",
     "Win32_Security",

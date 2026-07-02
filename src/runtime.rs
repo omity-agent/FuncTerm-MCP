@@ -1,8 +1,7 @@
 pub(crate) mod client;
 pub(crate) mod config;
 pub(crate) mod daemon;
-pub(crate) mod iceoryx;
-mod ipc_events;
+mod ipc_endpoint;
 pub(crate) mod protocol;
 pub(crate) mod session;
 pub(crate) mod temp;
