@@ -1,10 +1,6 @@
 use super::ShellSession;
 use crate::runtime::session::support::lock_mutex;
 use anyhow::{Result, bail};
-#[expect(
-    clippy::missing_trait_methods,
-    reason = "Drop only needs the regular destructor for this type"
-)]
 impl Drop for ShellSession {
     fn drop(&mut self) {
         if let Err(error) = self.process_tree.terminate() {
@@ -46,10 +42,6 @@ pub(super) fn release_shell(shell: &ShellSession, command_id: &str) -> Result<()
     Ok(())
 }
 #[cfg(test)]
-#[expect(
-    clippy::inline_modules,
-    reason = "Rust skill permits inline modules guarded by cfg(test)"
-)]
 mod tests {
     use super::{release_shell, reserve_shell};
     use crate::runtime::session::manager::ShellSession;

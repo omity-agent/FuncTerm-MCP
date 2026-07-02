@@ -29,10 +29,6 @@ fn initialization_script(cwd: &Path, ready_file: &Path) -> String {
     )
 }
 #[cfg(test)]
-#[expect(
-    clippy::inline_modules,
-    reason = "Rust skill permits inline modules guarded by cfg(test)"
-)]
 mod tests {
     use std::path::Path;
     #[test]

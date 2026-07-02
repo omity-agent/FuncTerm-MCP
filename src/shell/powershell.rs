@@ -55,10 +55,6 @@ fn encode_command(command: &str) -> String {
     STANDARD.encode(&bytes)
 }
 #[cfg(test)]
-#[expect(
-    clippy::inline_modules,
-    reason = "Rust skill permits inline modules guarded by cfg(test)"
-)]
 mod tests {
     use std::path::Path;
     #[test]

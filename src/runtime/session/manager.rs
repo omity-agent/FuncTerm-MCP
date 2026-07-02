@@ -71,19 +71,12 @@ impl Manager {
         let ready_file = startup.ready_file.clone();
         apply_startup(&mut command, startup);
         command.cwd(cwd);
+        let process_tree =
+            process_tree::ProcessTree::new().context("failed to create shell cleanup guard")?;
         let mut child = pair
             .slave
             .spawn_command(command)
             .context("failed to spawn shell")?;
-        let process_tree = match process_tree::ProcessTree::new()
-            .context("failed to create shell cleanup guard")
-        {
-            Ok(process_tree) => process_tree,
-            Err(error) => {
-                cleanup_unregistered_child(&mut child);
-                return Err(error);
-            }
-        };
         if let Err(error) = process_tree
             .attach(child.as_ref())
             .context("failed to guard shell process tree")

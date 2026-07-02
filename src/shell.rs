@@ -85,10 +85,6 @@ fn select_available_executable(candidates: &[String]) -> Result<String> {
     )
 }
 #[cfg(test)]
-#[expect(
-    clippy::inline_modules,
-    reason = "Rust skill permits inline modules guarded by cfg(test)"
-)]
 mod tests {
     use super::ShellChoice;
     #[test]

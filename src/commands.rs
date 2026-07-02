@@ -15,7 +15,7 @@ pub(crate) fn new_shell(
         cwd: resolved_cwd,
         shell: shell_choice,
     })?;
-    text_from_payload(&payload, ExpectedPayload::ShellCreated)
+    text_from_payload(payload, ExpectedPayload::ShellCreated)
 }
 pub(crate) fn write_keyboard(
     call: impl Fn(&Request) -> Result<Payload>,
@@ -23,7 +23,7 @@ pub(crate) fn write_keyboard(
     bytes: Vec<u8>,
 ) -> Result<String> {
     let payload = call(&Request::WriteKeyboard { shell_id, bytes })?;
-    text_from_payload(&payload, ExpectedPayload::KeyboardWritten)
+    text_from_payload(payload, ExpectedPayload::KeyboardWritten)
 }
 pub(crate) fn send_command(
     call: impl Fn(&Request) -> Result<Payload>,
@@ -37,11 +37,11 @@ pub(crate) fn send_command(
         command,
         waiting,
     })?;
-    text_from_payload(&payload, ExpectedPayload::CommandAccepted)
+    text_from_payload(payload, ExpectedPayload::CommandAccepted)
 }
 pub(crate) fn query(call: impl Fn(&Request) -> Result<Payload>, id: String) -> Result<String> {
     let payload = call(&Request::Query { id })?;
-    text_from_payload(&payload, ExpectedPayload::Query)
+    text_from_payload(payload, ExpectedPayload::Query)
 }
 pub(crate) fn with_daemon(
     daemon_service_name: &str,
@@ -57,9 +57,9 @@ enum ExpectedPayload {
     CommandAccepted,
     Query,
 }
-fn text_from_payload(payload: &Payload, expected: ExpectedPayload) -> Result<String> {
+fn text_from_payload(payload: Payload, expected: ExpectedPayload) -> Result<String> {
     let matches_expected = matches!(
-        (payload, expected),
+        (&payload, expected),
         (Payload::ShellCreated { .. }, ExpectedPayload::ShellCreated)
             | (Payload::KeyboardWritten, ExpectedPayload::KeyboardWritten)
             | (
@@ -69,7 +69,7 @@ fn text_from_payload(payload: &Payload, expected: ExpectedPayload) -> Result<Str
             | (Payload::Query(_), ExpectedPayload::Query)
     );
     if matches_expected {
-        return Ok(payload.to_plain_text());
+        return Ok(payload.into_plain_text());
     }
     bail!("daemon returned an unexpected response")
 }

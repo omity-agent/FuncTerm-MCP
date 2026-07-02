@@ -38,10 +38,6 @@ fn nu_quote(value: &str) -> String {
     format!("\"{text}\"")
 }
 #[cfg(test)]
-#[expect(
-    clippy::inline_modules,
-    reason = "Rust skill permits inline modules guarded by cfg(test)"
-)]
 mod tests {
     #[test]
     fn quotes_single_quotes_for_nushell() {

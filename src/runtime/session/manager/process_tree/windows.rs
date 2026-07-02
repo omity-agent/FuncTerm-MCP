@@ -62,10 +62,6 @@ impl ProcessTree {
         Ok(())
     }
 }
-#[expect(
-    clippy::missing_trait_methods,
-    reason = "Drop only needs the regular destructor for this type"
-)]
 impl Drop for ProcessTree {
     fn drop(&mut self) {
         let closed = unsafe { CloseHandle(self.job) };
@@ -82,10 +78,6 @@ fn last_error(message: &str) -> Error {
     anyhow::anyhow!("{message}: {error}")
 }
 #[cfg(test)]
-#[expect(
-    clippy::inline_modules,
-    reason = "Rust skill permits inline modules guarded by cfg(test)"
-)]
 mod tests {
     use super::ProcessTree;
     use core::time::Duration;

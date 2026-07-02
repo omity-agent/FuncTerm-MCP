@@ -17,10 +17,6 @@ impl ChildGuard {
         self.child.try_wait().unwrap().is_none()
     }
 }
-#[expect(
-    clippy::missing_trait_methods,
-    reason = "Drop only needs the regular destructor for this test guard"
-)]
 impl Drop for ChildGuard {
     fn drop(&mut self) {
         if self.child.try_wait().unwrap().is_none() {

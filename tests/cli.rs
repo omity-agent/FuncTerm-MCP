@@ -9,10 +9,6 @@ mod support;
 mod unix;
 #[cfg(windows)]
 #[cfg(test)]
-#[expect(
-    clippy::inline_modules,
-    reason = "Rust skill permits inline modules guarded by cfg(test)"
-)]
 mod tests {
     use super::support::{
         create_shell, locked, parse_command_query, run_cli, run_cli_with_pipes, send_test_command,

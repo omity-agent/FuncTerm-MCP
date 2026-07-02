@@ -386,6 +386,7 @@ dependencies = [
  "encoding_rs",
  "hex",
  "ipc-channel",
+ "libc",
  "mimalloc",
  "nanoid",
  "notify",

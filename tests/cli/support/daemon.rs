@@ -14,10 +14,6 @@ pub(crate) struct TestGuard {
     _daemon: ChildGuard,
     _lock: MutexGuard<'static, ()>,
 }
-#[expect(
-    clippy::missing_trait_methods,
-    reason = "Drop only needs the regular destructor for this test guard"
-)]
 impl Drop for TestGuard {
     fn drop(&mut self) {
         ACTIVE_CLI_ENV

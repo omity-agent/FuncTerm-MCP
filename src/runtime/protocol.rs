@@ -63,11 +63,7 @@ pub(crate) enum QueryResult {
     },
 }
 impl Payload {
-    #[expect(
-        clippy::pattern_type_mismatch,
-        reason = "matching borrowed enum variants keeps the formatter concise"
-    )]
-    pub(crate) fn to_plain_text(&self) -> String {
+    pub(crate) fn into_plain_text(self) -> String {
         match self {
             Self::Pong => "pong".to_owned(),
             Self::ShellCreated { shell_id } => format!("shell_id: {shell_id}"),
@@ -76,19 +72,15 @@ impl Payload {
                 command_id, query, ..
             } => {
                 let mut text = format!("command_id: {command_id}\n");
-                text.push_str(&query.to_plain_text());
+                text.push_str(&query.into_plain_text());
                 text
             }
-            Self::Query(query) => query.to_plain_text(),
+            Self::Query(query) => query.into_plain_text(),
         }
     }
 }
 impl QueryResult {
-    #[expect(
-        clippy::pattern_type_mismatch,
-        reason = "matching borrowed enum variants keeps the formatter concise"
-    )]
-    pub(crate) fn to_plain_text(&self) -> String {
+    pub(crate) fn into_plain_text(self) -> String {
         match self {
             Self::Shell { alive, cwd, screen } => {
                 format!("recognized_as: shell\nalive: {alive}\ncwd: {cwd}\nscreen:\n{screen}")
@@ -101,7 +93,7 @@ impl QueryResult {
                 exit_code,
             } => {
                 let exit_code_text =
-                    (*exit_code).map_or_else(|| "pending".to_owned(), |code| code.to_string());
+                    exit_code.map_or_else(|| "pending".to_owned(), |code| code.to_string());
                 format!(
                     "recognized_as: command\ncwd: {cwd}\nfinished: {finished}\nexit_code: {exit_code_text}\nstdout:\n{stdout}\nstderr:\n{stderr}"
                 )
