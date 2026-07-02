@@ -4,16 +4,21 @@ mod history;
 mod shell_matrix;
 #[path = "cli/support.rs"]
 mod support;
+#[cfg(windows)]
+#[path = "cli/tab_state.rs"]
+mod tab_state;
 #[cfg(unix)]
 #[path = "cli/unix.rs"]
 mod unix;
+#[cfg(windows)]
+#[path = "cli/windows_io.rs"]
+mod windows_io;
 #[cfg(windows)]
 #[cfg(test)]
 mod tests {
     use super::support::{
         create_tab, create_tab_from_directory_argument, locked, locked_with_env, manual_write,
-        parse_command_id, parse_command_query, parse_tab_query, run_cli, run_cli_with_pipes,
-        send_test_command,
+        parse_command_id, parse_command_query, parse_tab_query, run_cli, send_test_command,
     };
     use core::time::Duration;
     use std::thread;
@@ -34,20 +39,6 @@ mod tests {
             String::from_utf8_lossy(&output.stderr)
                 .contains("starting_directory does not exist or is not a directory")
         );
-    }
-    #[test]
-    fn cli_pipe_capture_returns_without_hanging() {
-        let _guard = locked();
-        let cwd = std::env::temp_dir();
-        let output = run_cli_with_pipes(&[
-            "new-tab",
-            "--starting-directory",
-            cwd.to_str().unwrap(),
-            "--starting-shell",
-            "powershell",
-        ]);
-        assert!(output.status.success());
-        assert!(String::from_utf8_lossy(&output.stdout).contains("<TAB_ID>"));
     }
     #[test]
     fn cli_expands_starting_directory_environment_variables() {

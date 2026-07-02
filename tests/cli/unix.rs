@@ -40,6 +40,7 @@ mod tests {
         ]);
         let shell = create_tab_from_directory_argument("$FUNCTERM_TEST_STARTING_DIRECTORY", "bash");
         let query = parse_tab_query(&run_cli(&["view", &shell.tab_id]));
+        assert_eq!(query.last_command, "");
         assert!(
             query
                 .cwd

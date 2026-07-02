@@ -54,6 +54,7 @@ pub(crate) enum ViewResult {
         alive: bool,
         cwd: String,
         screen: String,
+        last_command: Option<String>,
     },
     Command {
         cwd: String,
@@ -84,9 +85,15 @@ impl Payload {
 impl ViewResult {
     pub(crate) fn into_plain_text(self) -> String {
         match self {
-            Self::Tab { alive, cwd, screen } => elements([
+            Self::Tab {
+                alive,
+                cwd,
+                screen,
+                last_command,
+            } => elements([
                 ("ALIVE", alive.to_string()),
                 ("CWD", cwd),
+                ("LAST_COMMAND", last_command.unwrap_or_default()),
                 ("SCREEN", screen),
             ]),
             Self::Command {
@@ -142,5 +149,16 @@ mod tests {
         assert!(text.contains("<CWD>\nF:\\workspace\\A&B\n</CWD>"));
         assert!(text.contains("<STDOUT>\nleft < right\n</STDOUT>"));
         assert!(text.contains("<STDERR>\nraw </STDERR> allowed\n</STDERR>"));
+    }
+    #[test]
+    fn tab_output_reports_last_command() {
+        let text = ViewResult::Tab {
+            alive: true,
+            cwd: "F:\\workspace".to_owned(),
+            screen: "screen".to_owned(),
+            last_command: Some("Write-Output 'ok'".to_owned()),
+        }
+        .into_plain_text();
+        assert!(text.contains("<LAST_COMMAND>\nWrite-Output 'ok'\n</LAST_COMMAND>"));
     }
 }

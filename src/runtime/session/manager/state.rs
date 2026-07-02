@@ -52,7 +52,8 @@ impl Manager {
     fn id_exists(&self, id: &str) -> Result<bool> {
         let shell_exists = lock_mutex(&self.shells, "shell")?.contains_key(id);
         let command_exists = lock_mutex(&self.commands, "command")?.contains_key(id);
-        Ok(shell_exists || command_exists)
+        let tab_id_exists = self.generated_tab_id_exists(id)?;
+        Ok(shell_exists || command_exists || tab_id_exists)
     }
 }
 fn random_id_suffix() -> String {

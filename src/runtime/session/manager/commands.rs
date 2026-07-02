@@ -19,13 +19,7 @@ impl Manager {
         Self::refresh_shell_choice(&shell)?;
         let choice = *lock_mutex(&shell.choice, "choice")?;
         let keyboard_bytes = choice.keyboard_bytes(bytes);
-        let write_result = {
-            let mut writer = lock_mutex(&shell.writer, "writer")?;
-            writer
-                .write_all(&keyboard_bytes)
-                .context("failed to write to pty")
-                .and_then(|()| writer.flush().context("failed to flush pty writer"))
-        };
+        let write_result = Self::write_keyboard(&shell, &keyboard_bytes);
         if let Err(error) = write_result {
             self.remove_shell(tab_id)?;
             return Err(error);
@@ -41,6 +35,8 @@ impl Manager {
         let shell = self.shell(tab_id)?;
         self.ensure_shell_running(tab_id, &shell)?;
         Self::refresh_shell_choice(&shell)?;
+        *lock_mutex(&shell.last_command, "last command")? = Some(command.to_owned());
+        self.remember_tab(tab_id, &shell)?;
         let command_id = self.next_command_id()?;
         reserve_shell(&shell, &command_id)?;
         let initial_cwd = Self::shell_cwd(&shell)?;
@@ -65,11 +61,22 @@ impl Manager {
         Ok((command_id, reason, query))
     }
     fn shell(&self, tab_id: &str) -> Result<Arc<ShellSession>> {
-        self.find_shell(tab_id)?
-            .with_context(|| format!("unknown tab id {tab_id}"))
+        if let Some(shell) = self.find_shell(tab_id)? {
+            return Ok(shell);
+        }
+        if self.generated_tab_id_exists(tab_id)? {
+            bail!("tab id {tab_id} was generated, but its shell is gone");
+        }
+        bail!("unknown tab id {tab_id}")
     }
     fn remove_shell(&self, tab_id: &str) -> Result<()> {
-        lock_mutex(&self.shells, "shell")?.remove(tab_id);
+        let removed_shell = {
+            let mut shells = lock_mutex(&self.shells, "shell")?;
+            shells.remove(tab_id)
+        };
+        if let Some(shell) = removed_shell {
+            self.remember_tab(tab_id, &shell)?;
+        }
         Ok(())
     }
     fn ensure_shell_running(&self, tab_id: &str, shell: &ShellSession) -> Result<()> {
@@ -78,8 +85,19 @@ impl Manager {
             .context("failed to poll shell child")?;
         if let Some(exit_status) = status {
             self.remove_shell(tab_id)?;
-            bail!("shell process exited with status {exit_status}");
+            bail!(
+                "tab id {tab_id} was generated, but its shell is gone; exit status {exit_status}"
+            );
         }
+        Ok(())
+    }
+    fn write_keyboard(shell: &ShellSession, keyboard_bytes: &[u8]) -> Result<()> {
+        let mut writer = lock_mutex(&shell.writer, "writer")?;
+        writer
+            .write_all(keyboard_bytes)
+            .context("failed to write to pty")?;
+        writer.flush().context("failed to flush pty writer")?;
+        drop(writer);
         Ok(())
     }
     fn write_invocation(
@@ -116,6 +134,9 @@ impl Manager {
                 return;
             }
             if let Err(error) = Self::update_shell_cwd(&shell, &record) {
+                eprintln!("{error:#}");
+            }
+            if let Err(error) = manager.remember_tab(&record.tab_id, &shell) {
                 eprintln!("{error:#}");
             }
             if let Ok(mut busy) = shell.busy.lock() {

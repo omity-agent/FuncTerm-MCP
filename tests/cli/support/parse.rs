@@ -12,6 +12,7 @@ pub(crate) struct CommandQuery {
 pub(crate) struct TabQuery {
     pub(crate) alive: bool,
     pub(crate) cwd: String,
+    pub(crate) last_command: String,
     pub(crate) screen: String,
 }
 pub(crate) fn parse_command_query(output: &Output) -> CommandQuery {
@@ -32,6 +33,7 @@ pub(crate) fn parse_tab_query(output: &Output) -> TabQuery {
     TabQuery {
         alive: element(&text, "ALIVE").parse().unwrap(),
         cwd: element(&text, "CWD"),
+        last_command: element(&text, "LAST_COMMAND"),
         screen: element(&text, "SCREEN"),
     }
 }

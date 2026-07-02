@@ -3,11 +3,12 @@ mod lifecycle;
 mod process_tree;
 mod startup;
 mod state;
+mod tabs;
 #[cfg(test)]
 mod tests;
+mod views;
 use crate::runtime::config::Settings;
-use crate::runtime::protocol::ViewResult;
-use crate::runtime::session::records::{CommandRecord, command_query, wait_for_done};
+use crate::runtime::session::records::CommandRecord;
 use crate::runtime::session::support::{lock_mutex, start_reader};
 use crate::runtime::temp;
 use crate::shell::{ShellChoice, shims};
@@ -15,23 +16,23 @@ use alloc::sync::Arc;
 use anyhow::{Context as _, Result, bail};
 use portable_pty::{Child, CommandBuilder, PtySize, SlavePty, native_pty_system};
 use startup::{apply_startup, wait_for_shell_startup};
-use state::path_text;
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
 use std::sync::Mutex;
-use std::thread;
 pub(crate) struct Manager {
     settings: Settings,
     root: std::path::PathBuf,
     shells: Mutex<HashMap<String, Arc<ShellSession>>>,
     commands: Mutex<HashMap<String, CommandRecord>>,
+    tab_snapshots: Mutex<HashMap<String, tabs::TabSnapshot>>,
 }
 pub(super) struct ShellSession {
     choice: Mutex<ShellChoice>,
     cwd: Mutex<std::path::PathBuf>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     screen: Arc<Mutex<vt100::Parser>>,
+    last_command: Mutex<Option<String>>,
     busy: Mutex<Option<String>>,
     command_root: std::path::PathBuf,
     active_shell_file: std::path::PathBuf,
@@ -47,6 +48,7 @@ impl Manager {
             root,
             shells: Mutex::new(HashMap::new()),
             commands: Mutex::new(HashMap::new()),
+            tab_snapshots: Mutex::new(HashMap::new()),
         })
     }
     pub(crate) fn new_tab(
@@ -118,6 +120,7 @@ impl Manager {
             cwd: Mutex::new(starting_directory.to_path_buf()),
             writer,
             screen,
+            last_command: Mutex::new(None),
             busy: Mutex::new(None),
             command_root,
             active_shell_file,
@@ -125,60 +128,9 @@ impl Manager {
             child: Mutex::new(child),
             _slave: Mutex::new(pair.slave),
         });
+        self.remember_tab(&tab_id, &session)?;
         lock_mutex(&self.shells, "shell")?.insert(tab_id.clone(), session);
         Ok(tab_id)
-    }
-    pub(crate) fn view(&self, id: &str, waiting: core::time::Duration) -> Result<ViewResult> {
-        if let Some(shell) = self.find_shell(id)? {
-            self.wait_for_shell_view(&shell, waiting)?;
-            return Self::tab_view(&shell);
-        }
-        if let Some(record) = self.find_command(id)? {
-            self.wait_for_command_view(&record, waiting)?;
-            return self.command_view(&record);
-        }
-        bail!("unknown id {id}")
-    }
-    fn tab_view(shell: &Arc<ShellSession>) -> Result<ViewResult> {
-        let alive = Self::shell_alive(shell)?;
-        Self::refresh_shell_choice(shell)?;
-        let screen = lock_mutex(&shell.screen, "screen")?.screen().contents();
-        let cwd = path_text(&Self::shell_cwd(shell)?)?;
-        Ok(ViewResult::Tab { alive, cwd, screen })
-    }
-    fn command_view(&self, record: &CommandRecord) -> Result<ViewResult> {
-        let fallback_cwd = self.command_fallback_cwd(record)?;
-        command_query(record, &fallback_cwd)
-    }
-    fn wait_for_shell_view(
-        &self,
-        shell: &Arc<ShellSession>,
-        waiting: core::time::Duration,
-    ) -> Result<()> {
-        let busy_command_id = lock_mutex(&shell.busy, "busy")?.clone();
-        let Some(command_id) = busy_command_id else {
-            thread::sleep(waiting);
-            return Ok(());
-        };
-        let record = self
-            .find_command(&command_id)?
-            .with_context(|| format!("busy shell command is missing: {command_id}"))?;
-        if wait_for_done(&record.done, waiting)? {
-            Self::update_shell_cwd(shell, &record)?;
-        }
-        Ok(())
-    }
-    fn wait_for_command_view(
-        &self,
-        record: &CommandRecord,
-        waiting: core::time::Duration,
-    ) -> Result<()> {
-        if wait_for_done(&record.done, waiting)?
-            && let Some(shell) = self.find_shell(&record.tab_id)?
-        {
-            Self::update_shell_cwd(&shell, record)?;
-        }
-        Ok(())
     }
     fn find_shell(&self, id: &str) -> Result<Option<Arc<ShellSession>>> {
         Ok(lock_mutex(&self.shells, "shell")?.get(id).cloned())

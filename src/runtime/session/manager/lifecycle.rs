@@ -113,6 +113,7 @@ mod tests {
             cwd: Mutex::new(std::env::temp_dir()),
             writer: Arc::new(Mutex::new(writer)),
             screen: Arc::new(Mutex::new(vt100::Parser::new(30, 120, 0))),
+            last_command: Mutex::new(None),
             busy: Mutex::new(busy.map(str::to_owned)),
             command_root: std::env::temp_dir().join("functerm-test-commands"),
             active_shell_file: std::env::temp_dir()
