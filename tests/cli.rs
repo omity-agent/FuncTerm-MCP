@@ -46,7 +46,7 @@ mod tests {
             "powershell",
         ]);
         assert!(output.status.success());
-        assert!(String::from_utf8_lossy(&output.stdout).contains("tab_id: "));
+        assert!(String::from_utf8_lossy(&output.stdout).contains("<TAB_ID>"));
     }
     #[test]
     fn cli_query_returns_command_output() {
@@ -55,10 +55,6 @@ mod tests {
         let created = create_tab(&cwd, "powershell");
         let accepted_output = send_test_command(&created.tab_id);
         let query = parse_command_query(&accepted_output);
-        assert_eq!(
-            query.recognized_as, "command",
-            "query kind should be command"
-        );
         assert!(!query.cwd.is_empty(), "cwd should be reported");
         assert!(query.finished, "command should be finished");
         assert!(
@@ -81,9 +77,12 @@ mod tests {
             String::from_utf8_lossy(&written.stdout),
             String::from_utf8_lossy(&written.stderr)
         );
-        assert_eq!(String::from_utf8(written.stdout).unwrap().trim(), "ok");
+        assert_eq!(
+            String::from_utf8(written.stdout).unwrap().trim(),
+            "<OK>\n\n</OK>"
+        );
         let query = wait_for_screen_contains(&created.tab_id, marker);
-        assert_eq!(query.recognized_as, "tab", "query kind should be tab");
+        assert!(query.alive, "query should report live tab");
     }
     #[test]
     fn cli_keyboard_enter_runs_command_through_pty() {

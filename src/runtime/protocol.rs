@@ -65,13 +65,14 @@ pub(crate) enum QueryResult {
 impl Payload {
     pub(crate) fn into_plain_text(self) -> String {
         match self {
-            Self::Pong => "pong".to_owned(),
-            Self::TabCreated { tab_id } => format!("tab_id: {tab_id}"),
-            Self::KeyboardWritten => "ok".to_owned(),
+            Self::Pong => element("PONG", ""),
+            Self::TabCreated { tab_id } => element("TAB_ID", &tab_id),
+            Self::KeyboardWritten => element("OK", ""),
             Self::CommandAccepted {
                 command_id, query, ..
             } => {
-                let mut text = format!("command_id: {command_id}\n");
+                let mut text = element("COMMAND_ID", &command_id);
+                text.push('\n');
                 text.push_str(&query.into_plain_text());
                 text
             }
@@ -82,9 +83,11 @@ impl Payload {
 impl QueryResult {
     pub(crate) fn into_plain_text(self) -> String {
         match self {
-            Self::Tab { alive, cwd, screen } => {
-                format!("recognized_as: tab\nalive: {alive}\ncwd: {cwd}\nscreen:\n{screen}")
-            }
+            Self::Tab { alive, cwd, screen } => elements([
+                ("ALIVE", alive.to_string()),
+                ("CWD", cwd),
+                ("SCREEN", screen),
+            ]),
             Self::Command {
                 cwd,
                 finished,
@@ -94,14 +97,49 @@ impl QueryResult {
             } => {
                 let exit_code_text =
                     exit_code.map_or_else(|| "pending".to_owned(), |code| code.to_string());
-                format!(
-                    "recognized_as: command\ncwd: {cwd}\nfinished: {finished}\nexit_code: {exit_code_text}\nstdout:\n{stdout}\nstderr:\n{stderr}"
-                )
+                elements([
+                    ("CWD", cwd),
+                    ("FINISHED", finished.to_string()),
+                    ("EXIT_CODE", exit_code_text),
+                    ("STDOUT", stdout),
+                    ("STDERR", stderr),
+                ])
             }
         }
     }
 }
+fn elements<const COUNT: usize>(items: [(&str, String); COUNT]) -> String {
+    let mut text = String::new();
+    for (index, (tag, content)) in items.into_iter().enumerate() {
+        if index > 0 {
+            text.push('\n');
+        }
+        text.push_str(&element(tag, &content));
+    }
+    text
+}
+fn element(tag: &str, content: &str) -> String {
+    format!("<{tag}>\n{content}\n</{tag}>")
+}
 pub(crate) fn waiting_from_seconds(seconds: f64) -> Result<Duration> {
     Duration::try_from_secs_f64(seconds)
         .context("waiting must be a finite non-negative number of seconds")
+}
+#[cfg(test)]
+mod tests {
+    use super::QueryResult;
+    #[test]
+    fn command_output_uses_uppercase_tags_without_escaping_content() {
+        let text = QueryResult::Command {
+            cwd: "F:\\workspace\\A&B".to_owned(),
+            finished: true,
+            stdout: "left < right".to_owned(),
+            stderr: "raw </STDERR> allowed".to_owned(),
+            exit_code: Some(0_i32),
+        }
+        .into_plain_text();
+        assert!(text.contains("<CWD>\nF:\\workspace\\A&B\n</CWD>"));
+        assert!(text.contains("<STDOUT>\nleft < right\n</STDOUT>"));
+        assert!(text.contains("<STDERR>\nraw </STDERR> allowed\n</STDERR>"));
+    }
 }

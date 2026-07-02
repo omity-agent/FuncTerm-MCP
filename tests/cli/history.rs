@@ -1,7 +1,8 @@
 #[cfg(test)]
 mod tests {
     use crate::support::{
-        create_tab, locked_with_env, manual_write, parse_command_query, run_cli, send_command,
+        create_tab, locked_with_env, manual_write, parse_command_query, parse_tab_query, run_cli,
+        send_command,
     };
     use core::sync::atomic::{AtomicU64, Ordering};
     use core::time::Duration;
@@ -114,9 +115,8 @@ mod tests {
             String::from_utf8_lossy(&written.stderr)
         );
         for _attempt in 0_usize..30 {
-            let output = run_cli(&["query", tab_id]);
-            let text = String::from_utf8_lossy(&output.stdout);
-            if text.contains("alive: false") {
+            let query = parse_tab_query(&run_cli(&["query", tab_id]));
+            if !query.alive {
                 return;
             }
             thread::sleep(Duration::from_millis(100));

@@ -176,12 +176,13 @@ mod tests {
     }
     fn command_id(output: &std::process::Output) -> String {
         let text = String::from_utf8(output.stdout.clone()).unwrap();
-        field(&text, "command_id")
+        element(&text, "COMMAND_ID")
     }
-    fn field(text: &str, name: &str) -> String {
-        let prefix = format!("{name}: ");
-        text.lines()
-            .find_map(|line| line.strip_prefix(&prefix).map(str::to_owned))
-            .unwrap()
+    fn element(text: &str, name: &str) -> String {
+        let open = format!("<{name}>\n");
+        let close = format!("\n</{name}>");
+        let (_, after_open) = text.split_once(&open).unwrap();
+        let (content, _) = after_open.rsplit_once(&close).unwrap();
+        content.to_owned()
     }
 }

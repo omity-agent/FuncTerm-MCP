@@ -27,7 +27,6 @@ mod tests {
                 let command = case_command(case.name, &next);
                 let command_query =
                     parse_command_query(&send_command(&created.tab_id, &command, 10.0));
-                assert_eq!(command_query.recognized_as, "command");
                 assert!(
                     command_query.finished,
                     "{name} command should finish",
@@ -210,10 +209,6 @@ mod tests {
         }
     }
     fn assert_shell_query(query: &crate::support::TabQuery, cwd: &Path, shell: &str) {
-        assert_eq!(
-            query.recognized_as, "tab",
-            "{shell} query kind should be tab"
-        );
         assert!(query.alive, "{shell} query should report live shell");
         assert_cwd(&query.cwd, cwd, shell);
         assert!(

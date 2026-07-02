@@ -1,0 +1,15 @@
+<CWD>
+F:\workspace\FuncTerm
+</CWD>
+<FINISHED>
+false
+</FINISHED>
+<EXIT_CODE>
+pending
+</EXIT_CODE>
+<STDOUT>
+partial output without escaping: <tag> & raw
+</STDOUT>
+<STDERR>
+
+</STDERR>

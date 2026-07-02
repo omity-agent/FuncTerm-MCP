@@ -1,0 +1,10 @@
+<ALIVE>
+true
+</ALIVE>
+<CWD>
+F:\workspace\FuncTerm
+</CWD>
+<SCREEN>
+PowerShell 7.5.0
+PS F:\workspace\FuncTerm>
+</SCREEN>
