@@ -1,4 +1,4 @@
-use crate::runtime::protocol::QueryResult;
+use crate::runtime::protocol::ViewResult;
 use anyhow::{Context as _, Result, bail};
 use core::time::Duration;
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher as _};
@@ -83,7 +83,7 @@ pub(super) fn wait_for_path(path: &Path, limit: Duration) -> Result<bool> {
         }
     }
 }
-pub(super) fn command_query(record: &CommandRecord, fallback_cwd: &Path) -> Result<QueryResult> {
+pub(super) fn command_query(record: &CommandRecord, fallback_cwd: &Path) -> Result<ViewResult> {
     let stdout = read_optional(&record.stdout)?;
     let stderr = read_optional(&record.stderr)?;
     let done = read_done(&record.done)?;
@@ -91,7 +91,7 @@ pub(super) fn command_query(record: &CommandRecord, fallback_cwd: &Path) -> Resu
     let cwd = done
         .as_ref()
         .map_or_else(|| path_text(fallback_cwd), |file| Ok(file.cwd.clone()))?;
-    Ok(QueryResult::Command {
+    Ok(ViewResult::Command {
         cwd,
         finished: done.is_some(),
         stdout,

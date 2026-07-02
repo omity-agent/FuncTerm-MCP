@@ -31,8 +31,10 @@ enum CliCommand {
         #[arg(long, default_value_t = 0.0)]
         waiting: f64,
     },
-    Query {
+    View {
         id: String,
+        #[arg(long, default_value_t = 0.0)]
+        waiting: f64,
     },
 }
 pub(crate) async fn run() -> Result<()> {
@@ -65,9 +67,12 @@ pub(crate) async fn run() -> Result<()> {
             &settings.daemon_service_name,
             |call| crate::commands::send_command(call, tab_id, command, waiting_seconds),
         )),
-        CliCommand::Query { id } => print_result(crate::commands::with_daemon(
+        CliCommand::View {
+            id,
+            waiting: waiting_seconds,
+        } => print_result(crate::commands::with_daemon(
             &settings.daemon_service_name,
-            |call| crate::commands::query(call, id),
+            |call| crate::commands::view(call, id, waiting_seconds),
         )),
     }
 }

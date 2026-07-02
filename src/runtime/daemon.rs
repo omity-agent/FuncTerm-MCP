@@ -101,6 +101,6 @@ fn dispatch(manager: &Arc<Manager>, request: Request) -> Result<Payload> {
                 query,
             })
         }
-        Request::Query { id } => Ok(Payload::Query(manager.query(&id)?)),
+        Request::View { id, waiting } => Ok(Payload::View(manager.view(&id, waiting)?)),
     }
 }

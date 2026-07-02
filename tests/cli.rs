@@ -11,8 +11,8 @@ mod unix;
 #[cfg(test)]
 mod tests {
     use super::support::{
-        create_tab, locked, manual_write, parse_command_query, run_cli, run_cli_with_pipes,
-        send_test_command,
+        create_tab, locked, manual_write, parse_command_id, parse_command_query, run_cli,
+        run_cli_with_pipes, send_test_command,
     };
     use core::time::Duration;
     use std::thread;
@@ -49,7 +49,7 @@ mod tests {
         assert!(String::from_utf8_lossy(&output.stdout).contains("<TAB_ID>"));
     }
     #[test]
-    fn cli_query_returns_command_output() {
+    fn cli_view_returns_command_output() {
         let _guard = locked();
         let cwd = std::env::temp_dir();
         let created = create_tab(&cwd, "powershell");
@@ -82,7 +82,7 @@ mod tests {
             "<OK>\n\n</OK>"
         );
         let query = wait_for_screen_contains(&created.tab_id, marker);
-        assert!(query.alive, "query should report live tab");
+        assert!(query.alive, "view should report live tab");
     }
     #[test]
     fn cli_keyboard_enter_runs_command_through_pty() {
@@ -101,22 +101,22 @@ mod tests {
         wait_for_screen_contains(&created.tab_id, marker);
     }
     #[test]
-    fn cli_query_reports_shell_liveness() {
+    fn cli_view_reports_shell_liveness() {
         let _guard = locked();
         let cwd = std::env::temp_dir();
         let created = create_tab(&cwd, "powershell");
-        let alive_query = super::support::parse_tab_query(&run_cli(&["query", &created.tab_id]));
+        let alive_query = super::support::parse_tab_query(&run_cli(&["view", &created.tab_id]));
         assert!(alive_query.alive, "new tab should be alive");
         let _closed = super::support::send_command(&created.tab_id, "exit", 0.2);
-        let mut dead_query = super::support::parse_tab_query(&run_cli(&["query", &created.tab_id]));
+        let mut dead_query = super::support::parse_tab_query(&run_cli(&["view", &created.tab_id]));
         for _attempt in 0_usize..20 {
             if !dead_query.alive {
                 return;
             }
             thread::sleep(Duration::from_millis(100));
-            dead_query = super::support::parse_tab_query(&run_cli(&["query", &created.tab_id]));
+            dead_query = super::support::parse_tab_query(&run_cli(&["view", &created.tab_id]));
         }
-        panic!("query should report exited tab as not alive");
+        panic!("view should report exited tab as not alive");
     }
     #[test]
     fn cli_waiting_command_does_not_block_other_requests() {
@@ -134,12 +134,12 @@ mod tests {
         });
         thread::sleep(Duration::from_millis(500));
         let start = Instant::now();
-        let query = super::support::parse_tab_query(&run_cli(&["query", &second.tab_id]));
+        let query = super::support::parse_tab_query(&run_cli(&["view", &second.tab_id]));
         let elapsed = start.elapsed();
         assert!(query.alive, "second tab should remain alive");
         assert!(
             elapsed < Duration::from_secs(2),
-            "query should not wait for unrelated command; elapsed {elapsed:?}"
+            "view should not wait for unrelated command; elapsed {elapsed:?}"
         );
         let accepted = worker.join().unwrap();
         let command_query = parse_command_query(&accepted);
@@ -149,10 +149,31 @@ mod tests {
             "stdout should include long command marker"
         );
     }
+    #[test]
+    fn cli_view_waits_until_command_finishes() {
+        let _guard = locked();
+        let cwd = std::env::temp_dir();
+        let created = create_tab(&cwd, "powershell");
+        let accepted = super::support::send_command(
+            &created.tab_id,
+            "Start-Sleep -Milliseconds 300; Write-Output 'MCP_PTY_VIEW_WAIT_DONE'",
+            0.0,
+        );
+        let command_id = parse_command_id(&accepted);
+        let start = Instant::now();
+        let viewed = parse_command_query(&run_cli(&["view", &command_id, "--waiting", "5"]));
+        let elapsed = start.elapsed();
+        assert!(viewed.finished, "view should return after command finishes");
+        assert!(
+            elapsed < Duration::from_secs(2),
+            "view should not wait for the full timeout after command completion; elapsed {elapsed:?}"
+        );
+        assert!(viewed.stdout.contains("MCP_PTY_VIEW_WAIT_DONE"));
+    }
     fn wait_for_screen_contains(tab_id: &str, expected: &str) -> super::support::TabQuery {
         let mut last_screen = String::new();
         for _attempt in 0_usize..50 {
-            let query = super::support::parse_tab_query(&run_cli(&["query", tab_id]));
+            let query = super::support::parse_tab_query(&run_cli(&["view", tab_id]));
             if query.screen.contains(expected) {
                 return query;
             }

@@ -24,6 +24,9 @@ pub(crate) fn parse_command_query(output: &Output) -> CommandQuery {
         stderr: element(&text, "STDERR").trim_end().to_owned(),
     }
 }
+pub(crate) fn parse_command_id(output: &Output) -> String {
+    element(&checked_stdout(output), "COMMAND_ID")
+}
 pub(crate) fn parse_tab_query(output: &Output) -> TabQuery {
     let text = checked_stdout(output);
     TabQuery {

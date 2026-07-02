@@ -22,7 +22,7 @@ mod tests {
                 let start = case_dir(case.name, "start dir");
                 let next = case_dir(case.name, "next dir");
                 let created = create_tab(&start, case.name);
-                let shell_before = parse_tab_query(&run_cli(&["query", &created.tab_id]));
+                let shell_before = parse_tab_query(&run_cli(&["view", &created.tab_id]));
                 assert_shell_query(&shell_before, &start, case.name);
                 let command = case_command(case.name, &next);
                 let command_query =
@@ -51,7 +51,7 @@ mod tests {
                     name = case.name
                 );
                 assert_cwd(&command_query.cwd, &next, case.name);
-                let shell_after = parse_tab_query(&run_cli(&["query", &created.tab_id]));
+                let shell_after = parse_tab_query(&run_cli(&["view", &created.tab_id]));
                 assert_shell_query(&shell_after, &next, case.name);
             }
         }
@@ -209,7 +209,7 @@ mod tests {
         }
     }
     fn assert_shell_query(query: &crate::support::TabQuery, cwd: &Path, shell: &str) {
-        assert!(query.alive, "{shell} query should report live shell");
+        assert!(query.alive, "{shell} view should report live shell");
         assert_cwd(&query.cwd, cwd, shell);
         assert!(
             !query.screen.is_empty(),

@@ -9,7 +9,7 @@ use rmcp::{
     tool, tool_handler, tool_router,
 };
 use std::sync::Mutex;
-use types::{ManualWriteRequest, NewTabRequest, QueryRequest, SendCommandRequest};
+use types::{ManualWriteRequest, NewTabRequest, SendCommandRequest, ViewRequest};
 #[derive(Clone, Debug)]
 struct McpServer {
     daemon_service_name: String,
@@ -85,9 +85,10 @@ impl McpServer {
         )
         .map_err(error_text)
     }
-    #[tool(name = "query")]
-    async fn query(&self, Parameters(request): Parameters<QueryRequest>) -> Result<String, String> {
-        crate::commands::query(|command| self.call(command), request.id).map_err(error_text)
+    #[tool(name = "view", description = "工具会在等待结束或命令结束时输出。")]
+    async fn view(&self, Parameters(request): Parameters<ViewRequest>) -> Result<String, String> {
+        crate::commands::view(|command| self.call(command), request.id, request.waiting)
+            .map_err(error_text)
     }
 }
 pub(crate) async fn run(settings: Settings) -> Result<()> {

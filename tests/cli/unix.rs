@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
     use crate::support::{
-        create_tab, locked_with_env, manual_write, parse_command_query, parse_tab_query, run_cli,
-        send_command,
+        create_tab, locked_with_env, manual_write, parse_command_id, parse_command_query,
+        parse_tab_query, run_cli, send_command,
     };
     use core::time::Duration;
     use std::thread;
@@ -48,13 +48,13 @@ mod tests {
         }
     }
     #[test]
-    fn cli_query_reports_unix_shell_liveness_after_keyboard_exit() {
+    fn cli_view_reports_unix_shell_liveness_after_keyboard_exit() {
         let Some(bash) = executable("bash") else {
             return;
         };
         let _guard = locked_with_env(&[("SHELL_MCP_PTY_BASH", &bash)]);
         let shell = create_tab(&std::env::temp_dir(), "bash");
-        let alive = parse_tab_query(&run_cli(&["query", &shell.tab_id]));
+        let alive = parse_tab_query(&run_cli(&["view", &shell.tab_id]));
         assert!(alive.alive);
         let written = manual_write(&shell.tab_id, b"exit\n");
         assert!(
@@ -79,12 +79,12 @@ mod tests {
         });
         thread::sleep(Duration::from_millis(300));
         let start = Instant::now();
-        let query = parse_tab_query(&run_cli(&["query", &second.tab_id]));
+        let query = parse_tab_query(&run_cli(&["view", &second.tab_id]));
         let elapsed = start.elapsed();
         assert!(query.alive);
         assert!(
             elapsed < Duration::from_secs(2),
-            "query should not wait for unrelated command; elapsed {elapsed:?}"
+            "view should not wait for unrelated command; elapsed {elapsed:?}"
         );
         let accepted = worker.join().unwrap();
         let command_query = parse_command_query(&accepted);
@@ -106,7 +106,7 @@ mod tests {
         let pending = parse_command_query(&accepted);
         assert!(!pending.finished);
         assert_eq!(pending.exit_code, None);
-        let command_id = command_id(&accepted);
+        let command_id = parse_command_id(&accepted);
         let completed = wait_for_command_finished(&command_id);
         assert!(completed.stdout.contains("MCP_PTY_TIMEOUT_DONE"));
         assert_eq!(completed.exit_code, Some(0));
@@ -145,7 +145,7 @@ mod tests {
     fn wait_for_screen_contains(tab_id: &str, expected: &str) {
         let mut last_screen = String::new();
         for _attempt in 0_usize..50 {
-            let query = parse_tab_query(&run_cli(&["query", tab_id]));
+            let query = parse_tab_query(&run_cli(&["view", tab_id]));
             if query.screen.contains(expected) {
                 return;
             }
@@ -156,7 +156,7 @@ mod tests {
     }
     fn wait_for_shell_dead(tab_id: &str) {
         for _attempt in 0_usize..30 {
-            let query = parse_tab_query(&run_cli(&["query", tab_id]));
+            let query = parse_tab_query(&run_cli(&["view", tab_id]));
             if !query.alive {
                 return;
             }
@@ -166,23 +166,12 @@ mod tests {
     }
     fn wait_for_command_finished(command_id: &str) -> crate::support::CommandQuery {
         for _attempt in 0_usize..30 {
-            let query = parse_command_query(&run_cli(&["query", command_id]));
+            let query = parse_command_query(&run_cli(&["view", command_id]));
             if query.finished {
                 return query;
             }
             thread::sleep(Duration::from_millis(100));
         }
         panic!("command {command_id} should finish");
-    }
-    fn command_id(output: &std::process::Output) -> String {
-        let text = String::from_utf8(output.stdout.clone()).unwrap();
-        element(&text, "COMMAND_ID")
-    }
-    fn element(text: &str, name: &str) -> String {
-        let open = format!("<{name}>\n");
-        let close = format!("\n</{name}>");
-        let (_, after_open) = text.split_once(&open).unwrap();
-        let (content, _) = after_open.rsplit_once(&close).unwrap();
-        content.to_owned()
     }
 }

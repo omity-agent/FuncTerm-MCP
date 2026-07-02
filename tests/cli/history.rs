@@ -115,7 +115,7 @@ mod tests {
             String::from_utf8_lossy(&written.stderr)
         );
         for _attempt in 0_usize..30 {
-            let query = parse_tab_query(&run_cli(&["query", tab_id]));
+            let query = parse_tab_query(&run_cli(&["view", tab_id]));
             if !query.alive {
                 return;
             }

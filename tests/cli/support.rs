@@ -14,4 +14,4 @@ pub(crate) use daemon::locked;
 pub(crate) use daemon::locked_with_env;
 #[cfg(unix)]
 pub(crate) use parse::CommandQuery;
-pub(crate) use parse::{TabQuery, parse_command_query, parse_tab_query};
+pub(crate) use parse::{TabQuery, parse_command_id, parse_command_query, parse_tab_query};

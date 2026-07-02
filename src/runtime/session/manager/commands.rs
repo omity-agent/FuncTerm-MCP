@@ -1,6 +1,6 @@
 use super::lifecycle::{release_shell, reserve_shell};
 use super::{Manager, ShellSession};
-use crate::runtime::protocol::{EndReason, QueryResult};
+use crate::runtime::protocol::{EndReason, ViewResult};
 use crate::runtime::session::records::{
     CommandRecord, command_query, create_record, wait_for_done,
 };
@@ -37,7 +37,7 @@ impl Manager {
         tab_id: &str,
         command: &str,
         waiting: Duration,
-    ) -> Result<(String, EndReason, QueryResult)> {
+    ) -> Result<(String, EndReason, ViewResult)> {
         let shell = self.shell(tab_id)?;
         self.ensure_shell_running(tab_id, &shell)?;
         Self::refresh_shell_choice(&shell)?;

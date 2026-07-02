@@ -6,8 +6,8 @@ mod state;
 #[cfg(test)]
 mod tests;
 use crate::runtime::config::Settings;
-use crate::runtime::protocol::QueryResult;
-use crate::runtime::session::records::{CommandRecord, command_query};
+use crate::runtime::protocol::ViewResult;
+use crate::runtime::session::records::{CommandRecord, command_query, wait_for_done};
 use crate::runtime::session::support::{lock_mutex, start_reader};
 use crate::runtime::temp;
 use crate::shell::{ShellChoice, shims};
@@ -20,6 +20,7 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
 use std::sync::Mutex;
+use std::thread;
 pub(crate) struct Manager {
     settings: Settings,
     root: std::path::PathBuf,
@@ -127,19 +128,57 @@ impl Manager {
         lock_mutex(&self.shells, "shell")?.insert(tab_id.clone(), session);
         Ok(tab_id)
     }
-    pub(crate) fn query(&self, id: &str) -> Result<QueryResult> {
+    pub(crate) fn view(&self, id: &str, waiting: core::time::Duration) -> Result<ViewResult> {
         if let Some(shell) = self.find_shell(id)? {
-            let alive = Self::shell_alive(&shell)?;
-            Self::refresh_shell_choice(&shell)?;
-            let screen = lock_mutex(&shell.screen, "screen")?.screen().contents();
-            let cwd = path_text(&Self::shell_cwd(&shell)?)?;
-            return Ok(QueryResult::Tab { alive, cwd, screen });
+            self.wait_for_shell_view(&shell, waiting)?;
+            return Self::tab_view(&shell);
         }
         if let Some(record) = self.find_command(id)? {
-            let fallback_cwd = self.command_fallback_cwd(&record)?;
-            return command_query(&record, &fallback_cwd);
+            self.wait_for_command_view(&record, waiting)?;
+            return self.command_view(&record);
         }
         bail!("unknown id {id}")
+    }
+    fn tab_view(shell: &Arc<ShellSession>) -> Result<ViewResult> {
+        let alive = Self::shell_alive(shell)?;
+        Self::refresh_shell_choice(shell)?;
+        let screen = lock_mutex(&shell.screen, "screen")?.screen().contents();
+        let cwd = path_text(&Self::shell_cwd(shell)?)?;
+        Ok(ViewResult::Tab { alive, cwd, screen })
+    }
+    fn command_view(&self, record: &CommandRecord) -> Result<ViewResult> {
+        let fallback_cwd = self.command_fallback_cwd(record)?;
+        command_query(record, &fallback_cwd)
+    }
+    fn wait_for_shell_view(
+        &self,
+        shell: &Arc<ShellSession>,
+        waiting: core::time::Duration,
+    ) -> Result<()> {
+        let busy_command_id = lock_mutex(&shell.busy, "busy")?.clone();
+        let Some(command_id) = busy_command_id else {
+            thread::sleep(waiting);
+            return Ok(());
+        };
+        let record = self
+            .find_command(&command_id)?
+            .with_context(|| format!("busy shell command is missing: {command_id}"))?;
+        if wait_for_done(&record.done, waiting)? {
+            Self::update_shell_cwd(shell, &record)?;
+        }
+        Ok(())
+    }
+    fn wait_for_command_view(
+        &self,
+        record: &CommandRecord,
+        waiting: core::time::Duration,
+    ) -> Result<()> {
+        if wait_for_done(&record.done, waiting)?
+            && let Some(shell) = self.find_shell(&record.tab_id)?
+        {
+            Self::update_shell_cwd(&shell, record)?;
+        }
+        Ok(())
     }
     fn find_shell(&self, id: &str) -> Result<Option<Arc<ShellSession>>> {
         Ok(lock_mutex(&self.shells, "shell")?.get(id).cloned())

@@ -19,8 +19,9 @@ pub(crate) enum Request {
         command: String,
         waiting: Duration,
     },
-    Query {
+    View {
         id: String,
+        waiting: Duration,
     },
 }
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
@@ -38,9 +39,9 @@ pub(crate) enum Payload {
     CommandAccepted {
         command_id: String,
         end_reason: EndReason,
-        query: QueryResult,
+        query: ViewResult,
     },
-    Query(QueryResult),
+    View(ViewResult),
 }
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) enum EndReason {
@@ -48,7 +49,7 @@ pub(crate) enum EndReason {
     WaitTimeout,
 }
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
-pub(crate) enum QueryResult {
+pub(crate) enum ViewResult {
     Tab {
         alive: bool,
         cwd: String,
@@ -76,11 +77,11 @@ impl Payload {
                 text.push_str(&query.into_plain_text());
                 text
             }
-            Self::Query(query) => query.into_plain_text(),
+            Self::View(query) => query.into_plain_text(),
         }
     }
 }
-impl QueryResult {
+impl ViewResult {
     pub(crate) fn into_plain_text(self) -> String {
         match self {
             Self::Tab { alive, cwd, screen } => elements([
@@ -127,10 +128,10 @@ pub(crate) fn waiting_from_seconds(seconds: f64) -> Result<Duration> {
 }
 #[cfg(test)]
 mod tests {
-    use super::QueryResult;
+    use super::ViewResult;
     #[test]
     fn command_output_uses_uppercase_tags_without_escaping_content() {
-        let text = QueryResult::Command {
+        let text = ViewResult::Command {
             cwd: "F:\\workspace\\A&B".to_owned(),
             finished: true,
             stdout: "left < right".to_owned(),

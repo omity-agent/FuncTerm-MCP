@@ -39,9 +39,14 @@ pub(crate) fn send_command(
     })?;
     text_from_payload(payload, ExpectedPayload::CommandAccepted)
 }
-pub(crate) fn query(call: impl Fn(&Request) -> Result<Payload>, id: String) -> Result<String> {
-    let payload = call(&Request::Query { id })?;
-    text_from_payload(payload, ExpectedPayload::Query)
+pub(crate) fn view(
+    call: impl Fn(&Request) -> Result<Payload>,
+    id: String,
+    waiting_seconds: f64,
+) -> Result<String> {
+    let waiting = waiting_from_seconds(waiting_seconds)?;
+    let payload = call(&Request::View { id, waiting })?;
+    text_from_payload(payload, ExpectedPayload::View)
 }
 pub(crate) fn with_daemon(
     daemon_service_name: &str,
@@ -55,7 +60,7 @@ enum ExpectedPayload {
     TabCreated,
     KeyboardWritten,
     CommandAccepted,
-    Query,
+    View,
 }
 fn text_from_payload(payload: Payload, expected: ExpectedPayload) -> Result<String> {
     let matches_expected = matches!(
@@ -66,7 +71,7 @@ fn text_from_payload(payload: Payload, expected: ExpectedPayload) -> Result<Stri
                 Payload::CommandAccepted { .. },
                 ExpectedPayload::CommandAccepted
             )
-            | (Payload::Query(_), ExpectedPayload::Query)
+            | (Payload::View(_), ExpectedPayload::View)
     );
     if matches_expected {
         return Ok(payload.into_plain_text());
