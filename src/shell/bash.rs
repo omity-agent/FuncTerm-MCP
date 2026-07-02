@@ -1,6 +1,5 @@
 use super::posix::{sh_path, sh_quote};
 use anyhow::{Context as _, Result};
-use base64_turbo::STANDARD;
 use std::fs;
 use std::path::Path;
 pub(super) fn startup_args(
@@ -18,12 +17,10 @@ pub(super) fn startup_args(
         "-i".to_owned(),
     ])
 }
-pub(super) fn invocation(command_id: &str, command: &str, directory: &Path, cwd: &Path) -> String {
-    let payload = STANDARD.encode(command.as_bytes());
+pub(super) fn invocation(command_id: &str, directory: &Path, cwd: &Path) -> String {
     format!(
-        "mcp_pty_command {} {} {} {}\n",
+        "mcp_pty_command {} {} {}\n",
         sh_quote(command_id),
-        sh_quote(&payload),
         sh_quote(&sh_path(directory)),
         sh_quote(&sh_path(cwd))
     )
@@ -51,12 +48,9 @@ mod tests {
     }
     #[test]
     fn invocation_converts_windows_paths_for_bash() {
-        let converted = super::invocation(
-            "command",
-            "printf ok",
-            Path::new("F:\\dir\\child"),
-            Path::new("F:\\cwd"),
-        );
+        let converted =
+            super::invocation("command", Path::new("F:\\dir\\child"), Path::new("F:\\cwd"));
+        assert!(!converted.contains("printf ok"));
         assert!(converted.contains("'F:/dir/child'"));
     }
 }

@@ -1,4 +1,3 @@
-use base64_turbo::STANDARD;
 use std::path::Path;
 pub(super) fn startup_args(cwd: &Path, ready_file: &Path) -> Vec<String> {
     vec![
@@ -8,13 +7,11 @@ pub(super) fn startup_args(cwd: &Path, ready_file: &Path) -> Vec<String> {
         initialization_script(cwd, ready_file),
     ]
 }
-pub(super) fn invocation(command_id: &str, command: &str, directory: &Path, cwd: &Path) -> String {
-    let payload = STANDARD.encode(command.as_bytes());
+pub(super) fn invocation(command_id: &str, directory: &Path, cwd: &Path) -> String {
     let line_ending = invocation_line_ending();
     format!(
-        "mcp_pty_command {} {} {} {}{}",
+        "mcp_pty_command {} {} {}{}",
         nu_quote(command_id),
-        nu_quote(&payload),
         nu_quote(&directory.to_string_lossy()),
         nu_quote(&cwd.to_string_lossy()),
         line_ending
@@ -60,5 +57,15 @@ mod tests {
         assert!(script.contains("def mcp_pty_command"));
         assert!(script.contains("cd \"F:\\\\dir with ' quote\""));
         assert!(script.contains("save --force --raw \"F:\\\\ready'file\""));
+    }
+    #[test]
+    fn invocation_references_payload_file_by_directory() {
+        let line = super::invocation(
+            "command",
+            std::path::Path::new("F:\\dir with ' quote"),
+            std::path::Path::new("F:\\cwd"),
+        );
+        assert_eq!(line.matches("\"command\"").count(), 1);
+        assert!(line.contains("\"F:\\\\dir with ' quote\""));
     }
 }

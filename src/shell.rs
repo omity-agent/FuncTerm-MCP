@@ -46,18 +46,12 @@ impl ShellChoice {
             ready_file,
         })
     }
-    pub(crate) fn invocation(
-        self,
-        command_id: &str,
-        command: &str,
-        directory: &Path,
-        cwd: &Path,
-    ) -> String {
+    pub(crate) fn invocation(self, command_id: &str, directory: &Path, cwd: &Path) -> String {
         match self {
-            Self::PowerShell => powershell::invocation(command_id, command, directory, cwd),
-            Self::Bash => bash::invocation(command_id, command, directory, cwd),
-            Self::NuShell => nushell::invocation(command_id, command, directory, cwd),
-            Self::Zsh => zsh::invocation(command_id, command, directory, cwd),
+            Self::PowerShell => powershell::invocation(command_id, directory, cwd),
+            Self::Bash => bash::invocation(command_id, directory, cwd),
+            Self::NuShell => nushell::invocation(command_id, directory, cwd),
+            Self::Zsh => zsh::invocation(command_id, directory, cwd),
         }
     }
     pub(crate) fn keyboard_bytes(self, bytes: &[u8]) -> Cow<'_, [u8]> {

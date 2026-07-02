@@ -13,6 +13,7 @@ pub(super) struct CommandRecord {
     pub(super) initial_cwd: PathBuf,
     pub(super) stdout: PathBuf,
     pub(super) stderr: PathBuf,
+    pub(super) payload: PathBuf,
     pub(super) done: PathBuf,
 }
 #[derive(Deserialize)]
@@ -33,6 +34,7 @@ pub(super) fn create_record(
         initial_cwd: initial_cwd.to_path_buf(),
         stdout: command_dir.join("stdout.txt"),
         stderr: command_dir.join("stderr.txt"),
+        payload: command_dir.join("command.b64"),
         done: command_dir.join("done.json"),
     })
 }

@@ -13,13 +13,13 @@ Clear-History
 function Invoke-McpPtyCommand {
     param(
         [Parameter(Mandatory = $true)][string]$CommandId,
-        [Parameter(Mandatory = $true)][string]$Payload,
         [Parameter(Mandatory = $true)][string]$Directory,
         [Parameter(Mandatory = $true)][string]$WorkingDirectory
     )
     New-Item -ItemType Directory -Force -Path $Directory | Out-Null
     $stdoutFile = Join-Path $Directory 'stdout.txt'
     $stderrFile = Join-Path $Directory 'stderr.txt'
+    $payloadFile = Join-Path $Directory 'command.b64'
     $doneFile = Join-Path $Directory 'done.json'
     $doneTempFile = Join-Path $Directory 'done.json.tmp'
     Set-Content -LiteralPath $stdoutFile -Value '' -NoNewline -Encoding utf8
@@ -27,6 +27,7 @@ function Invoke-McpPtyCommand {
     try {
         Set-Location -LiteralPath $WorkingDirectory
         $global:LASTEXITCODE = $null
+        $Payload = Get-Content -LiteralPath $payloadFile -Raw -Encoding utf8
         $script = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Payload))
         & ([scriptblock]::Create($script)) 2> $stderrFile | Tee-Object -FilePath $stdoutFile
         if ($null -ne $global:LASTEXITCODE) {

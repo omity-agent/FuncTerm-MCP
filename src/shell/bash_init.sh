@@ -6,18 +6,18 @@ history -c
 
 mcp_pty_command() {
     local command_id="$1"
-    local payload="$2"
-    local directory="$3"
-    local working_directory="$4"
+    local directory="$2"
+    local working_directory="$3"
     mkdir -p "$directory" || return 1
     local stdout_file="$directory/stdout.txt"
     local stderr_file="$directory/stderr.txt"
+    local payload_file="$directory/command.b64"
     local done_file="$directory/done.json"
     local done_temp_file="$directory/done.json.tmp"
     : > "$stdout_file"
     : > "$stderr_file"
     local script
-    if ! script="$(mcp_pty_decode_payload "$payload" "$stderr_file")"; then
+    if ! script="$(mcp_pty_decode_payload_file "$payload_file" "$stderr_file")"; then
         local cwd_json
         cwd_json="$(mcp_pty_json_string "$PWD")"
         printf '{"command_id":"%s","exit_code":1,"cwd":%s,"completed_at":"%s"}\n' \
@@ -46,11 +46,11 @@ mcp_pty_json_string() {
     printf '"%s"' "$value"
 }
 
-mcp_pty_decode_payload() {
-    local payload="$1"
+mcp_pty_decode_payload_file() {
+    local payload_file="$1"
     local stderr_file="$2"
-    if printf '%s' "$payload" | base64 --decode 2> "$stderr_file"; then
+    if base64 --decode < "$payload_file" 2> "$stderr_file"; then
         return 0
     fi
-    printf '%s' "$payload" | base64 -D 2> "$stderr_file"
+    base64 -D < "$payload_file" 2> "$stderr_file"
 }

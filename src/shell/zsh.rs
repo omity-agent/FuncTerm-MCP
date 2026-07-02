@@ -1,6 +1,5 @@
 use super::posix::{sh_path, sh_quote};
 use anyhow::{Context as _, Result};
-use base64_turbo::STANDARD;
 use std::fs;
 use std::path::Path;
 type Startup = (Vec<String>, Vec<(String, String)>);
@@ -13,12 +12,10 @@ pub(super) fn startup(cwd: &Path, session_root: &Path, ready_file: &Path) -> Res
         vec![("ZDOTDIR".to_owned(), sh_path(session_root))],
     ))
 }
-pub(super) fn invocation(command_id: &str, command: &str, directory: &Path, cwd: &Path) -> String {
-    let payload = STANDARD.encode(command.as_bytes());
+pub(super) fn invocation(command_id: &str, directory: &Path, cwd: &Path) -> String {
     format!(
-        "mcp_pty_command {} {} {} {}\n",
+        "mcp_pty_command {} {} {}\n",
         sh_quote(command_id),
-        sh_quote(&payload),
         sh_quote(&sh_path(directory)),
         sh_quote(&sh_path(cwd))
     )

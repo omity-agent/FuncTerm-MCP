@@ -7,7 +7,9 @@ use crate::runtime::session::records::{
 use crate::runtime::session::support::lock_mutex;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result, bail};
+use base64_turbo::STANDARD;
 use core::time::Duration;
+use std::fs;
 use std::io::Write as _;
 use std::thread;
 impl Manager {
@@ -83,13 +85,15 @@ impl Manager {
         command: &str,
         record: &CommandRecord,
     ) -> Result<()> {
+        let payload = STANDARD.encode(command.as_bytes());
+        fs::write(&record.payload, payload).context("failed to write command payload")?;
         let directory = record
             .stdout
             .parent()
             .context("missing command directory")?;
         let line = shell
             .choice
-            .invocation(command_id, command, directory, &record.initial_cwd);
+            .invocation(command_id, directory, &record.initial_cwd);
         let mut writer = lock_mutex(&shell.writer, "writer")?;
         writer
             .write_all(line.as_bytes())

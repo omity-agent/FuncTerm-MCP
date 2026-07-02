@@ -1,7 +1,8 @@
-def mcp_pty_command [command_id: string, payload: string, directory: path, working_directory: path] {
+def mcp_pty_command [command_id: string, directory: path, working_directory: path] {
     mkdir $directory
     let stdout_file = ($directory | path join 'stdout.txt')
     let stderr_file = ($directory | path join 'stderr.txt')
+    let payload_file = ($directory | path join 'command.b64')
     let done_file = ($directory | path join 'done.json')
     let done_temp_file = ($directory | path join 'done.json.tmp')
     let state_file = ($directory | path join 'state.json')
@@ -9,6 +10,7 @@ def mcp_pty_command [command_id: string, payload: string, directory: path, worki
     '' | save --force --raw $stdout_file
     '' | save --force --raw $stderr_file
     let state = try {
+        let payload = (open --raw $payload_file)
         let script = ($payload | decode base64 | decode)
         [
             $"cd ($working_directory | to nuon)"

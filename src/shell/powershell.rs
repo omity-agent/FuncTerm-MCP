@@ -13,12 +13,11 @@ pub(super) fn startup_args(cwd: &Path, ready_file: &Path) -> Vec<String> {
         encode_command(&init),
     ]
 }
-pub(super) fn invocation(command_id: &str, command: &str, directory: &Path, cwd: &Path) -> String {
-    let payload = STANDARD.encode(command.as_bytes());
+pub(super) fn invocation(command_id: &str, directory: &Path, cwd: &Path) -> String {
     let quoted_directory = ps_quote(directory);
     let quoted_cwd = ps_quote(cwd);
     format!(
-        "Invoke-McpPtyCommand -CommandId '{command_id}' -Payload '{payload}' -Directory {quoted_directory} -WorkingDirectory {quoted_cwd}\r\n"
+        "Invoke-McpPtyCommand -CommandId '{command_id}' -Directory {quoted_directory} -WorkingDirectory {quoted_cwd}\r\n"
     )
 }
 pub(super) fn keyboard_bytes(bytes: &[u8]) -> Cow<'_, [u8]> {
@@ -76,6 +75,16 @@ mod tests {
         assert!(script.contains("Invoke-McpPtyCommand"));
         assert!(script.contains("Set-Location -LiteralPath 'F:\\dir with '' quote'"));
         assert!(script.contains("Set-Content -LiteralPath 'F:\\ready''file'"));
+    }
+    #[test]
+    fn invocation_references_payload_file_by_directory() {
+        let line = super::invocation(
+            "command",
+            Path::new("F:\\dir with ' quote"),
+            Path::new("F:\\cwd"),
+        );
+        assert!(!line.contains("-Payload"));
+        assert!(line.contains("-Directory 'F:\\dir with '' quote'"));
     }
     #[test]
     fn encoded_command_round_trips_as_utf16() {
