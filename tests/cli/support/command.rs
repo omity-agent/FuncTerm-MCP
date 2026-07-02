@@ -34,10 +34,13 @@ pub(crate) fn run_cli_with_pipes(arguments: &[&str]) -> Output {
     output_from_pipes(command, CLI_COMMAND_TIMEOUT)
 }
 pub(crate) fn create_tab(cwd: &Path, shell: &str) -> TabCreated {
+    create_tab_from_directory_argument(cwd.to_str().unwrap(), shell)
+}
+pub(crate) fn create_tab_from_directory_argument(cwd: &str, shell: &str) -> TabCreated {
     parse_tab_created(&run_cli(&[
         "new-tab",
         "--starting-directory",
-        cwd.to_str().unwrap(),
+        cwd,
         "--starting-shell",
         shell,
     ]))

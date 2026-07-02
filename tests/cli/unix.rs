@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
     use crate::support::{
-        create_tab, locked_with_env, manual_write, parse_command_id, parse_command_query,
-        parse_tab_query, run_cli, send_command,
+        create_tab, create_tab_from_directory_argument, locked_with_env, manual_write,
+        parse_command_id, parse_command_query, parse_tab_query, run_cli, send_command,
     };
     use core::time::Duration;
     use std::thread;
@@ -25,6 +25,28 @@ mod tests {
         assert!(
             String::from_utf8_lossy(&output.stderr)
                 .contains("starting_directory does not exist or is not a directory")
+        );
+    }
+    #[test]
+    fn cli_expands_starting_directory_environment_variables_on_unix_shell() {
+        let Some(bash) = executable("bash") else {
+            return;
+        };
+        let cwd = std::env::temp_dir();
+        let cwd_text = cwd.to_str().unwrap();
+        let _guard = locked_with_env(&[
+            ("SHELL_MCP_PTY_BASH", &bash),
+            ("FUNCTERM_TEST_STARTING_DIRECTORY", cwd_text),
+        ]);
+        let shell = create_tab_from_directory_argument("$FUNCTERM_TEST_STARTING_DIRECTORY", "bash");
+        let query = parse_tab_query(&run_cli(&["view", &shell.tab_id]));
+        assert!(
+            query
+                .cwd
+                .replace('\\', "/")
+                .contains(&cwd_text.replace('\\', "/")),
+            "expanded cwd should include {cwd_text}, got {}",
+            query.cwd
         );
     }
     #[test]

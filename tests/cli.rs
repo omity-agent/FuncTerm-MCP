@@ -11,8 +11,9 @@ mod unix;
 #[cfg(test)]
 mod tests {
     use super::support::{
-        create_tab, locked, manual_write, parse_command_id, parse_command_query, run_cli,
-        run_cli_with_pipes, send_test_command,
+        create_tab, create_tab_from_directory_argument, locked, locked_with_env, manual_write,
+        parse_command_id, parse_command_query, parse_tab_query, run_cli, run_cli_with_pipes,
+        send_test_command,
     };
     use core::time::Duration;
     use std::thread;
@@ -47,6 +48,18 @@ mod tests {
         ]);
         assert!(output.status.success());
         assert!(String::from_utf8_lossy(&output.stdout).contains("<TAB_ID>"));
+    }
+    #[test]
+    fn cli_expands_starting_directory_environment_variables() {
+        let cwd = std::env::temp_dir();
+        let cwd_text = cwd.to_str().unwrap();
+        let _guard = locked_with_env(&[("FUNCTERM_TEST_STARTING_DIRECTORY", cwd_text)]);
+        let created =
+            create_tab_from_directory_argument("%FUNCTERM_TEST_STARTING_DIRECTORY%", "powershell");
+        let query = parse_tab_query(&run_cli(&["view", &created.tab_id]));
+        let actual = query.cwd.replace('\\', "/");
+        let expected = cwd_text.replace('\\', "/");
+        assert!(actual.contains(&expected));
     }
     #[test]
     fn cli_view_returns_command_output() {
