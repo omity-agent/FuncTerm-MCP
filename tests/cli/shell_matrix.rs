@@ -1,7 +1,8 @@
 #[cfg(test)]
 mod tests {
     use crate::support::{
-        create_tab, locked_with_env, parse_command_query, parse_tab_query, run_cli, send_command,
+        create_tab, locked_with_env, manual_write, parse_command_query, parse_tab_query, run_cli,
+        send_command,
     };
     use core::sync::atomic::{AtomicU64, Ordering};
     use std::fs;
@@ -83,6 +84,45 @@ mod tests {
             );
         }
     }
+    #[test]
+    fn cli_keeps_send_command_available_after_nested_shell_launch() {
+        for case in shell_cases() {
+            if let Some(executable) = available_executable(case.executables) {
+                let _guard = locked_with_env(&[(case.env_var, &executable)]);
+                let start = case_dir(case.name, "nested start");
+                let created = create_tab(&start, case.name);
+                let launch = parse_command_query(&send_command(
+                    &created.tab_id,
+                    nested_launch_command(case.name),
+                    10.0,
+                ));
+                assert!(
+                    launch.finished,
+                    "{name} nested launch should finish early",
+                    name = case.name
+                );
+                assert_eq!(launch.exit_code, Some(0_i32));
+                let marker = format!("MCP_PTY_NESTED_{}", case.name.to_ascii_uppercase());
+                let nested = parse_command_query(&send_command(
+                    &created.tab_id,
+                    &nested_marker_command(case.name, &marker),
+                    10.0,
+                ));
+                assert!(
+                    nested.finished,
+                    "{name} command in nested shell should finish",
+                    name = case.name
+                );
+                assert!(
+                    nested.stdout.contains(&marker),
+                    "{name} nested stdout should include marker: {stdout}",
+                    name = case.name,
+                    stdout = nested.stdout
+                );
+                let _closed = manual_write(&created.tab_id, b"exit\n");
+            }
+        }
+    }
     const fn shell_cases() -> [ShellCase; 4] {
         [
             ShellCase {
@@ -149,6 +189,23 @@ mod tests {
                 "print 'MCP_PTY_STDOUT'; print --stderr 'MCP_PTY_STDERR'; cd {}",
                 nu_quote(&next.to_string_lossy())
             ),
+            other => panic!("unsupported shell case {other}"),
+        }
+    }
+    fn nested_launch_command(shell: &str) -> &'static str {
+        match shell {
+            "powershell" => "pwsh",
+            "bash" => "bash",
+            "nu" => "nu",
+            "zsh" => "zsh",
+            other => panic!("unsupported shell case {other}"),
+        }
+    }
+    fn nested_marker_command(shell: &str, marker: &str) -> String {
+        match shell {
+            "powershell" => format!("Write-Output '{marker}'"),
+            "bash" | "zsh" => format!("printf '{}\\n'", marker.replace('\'', "'\\''")),
+            "nu" => format!("print '{}'", marker.replace('\'', "\\'")),
             other => panic!("unsupported shell case {other}"),
         }
     }

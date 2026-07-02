@@ -22,7 +22,7 @@ pub(super) fn invocation(command_id: &str, directory: &Path, cwd: &Path) -> Stri
 }
 fn initialization_script(cwd: &Path, ready_file: &Path) -> String {
     format!(
-        "{}\ncd {}\n: >| {}\n",
+        "export FUNCTERM_CURRENT_SHELL=zsh\n{}\ncd {}\n: >| {}\n",
         include_str!("zsh_init.zsh"),
         sh_quote(&sh_path(cwd)),
         sh_quote(&sh_path(ready_file))

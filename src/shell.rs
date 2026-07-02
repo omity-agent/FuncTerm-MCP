@@ -3,11 +3,12 @@ mod bash;
 mod nushell;
 mod posix;
 mod powershell;
+pub(crate) mod shims;
 mod zsh;
 use alloc::borrow::Cow;
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) enum ShellChoice {
     PowerShell,
@@ -22,11 +23,14 @@ pub(crate) struct ShellStartup {
 }
 impl ShellChoice {
     pub(crate) fn executable(self, settings: &Settings) -> Result<String> {
+        path_text(&self.executable_path(settings)?)
+    }
+    pub(crate) fn executable_path(self, settings: &Settings) -> Result<PathBuf> {
         match self {
             Self::PowerShell => select_available_executable(&settings.powershell),
-            Self::Bash => Ok(settings.bash.clone()),
-            Self::NuShell => Ok(settings.nushell.clone()),
-            Self::Zsh => Ok(settings.zsh.clone()),
+            Self::Bash => resolve_executable(&settings.bash),
+            Self::NuShell => resolve_executable(&settings.nushell),
+            Self::Zsh => resolve_executable(&settings.zsh),
         }
     }
     pub(crate) fn startup(self, cwd: &Path, session_root: &Path) -> Result<ShellStartup> {
@@ -72,17 +76,52 @@ impl ShellChoice {
             ),
         }
     }
+    pub(crate) const fn canonical_name(self) -> &'static str {
+        match self {
+            Self::PowerShell => "powershell",
+            Self::Bash => "bash",
+            Self::NuShell => "nu",
+            Self::Zsh => "zsh",
+        }
+    }
+    pub(crate) const fn shim_env_name(self) -> &'static str {
+        match self {
+            Self::PowerShell => "FUNCTERM_REAL_POWERSHELL",
+            Self::Bash => "FUNCTERM_REAL_BASH",
+            Self::NuShell => "FUNCTERM_REAL_NUSHELL",
+            Self::Zsh => "FUNCTERM_REAL_ZSH",
+        }
+    }
+    pub(crate) const fn executable_aliases(self) -> &'static [&'static str] {
+        match self {
+            Self::PowerShell => &["pwsh", "pwsh.exe", "powershell", "powershell.exe"],
+            Self::Bash => &["bash", "bash.exe"],
+            Self::NuShell => &["nu", "nu.exe", "nushell", "nushell.exe"],
+            Self::Zsh => &["zsh"],
+        }
+    }
+    pub(crate) const fn all() -> [Self; 4] {
+        [Self::PowerShell, Self::Bash, Self::NuShell, Self::Zsh]
+    }
 }
-fn select_available_executable(candidates: &[String]) -> Result<String> {
+fn select_available_executable(candidates: &[String]) -> Result<PathBuf> {
     for candidate in candidates {
-        if which::which(candidate).is_ok() {
-            return Ok(candidate.clone());
+        if let Ok(path) = resolve_executable(candidate) {
+            return Ok(path);
         }
     }
     bail!(
         "none of the configured PowerShell executables are available: {}",
         candidates.join(", ")
     )
+}
+fn resolve_executable(candidate: &str) -> Result<PathBuf> {
+    which::which(candidate).map_err(Into::into)
+}
+fn path_text(path: &Path) -> Result<String> {
+    path.to_str()
+        .map(str::to_owned)
+        .ok_or_else(|| anyhow::anyhow!("executable path is not valid UTF-8: {}", path.display()))
 }
 #[cfg(test)]
 mod tests {

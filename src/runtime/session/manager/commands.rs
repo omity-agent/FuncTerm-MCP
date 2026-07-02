@@ -16,7 +16,9 @@ impl Manager {
     pub(crate) fn manual_write(&self, tab_id: &str, bytes: &[u8]) -> Result<()> {
         let shell = self.shell(tab_id)?;
         self.ensure_shell_running(tab_id, &shell)?;
-        let keyboard_bytes = shell.choice.keyboard_bytes(bytes);
+        Self::refresh_shell_choice(&shell)?;
+        let choice = *lock_mutex(&shell.choice, "choice")?;
+        let keyboard_bytes = choice.keyboard_bytes(bytes);
         let write_result = {
             let mut writer = lock_mutex(&shell.writer, "writer")?;
             writer
@@ -38,6 +40,7 @@ impl Manager {
     ) -> Result<(String, EndReason, QueryResult)> {
         let shell = self.shell(tab_id)?;
         self.ensure_shell_running(tab_id, &shell)?;
+        Self::refresh_shell_choice(&shell)?;
         let command_id = self.next_command_id()?;
         reserve_shell(&shell, &command_id)?;
         let initial_cwd = Self::shell_cwd(&shell)?;
@@ -92,7 +95,7 @@ impl Manager {
             .parent()
             .context("missing command directory")?;
         let line = shell
-            .choice
+            .current_choice()?
             .invocation(command_id, directory, &record.initial_cwd);
         let mut writer = lock_mutex(&shell.writer, "writer")?;
         writer
@@ -122,5 +125,10 @@ impl Manager {
                 commands.entry(command_id).or_insert(record);
             }
         });
+    }
+}
+impl ShellSession {
+    fn current_choice(&self) -> Result<crate::shell::ShellChoice> {
+        Ok(*lock_mutex(&self.choice, "choice")?)
     }
 }

@@ -109,12 +109,15 @@ mod tests {
         let child: Box<dyn Child + Send + Sync> = Box::new(TestChild);
         let slave: Box<dyn SlavePty + Send> = Box::new(TestSlave);
         ShellSession {
-            choice: ShellChoice::PowerShell,
+            choice: Mutex::new(ShellChoice::PowerShell),
             cwd: Mutex::new(std::env::temp_dir()),
             writer: Arc::new(Mutex::new(writer)),
             screen: Arc::new(Mutex::new(vt100::Parser::new(30, 120, 0))),
             busy: Mutex::new(busy.map(str::to_owned)),
             command_root: std::env::temp_dir().join("functerm-test-commands"),
+            active_shell_file: std::env::temp_dir()
+                .join("functerm-test-commands")
+                .join("active-shell.txt"),
             process_tree: crate::runtime::session::manager::process_tree::ProcessTree::new()
                 .unwrap(),
             child: Mutex::new(child),

@@ -10,7 +10,7 @@ use crate::runtime::protocol::QueryResult;
 use crate::runtime::session::records::{CommandRecord, command_query};
 use crate::runtime::session::support::{lock_mutex, start_reader};
 use crate::runtime::temp;
-use crate::shell::ShellChoice;
+use crate::shell::{ShellChoice, shims};
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result, bail};
 use portable_pty::{Child, CommandBuilder, PtySize, SlavePty, native_pty_system};
@@ -27,12 +27,13 @@ pub(crate) struct Manager {
     commands: Mutex<HashMap<String, CommandRecord>>,
 }
 pub(super) struct ShellSession {
-    choice: ShellChoice,
+    choice: Mutex<ShellChoice>,
     cwd: Mutex<std::path::PathBuf>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     screen: Arc<Mutex<vt100::Parser>>,
     busy: Mutex<Option<String>>,
     command_root: std::path::PathBuf,
+    active_shell_file: std::path::PathBuf,
     process_tree: process_tree::ProcessTree,
     child: Mutex<Box<dyn Child + Send + Sync>>,
     _slave: Mutex<Box<dyn SlavePty + Send>>,
@@ -61,7 +62,12 @@ impl Manager {
         let tab_id = self.next_tab_id()?;
         let command_root = self.root.join("commands").join(&tab_id);
         std::fs::create_dir_all(&command_root).context("failed to create command root")?;
-        let startup = starting_shell.startup(starting_directory, &command_root)?;
+        let mut startup = starting_shell.startup(starting_directory, &command_root)?;
+        startup.env.extend(shims::environment(
+            &self.settings,
+            &command_root,
+            starting_shell,
+        )?);
         let pty_system = native_pty_system();
         let size = PtySize {
             rows: self.settings.terminal_rows,
@@ -104,13 +110,16 @@ impl Manager {
         )));
         start_reader(Arc::clone(&screen), Arc::clone(&writer), reader);
         wait_for_shell_startup(&mut child, &ready_file, &screen)?;
+        let active_shell_file = command_root.join("active-shell.txt");
+        shims::write_active_shell(&active_shell_file, starting_shell)?;
         let session = Arc::new(ShellSession {
-            choice: starting_shell,
+            choice: Mutex::new(starting_shell),
             cwd: Mutex::new(starting_directory.to_path_buf()),
             writer,
             screen,
             busy: Mutex::new(None),
             command_root,
+            active_shell_file,
             process_tree,
             child: Mutex::new(child),
             _slave: Mutex::new(pair.slave),
@@ -121,6 +130,7 @@ impl Manager {
     pub(crate) fn query(&self, id: &str) -> Result<QueryResult> {
         if let Some(shell) = self.find_shell(id)? {
             let alive = Self::shell_alive(&shell)?;
+            Self::refresh_shell_choice(&shell)?;
             let screen = lock_mutex(&shell.screen, "screen")?.screen().contents();
             let cwd = path_text(&Self::shell_cwd(&shell)?)?;
             return Ok(QueryResult::Tab { alive, cwd, screen });

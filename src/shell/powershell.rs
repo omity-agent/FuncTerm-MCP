@@ -37,7 +37,7 @@ pub(super) fn keyboard_bytes(bytes: &[u8]) -> Cow<'_, [u8]> {
 }
 fn initialization_script(cwd: &Path, ready_file: &Path) -> String {
     format!(
-        "{}\nSet-Location -LiteralPath {}\nSet-Content -LiteralPath {} -Value '' -NoNewline",
+        "$env:FUNCTERM_CURRENT_SHELL = 'powershell'\n{}\nSet-Location -LiteralPath {}\nSet-Content -LiteralPath {} -Value '' -NoNewline",
         include_str!("./powershell_init.ps1"),
         ps_quote(cwd),
         ps_quote(ready_file)

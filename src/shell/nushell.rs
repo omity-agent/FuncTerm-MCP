@@ -27,7 +27,7 @@ const fn invocation_line_ending() -> &'static str {
 }
 fn initialization_script(cwd: &Path, ready_file: &Path) -> String {
     format!(
-        "{}\ncd {}\n'' | save --force --raw {}\n",
+        "$env.FUNCTERM_CURRENT_SHELL = 'nu'\n{}\ncd {}\n'' | save --force --raw {}\n",
         include_str!("nushell_init.nu"),
         nu_quote(&cwd.to_string_lossy()),
         nu_quote(&ready_file.to_string_lossy())

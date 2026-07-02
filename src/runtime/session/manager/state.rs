@@ -1,6 +1,7 @@
 use super::{Manager, ShellSession};
 use crate::runtime::session::records::{CommandRecord, read_done};
 use crate::runtime::session::support::lock_mutex;
+use crate::shell::shims;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use std::path::{Path, PathBuf};
@@ -39,6 +40,12 @@ impl Manager {
     ) -> Result<()> {
         if let Some(done) = read_done(&record.done)? {
             *lock_mutex(&shell.cwd, "cwd")? = PathBuf::from(done.cwd);
+        }
+        Ok(())
+    }
+    pub(super) fn refresh_shell_choice(shell: &ShellSession) -> Result<()> {
+        if let Some(choice) = shims::read_active_shell(&shell.active_shell_file)? {
+            *lock_mutex(&shell.choice, "choice")? = choice;
         }
         Ok(())
     }

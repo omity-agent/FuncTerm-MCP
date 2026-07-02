@@ -1,3 +1,16 @@
+function Set-FuncTermShimPath {
+    if ([string]::IsNullOrEmpty($env:FUNCTERM_SHIM_DIR)) {
+        return
+    }
+    $separator = [string][IO.Path]::PathSeparator
+    $entries = $env:PATH -split [Regex]::Escape($separator)
+    $remaining = $entries | Where-Object {
+        -not [string]::Equals($_, $env:FUNCTERM_SHIM_DIR, [StringComparison]::OrdinalIgnoreCase)
+    }
+    $env:PATH = (@($env:FUNCTERM_SHIM_DIR) + @($remaining)) -join $separator
+}
+Set-FuncTermShimPath
+
 if (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue) {
     Set-PSReadLineOption -HistorySaveStyle SaveNothing
     $setPsReadLineOption = Get-Command Set-PSReadLineOption
@@ -22,6 +35,10 @@ function Invoke-FuncTermCommand {
     $payloadFile = Join-Path $Directory 'command.b64'
     $doneFile = Join-Path $Directory 'done.json'
     $doneTempFile = Join-Path $Directory 'done.json.tmp'
+    $previousCommandId = $env:FUNCTERM_COMMAND_ID
+    $previousCommandDirectory = $env:FUNCTERM_COMMAND_DIRECTORY
+    $env:FUNCTERM_COMMAND_ID = $CommandId
+    $env:FUNCTERM_COMMAND_DIRECTORY = $Directory
     Set-Content -LiteralPath $stdoutFile -Value '' -NoNewline -Encoding utf8
     Set-Content -LiteralPath $stderrFile -Value '' -NoNewline -Encoding utf8
     try {
@@ -56,4 +73,16 @@ function Invoke-FuncTermCommand {
     } | ConvertTo-Json -Compress
     Set-Content -LiteralPath $doneTempFile -Value $done -Encoding utf8
     Move-Item -LiteralPath $doneTempFile -Destination $doneFile -Force
+    if ($null -eq $previousCommandId) {
+        Remove-Item Env:FUNCTERM_COMMAND_ID -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:FUNCTERM_COMMAND_ID = $previousCommandId
+    }
+    if ($null -eq $previousCommandDirectory) {
+        Remove-Item Env:FUNCTERM_COMMAND_DIRECTORY -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:FUNCTERM_COMMAND_DIRECTORY = $previousCommandDirectory
+    }
 }
