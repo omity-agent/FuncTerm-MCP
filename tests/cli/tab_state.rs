@@ -4,7 +4,7 @@ mod tests {
     use core::time::Duration;
     use std::thread;
     #[test]
-    fn cli_tab_view_reports_last_command() {
+    fn cli_tab_view_reports_shell_cwd() {
         let _guard = crate::support::locked();
         let cwd = std::env::temp_dir();
         let created = create_tab(&cwd, "powershell");
@@ -13,7 +13,10 @@ mod tests {
         let command_result = parse_command_result(&accepted_output);
         assert!(command_result.finished);
         let tab_view = parse_tab_view(&run_cli(&["view", &created.tab_id]));
-        assert_eq!(tab_view.last_command, command);
+        assert!(
+            !tab_view.cwd.is_empty(),
+            "tab view should report shell cwd after {command}"
+        );
     }
     #[test]
     fn cli_view_keeps_closed_tab_snapshot_after_operation_detects_exit() {
@@ -34,7 +37,6 @@ mod tests {
         );
         let tab_view = parse_tab_view(&run_cli(&["view", &created.tab_id]));
         assert!(!tab_view.alive);
-        assert_eq!(tab_view.last_command, "exit");
         assert!(
             tab_view.screen.contains("MCP_PTY_BEFORE_CLOSE"),
             "closed tab should retain last screen: {}",

@@ -1,17 +1,19 @@
-use crate::runtime::protocol::ViewResult;
+use crate::runtime::protocol::CommandSnapshot;
 use crate::runtime::session::records::{
-    CommandRecord, read_and_clear_command_result, read_command_result, remove_record_directory,
-    wait_for_done, write_failed_result,
+    CommandRecord, command_note, read_and_clear_command_result, read_command_result,
+    remove_record_directory, wait_for_done, write_failed_result,
 };
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use core::time::Duration;
 use std::sync::Mutex;
+use std::time::Instant;
 pub(in crate::runtime::session::manager) struct ManagedCommand {
     id: String,
     record: CommandRecord,
+    started_at: Instant,
     state: Mutex<CommandState>,
-    cached_view: Mutex<Option<ViewResult>>,
+    cached_view: Mutex<Option<CommandSnapshot>>,
 }
 #[derive(Clone, Copy)]
 enum CommandState {
@@ -30,10 +32,11 @@ pub(super) struct ShellReservation {
     released: bool,
 }
 impl ManagedCommand {
-    pub(super) const fn new(id: String, record: CommandRecord) -> Self {
+    pub(super) fn new(id: String, record: CommandRecord) -> Self {
         Self {
             id,
             record,
+            started_at: Instant::now(),
             state: Mutex::new(CommandState::Running),
             cached_view: Mutex::new(None),
         }
@@ -62,24 +65,24 @@ impl ManagedCommand {
             }
         }
     }
-    pub(super) fn view(&self, fallback_cwd: &std::path::Path) -> Result<ViewResult> {
+    pub(super) fn view(&self) -> Result<CommandSnapshot> {
         if let Some(view) = self.cached_view()? {
             return Ok(view);
         }
-        read_command_result(&self.record, fallback_cwd)
+        read_command_result(&self.record, self.time_consumption())
     }
     #[expect(
         clippy::significant_drop_tightening,
         reason = "the state lock serializes the single read-and-delete of command files"
     )]
-    pub(super) fn mark_finished(&self, fallback_cwd: &std::path::Path) -> Result<ViewResult> {
+    pub(super) fn mark_finished(&self) -> Result<CommandSnapshot> {
         let mut state = self.lock_state()?;
         if !matches!(*state, CommandState::Running) {
             return self
                 .cached_view()?
                 .context("finished command is missing cached view");
         }
-        let view = read_and_clear_command_result(&self.record, fallback_cwd)?;
+        let view = read_and_clear_command_result(&self.record, self.time_consumption())?;
         *self.lock_cached_view()? = Some(view.clone());
         *state = CommandState::Finished;
         Ok(view)
@@ -92,7 +95,7 @@ impl ManagedCommand {
         let mut state = self.lock_state()?;
         if matches!(*state, CommandState::Running) {
             write_failed_result(&self.id, &self.record, &failure_message)?;
-            let view = failure_view(&self.record, &failure_message)?;
+            let view = failure_view(&self.record, &failure_message, self.time_consumption())?;
             if let Err(error) = remove_record_directory(&self.record) {
                 eprintln!("{error:#}");
             }
@@ -110,39 +113,30 @@ impl ManagedCommand {
             .lock()
             .map_err(|error| anyhow::anyhow!("command state mutex poisoned: {error}"))
     }
-    fn cached_view(&self) -> Result<Option<ViewResult>> {
+    fn cached_view(&self) -> Result<Option<CommandSnapshot>> {
         Ok(self.lock_cached_view()?.clone())
     }
-    fn lock_cached_view(&self) -> Result<std::sync::MutexGuard<'_, Option<ViewResult>>> {
+    fn lock_cached_view(&self) -> Result<std::sync::MutexGuard<'_, Option<CommandSnapshot>>> {
         self.cached_view
             .lock()
             .map_err(|error| anyhow::anyhow!("command view mutex poisoned: {error}"))
     }
-}
-fn failure_view(record: &CommandRecord, message: &str) -> Result<ViewResult> {
-    let view = read_command_result(record, &record.initial_cwd)?;
-    match view {
-        ViewResult::Command {
-            cwd,
-            finished: false,
-            stdout,
-            mut stderr,
-            ..
-        } => {
-            if !stderr.is_empty() {
-                stderr.push('\n');
-            }
-            stderr.push_str(message);
-            Ok(ViewResult::Command {
-                cwd,
-                finished: true,
-                stdout,
-                stderr,
-                exit_code: Some(1_i32),
-            })
-        }
-        other @ (ViewResult::Command { .. } | ViewResult::Tab { .. }) => Ok(other),
+    fn time_consumption(&self) -> String {
+        format!("{:?}", self.started_at.elapsed())
     }
+}
+fn failure_view(
+    record: &CommandRecord,
+    message: &str,
+    time_consumption: String,
+) -> Result<CommandSnapshot> {
+    let mut snapshot = read_command_result(record, time_consumption)?;
+    if !snapshot.command.finished {
+        snapshot.command.finished = true;
+        snapshot.command.exit_code = Some(1_i32);
+        snapshot.note = command_note(&snapshot.command.stdout, &snapshot.command.stderr, message);
+    }
+    Ok(snapshot)
 }
 impl ShellReservation {
     pub(super) fn new(

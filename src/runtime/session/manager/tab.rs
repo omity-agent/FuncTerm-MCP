@@ -1,7 +1,7 @@
 mod view;
 use super::command::ManagedCommand;
 use super::session::ShellSession;
-use crate::runtime::protocol::ViewResult;
+use crate::runtime::protocol::{ShellView, ViewResult};
 use crate::runtime::session::support::lock_mutex;
 use alloc::sync::Arc;
 use anyhow::{Result, bail};
@@ -26,15 +26,17 @@ pub(super) struct Tab {
 #[derive(Clone)]
 pub(super) struct TabSnapshot {
     cwd: String,
+    title: String,
+    shell_type: crate::shell::ShellChoice,
+    idle: bool,
     screen: String,
-    last_command: Option<String>,
 }
 impl TabDirectory {
     pub(super) fn insert(&self, tab: Tab) -> Result<()> {
         lock_mutex(&self.tabs, "tab")?.insert(tab.id().to_owned(), Arc::new(tab));
         Ok(())
     }
-    pub(super) fn manual_write(&self, tab_id: &str, bytes: &[u8]) -> Result<String> {
+    pub(super) fn manual_write(&self, tab_id: &str, bytes: &[u8]) -> Result<ViewResult> {
         self.require_tab(tab_id)?.manual_write(bytes)
     }
     pub(super) fn send_command(
@@ -129,6 +131,11 @@ impl Tab {
             .clone()
             .into_view(false))
     }
+    pub(super) fn snapshot_shell_view(&self) -> Result<ShellView> {
+        Ok(lock_mutex(&self.snapshot, "tab snapshot")?
+            .clone()
+            .shell_view(false))
+    }
     pub(super) fn optional_session(&self) -> Result<Option<Arc<ShellSession>>> {
         Ok(lock_mutex(&self.session, "tab session")?.clone())
     }
@@ -144,15 +151,6 @@ impl Tab {
             .get(command_id)
             .cloned())
     }
-    pub(super) fn command_fallback_cwd(
-        &self,
-        record: &crate::runtime::session::records::CommandRecord,
-    ) -> Result<std::path::PathBuf> {
-        if let Some(session) = self.optional_session()? {
-            return session.cwd();
-        }
-        Ok(record.initial_cwd.clone())
-    }
 }
 impl TabSnapshot {
     fn from_session(session: &ShellSession) -> Result<Self> {
@@ -163,22 +161,31 @@ impl TabSnapshot {
         } else {
             current_screen
         };
+        let shell_type = session.current_choice()?;
         Ok(Self {
             cwd,
+            title: session.screen_title()?,
+            shell_type,
+            idle: session.busy_command_id()?.is_none(),
             screen,
-            last_command: session.last_command()?,
         })
     }
     pub(super) fn into_view(self, alive: bool) -> ViewResult {
+        let shell = self.clone().shell_view(alive);
         ViewResult::Tab {
-            alive,
-            cwd: self.cwd,
+            shell,
             screen: self.screen,
-            last_command: self.last_command,
+            note: String::new(),
         }
     }
-    pub(super) fn into_screen(self) -> String {
-        self.screen
+    pub(super) fn shell_view(self, alive: bool) -> ShellView {
+        ShellView {
+            alive,
+            title: self.title,
+            shell_type: self.shell_type,
+            cwd: self.cwd,
+            idle: self.idle,
+        }
     }
 }
 fn random_id_suffix() -> String {

@@ -1,12 +1,22 @@
 use alloc::sync::Arc;
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use std::io::{Read, Write};
 use std::sync::{Mutex, MutexGuard};
 use std::thread;
 #[cfg(unix)]
 const CURSOR_POSITION_REPORT: &[u8] = b"\x1b[1;1R";
+#[derive(Default)]
+pub(super) struct TerminalCallbacks {
+    title: Vec<u8>,
+}
+impl vt100::Callbacks for TerminalCallbacks {
+    fn set_window_title(&mut self, _: &mut vt100::Screen, title: &[u8]) {
+        self.title = title.to_vec();
+    }
+}
+pub(super) type TerminalParser = vt100::Parser<TerminalCallbacks>;
 pub(super) fn start_reader(
-    screen: Arc<Mutex<vt100::Parser>>,
+    screen: Arc<Mutex<TerminalParser>>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     mut owned_reader: Box<dyn Read + Send>,
 ) {
@@ -33,6 +43,11 @@ pub(super) fn start_reader(
             }
         }
     });
+}
+pub(super) fn screen_title(parser: &TerminalParser) -> Result<String> {
+    let bytes = &parser.callbacks().title;
+    let title = core::str::from_utf8(bytes).context("terminal title is not valid UTF-8")?;
+    Ok(title.to_owned())
 }
 #[cfg(unix)]
 #[derive(Default)]

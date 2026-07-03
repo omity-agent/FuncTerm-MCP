@@ -4,6 +4,7 @@ use core::time::Duration;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 mod kind;
+mod text;
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) enum Request {
     Ping,
@@ -37,7 +38,7 @@ pub(crate) enum Payload {
         tab_id: String,
     },
     KeyboardWritten {
-        screen: String,
+        view: ViewResult,
     },
     CommandAccepted {
         command_id: String,
@@ -53,85 +54,38 @@ pub(crate) enum EndReason {
     CommandFailed,
 }
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+pub(crate) struct ShellView {
+    pub(crate) alive: bool,
+    pub(crate) title: String,
+    pub(crate) shell_type: ShellChoice,
+    pub(crate) cwd: String,
+    pub(crate) idle: bool,
+}
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+pub(crate) struct CommandView {
+    pub(crate) stdout: String,
+    pub(crate) stderr: String,
+    pub(crate) exit_code: Option<i32>,
+    pub(crate) time_consumption: String,
+    pub(crate) finished: bool,
+}
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+pub(crate) struct CommandSnapshot {
+    pub(crate) command: CommandView,
+    pub(crate) note: String,
+}
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) enum ViewResult {
     Tab {
-        alive: bool,
-        cwd: String,
+        shell: ShellView,
         screen: String,
-        last_command: Option<String>,
+        note: String,
     },
     Command {
-        cwd: String,
-        finished: bool,
-        stdout: String,
-        stderr: String,
-        exit_code: Option<i32>,
+        shell: ShellView,
+        command: CommandView,
+        note: String,
     },
-}
-impl Payload {
-    pub(crate) fn into_plain_text(self) -> String {
-        match self {
-            Self::Pong => element("PONG", ""),
-            Self::TabCreated { tab_id } => element("TAB_ID", &tab_id),
-            Self::KeyboardWritten { screen } => element("SCREEN", &screen),
-            Self::CommandAccepted {
-                command_id, view, ..
-            } => {
-                let mut text = element("COMMAND_ID", &command_id);
-                text.push('\n');
-                text.push_str(&view.into_plain_text());
-                text
-            }
-            Self::View(view) => view.into_plain_text(),
-        }
-    }
-}
-impl ViewResult {
-    pub(crate) fn into_plain_text(self) -> String {
-        match self {
-            Self::Tab {
-                alive,
-                cwd,
-                screen,
-                last_command,
-            } => elements([
-                ("ALIVE", alive.to_string()),
-                ("CWD", cwd),
-                ("LAST_COMMAND", last_command.unwrap_or_default()),
-                ("SCREEN", screen),
-            ]),
-            Self::Command {
-                cwd,
-                finished,
-                stdout,
-                stderr,
-                exit_code,
-            } => {
-                let exit_code_text =
-                    exit_code.map_or_else(|| "pending".to_owned(), |code| code.to_string());
-                elements([
-                    ("CWD", cwd),
-                    ("FINISHED", finished.to_string()),
-                    ("EXIT_CODE", exit_code_text),
-                    ("STDOUT", stdout),
-                    ("STDERR", stderr),
-                ])
-            }
-        }
-    }
-}
-fn elements<const COUNT: usize>(items: [(&str, String); COUNT]) -> String {
-    let mut text = String::new();
-    for (index, (tag, content)) in items.into_iter().enumerate() {
-        if index > 0 {
-            text.push('\n');
-        }
-        text.push_str(&element(tag, &content));
-    }
-    text
-}
-fn element(tag: &str, content: &str) -> String {
-    format!("<{tag}>\n{content}\n</{tag}>")
 }
 pub(crate) fn waiting_from_seconds(seconds: f64) -> Result<Duration> {
     Duration::try_from_secs_f64(seconds)
@@ -139,16 +93,21 @@ pub(crate) fn waiting_from_seconds(seconds: f64) -> Result<Duration> {
 }
 #[cfg(test)]
 mod tests {
-    use super::{Payload, ViewResult};
+    use super::{CommandView, Payload, ShellView, ViewResult};
+    use crate::shell::ShellChoice;
     #[doc = " 该程序输出的主要消费者为 LLM，如果输出中存在 JSON/XML 转义会增加认知负荷和无意义的上下文占用，使用伪结构化文本可读性更高。"]
     #[test]
     fn command_output_uses_uppercase_tags_without_escaping_content() {
         let text = ViewResult::Command {
-            cwd: "F:\\workspace\\A&B".to_owned(),
-            finished: true,
-            stdout: "left < right".to_owned(),
-            stderr: "raw </STDERR> allowed".to_owned(),
-            exit_code: Some(0_i32),
+            shell: shell(true),
+            command: CommandView {
+                stdout: "left < right".to_owned(),
+                stderr: "raw </STDERR> allowed".to_owned(),
+                exit_code: Some(0_i32),
+                time_consumption: "1s".to_owned(),
+                finished: true,
+            },
+            note: String::new(),
         }
         .into_plain_text();
         assert!(text.contains("<CWD>\nF:\\workspace\\A&B\n</CWD>"));
@@ -156,22 +115,36 @@ mod tests {
         assert!(text.contains("<STDERR>\nraw </STDERR> allowed\n</STDERR>"));
     }
     #[test]
-    fn tab_output_reports_last_command() {
+    fn tab_output_reports_shell_state() {
         let text = ViewResult::Tab {
-            alive: true,
-            cwd: "F:\\workspace".to_owned(),
+            shell: shell(true),
             screen: "screen".to_owned(),
-            last_command: Some("Write-Output 'ok'".to_owned()),
+            note: String::new(),
         }
         .into_plain_text();
-        assert!(text.contains("<LAST_COMMAND>\nWrite-Output 'ok'\n</LAST_COMMAND>"));
+        assert!(text.contains("<SHELL>\n<ALIVE>\ntrue\n</ALIVE>"));
+        assert!(text.contains("<TYPE>\nPowerShell\n</TYPE>"));
     }
     #[test]
     fn manual_write_output_reports_screen() {
         let text = Payload::KeyboardWritten {
-            screen: "running screen".to_owned(),
+            view: ViewResult::Tab {
+                shell: shell(true),
+                screen: "running screen".to_owned(),
+                note: String::new(),
+            },
         }
         .into_plain_text();
-        assert_eq!(text, "<SCREEN>\nrunning screen\n</SCREEN>");
+        assert!(!text.contains("<ALIVE>"));
+        assert!(text.contains("<SCREEN>\nrunning screen\n</SCREEN>"));
+    }
+    fn shell(alive: bool) -> ShellView {
+        ShellView {
+            alive,
+            title: "title".to_owned(),
+            shell_type: ShellChoice::PowerShell,
+            cwd: "F:\\workspace\\A&B".to_owned(),
+            idle: true,
+        }
     }
 }

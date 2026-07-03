@@ -2,7 +2,7 @@ mod lifecycle;
 #[cfg(test)]
 mod tests;
 use super::{Manager, session::KeyboardWriteFailure, tab::Tab};
-use crate::runtime::protocol::{EndReason, ViewResult};
+use crate::runtime::protocol::{CommandSnapshot, EndReason, ViewResult};
 use crate::runtime::session::records::{create_record, remove_record_directory};
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
@@ -16,7 +16,7 @@ pub(super) struct StartedCommand {
     session: Arc<super::session::ShellSession>,
 }
 impl Manager {
-    pub(crate) fn manual_write(&self, tab_id: &str, bytes: &[u8]) -> Result<String> {
+    pub(crate) fn manual_write(&self, tab_id: &str, bytes: &[u8]) -> Result<ViewResult> {
         self.tabs.manual_write(tab_id, bytes)
     }
     pub(crate) fn send_command(
@@ -32,7 +32,7 @@ impl Manager {
     }
 }
 impl Tab {
-    pub(super) fn manual_write(&self, bytes: &[u8]) -> Result<String> {
+    pub(super) fn manual_write(&self, bytes: &[u8]) -> Result<ViewResult> {
         let session = self.live_session()?;
         if !session.is_alive()? {
             self.close_session(&session)?;
@@ -40,7 +40,7 @@ impl Tab {
         }
         session.refresh_choice()?;
         match session.write_keyboard_for_running_command(bytes) {
-            Ok(()) => Ok(self.remember(&session)?.into_screen()),
+            Ok(()) => Ok(self.remember(&session)?.into_view(true)),
             Err(KeyboardWriteFailure::IdlePrompt) => {
                 anyhow::bail!(
                     "manual_write is unavailable while the prompt is idle; use send_command for prompt commands"
@@ -63,7 +63,6 @@ impl Tab {
             anyhow::bail!("tab id {} was generated, but its shell is gone", self.id());
         }
         session.refresh_choice()?;
-        session.set_last_command(command_text.to_owned())?;
         self.remember(&session)?;
         let reservation = ShellReservation::new(&session, &command_id)?;
         let initial_cwd = session.cwd()?;
@@ -106,8 +105,7 @@ impl Tab {
             }
             CommandWait::Failed => {}
         }
-        let fallback_cwd = self.command_fallback_cwd(command.record())?;
-        command.view(&fallback_cwd)
+        self.command_view_result(&command)
     }
     fn start_monitor(
         self: &Arc<Self>,
@@ -135,11 +133,10 @@ impl Tab {
     pub(super) fn finish_done_command(&self, command: &ManagedCommand) -> Result<()> {
         if let Some(session) = self.optional_session()? {
             session.update_cwd_from_done(command.record())?;
-            self.remember(&session)?;
             session.release(command.id())?;
+            self.remember(&session)?;
         }
-        let fallback_cwd = self.command_fallback_cwd(command.record())?;
-        command.mark_finished(&fallback_cwd)?;
+        command.mark_finished()?;
         Ok(())
     }
     pub(super) fn abort_if_shell_dead(
@@ -154,6 +151,27 @@ impl Tab {
         session.release(command.id())?;
         self.close_session(session)?;
         Ok(true)
+    }
+    pub(super) fn command_view_result(&self, command: &ManagedCommand) -> Result<ViewResult> {
+        let snapshot = command.view()?;
+        self.command_snapshot_result(snapshot)
+    }
+    fn command_snapshot_result(&self, snapshot: CommandSnapshot) -> Result<ViewResult> {
+        let shell = if let Some(session) = self.optional_session()? {
+            let alive = session.is_alive()?;
+            if alive {
+                self.remember(&session)?.shell_view(true)
+            } else {
+                self.snapshot_shell_view()?
+            }
+        } else {
+            self.snapshot_shell_view()?
+        };
+        Ok(ViewResult::Command {
+            shell,
+            command: snapshot.command,
+            note: snapshot.note,
+        })
     }
 }
 impl StartedCommand {
@@ -172,8 +190,7 @@ impl StartedCommand {
             }
             CommandWait::Failed => EndReason::CommandFailed,
         };
-        let fallback_cwd = self.tab.command_fallback_cwd(self.command.record())?;
-        let result = self.command.view(&fallback_cwd)?;
+        let result = self.tab.command_view_result(&self.command)?;
         Ok((self.command.id().to_owned(), reason, result))
     }
 }

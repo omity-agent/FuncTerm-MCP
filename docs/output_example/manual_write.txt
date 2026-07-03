@@ -1,4 +1,21 @@
+<SHELL>
+<TITLE>
+FuncTerm
+</TITLE>
+<TYPE>
+PowerShell
+</TYPE>
+<CWD>
+F:\workspace\FuncTerm
+</CWD>
+<IDLE>
+false
+</IDLE>
+</SHELL>
 <SCREEN>
 PowerShell 7.5.0
 PS F:\workspace\FuncTerm>
 </SCREEN>
+<NOTE>
+
+</NOTE>

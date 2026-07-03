@@ -4,7 +4,9 @@ use super::{
 };
 use crate::runtime::config::Settings;
 use crate::runtime::session::records::wait_for_path;
-use crate::runtime::session::support::{lock_mutex, start_reader};
+use crate::runtime::session::support::{
+    TerminalCallbacks, TerminalParser, lock_mutex, start_reader,
+};
 use crate::runtime::temp;
 use crate::shell::{ShellChoice, ShellStartup, shims};
 use alloc::sync::Arc;
@@ -91,10 +93,11 @@ impl ShellLauncher {
                 .take_writer()
                 .context("failed to take pty writer")?,
         ));
-        let screen = Arc::new(Mutex::new(vt100::Parser::new(
+        let screen = Arc::new(Mutex::new(TerminalParser::new_with_callbacks(
             self.settings.terminal_rows,
             self.settings.terminal_cols,
             0,
+            TerminalCallbacks::default(),
         )));
         start_reader(Arc::clone(&screen), Arc::clone(&writer), reader);
         let startup_timeout =
@@ -107,7 +110,6 @@ impl ShellLauncher {
             cwd: starting_directory.to_path_buf(),
             writer,
             screen,
-            last_command: None,
             busy: None,
             command_root,
             active_shell_file,
@@ -130,7 +132,7 @@ pub(super) fn apply_startup(command: &mut CommandBuilder, startup: ShellStartup)
 pub(super) fn wait_for_shell_startup(
     child: &mut Box<dyn Child + Send + Sync>,
     ready_file: &Path,
-    screen: &Arc<Mutex<vt100::Parser>>,
+    screen: &Arc<Mutex<TerminalParser>>,
     timeout: Duration,
 ) -> Result<()> {
     if let Some(status) = child.try_wait().context("failed to poll shell startup")? {
@@ -154,7 +156,7 @@ pub(super) fn wait_for_shell_startup(
         startup_screen(screen)?
     );
 }
-fn startup_screen(screen: &Arc<Mutex<vt100::Parser>>) -> Result<String> {
+fn startup_screen(screen: &Arc<Mutex<TerminalParser>>) -> Result<String> {
     let contents = lock_mutex(screen, "screen")?.screen().contents();
     Ok(contents.trim().to_owned())
 }

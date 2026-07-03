@@ -1,10 +1,24 @@
+<SHELL>
 <ALIVE>
 true
 </ALIVE>
+<TITLE>
+FuncTerm
+</TITLE>
+<TYPE>
+PowerShell
+</TYPE>
 <CWD>
 F:\workspace\FuncTerm
 </CWD>
+<IDLE>
+true
+</IDLE>
+</SHELL>
 <SCREEN>
 PowerShell 7.5.0
 PS F:\workspace\FuncTerm>
 </SCREEN>
+<NOTE>
+
+</NOTE>

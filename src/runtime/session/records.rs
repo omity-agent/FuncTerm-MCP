@@ -1,12 +1,11 @@
 use crate::contract::{
     COMMAND_PAYLOAD_FILE, COMMAND_SCRIPT_FILE, DONE_FILE, STARTED_FILE, STDERR_FILE, STDOUT_FILE,
 };
-use crate::runtime::protocol::ViewResult;
+use crate::runtime::protocol::{CommandSnapshot, CommandView};
 mod wait;
 use anyhow::{Context as _, Result, bail};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::io::Write as _;
 use std::path::{Path, PathBuf};
 pub(super) use wait::{wait_for_done, wait_for_path, wait_for_start_or_done};
 #[derive(Clone)]
@@ -51,29 +50,29 @@ pub(super) fn create_record(
 }
 pub(super) fn read_command_result(
     record: &CommandRecord,
-    fallback_cwd: &Path,
-) -> Result<ViewResult> {
+    time_consumption: String,
+) -> Result<CommandSnapshot> {
     let stdout = read_optional(&record.stdout)?;
     let stderr = read_optional(&record.stderr)?;
     let done = read_done(&record.done)?;
     let exit_code = done.as_ref().map(|file| file.exit_code);
-    let cwd = done.as_ref().map_or_else(
-        || crate::text::path_text(fallback_cwd, "cwd"),
-        |file| Ok(file.cwd.clone()),
-    )?;
-    Ok(ViewResult::Command {
-        cwd,
-        finished: done.is_some(),
-        stdout,
-        stderr,
-        exit_code,
+    let note = command_note(&stdout, &stderr, "");
+    Ok(CommandSnapshot {
+        command: CommandView {
+            stdout,
+            stderr,
+            exit_code,
+            time_consumption,
+            finished: done.is_some(),
+        },
+        note,
     })
 }
 pub(super) fn read_and_clear_command_result(
     record: &CommandRecord,
-    fallback_cwd: &Path,
-) -> Result<ViewResult> {
-    let result = read_command_result(record, fallback_cwd)?;
+    time_consumption: String,
+) -> Result<CommandSnapshot> {
+    let result = read_command_result(record, time_consumption)?;
     if let Err(error) = remove_record_directory(record) {
         eprintln!("{error:#}");
     }
@@ -94,7 +93,7 @@ pub(super) fn remove_record_directory(record: &CommandRecord) -> Result<()> {
 pub(super) fn write_failed_result(
     command_id: &str,
     record: &CommandRecord,
-    message: &str,
+    _message: &str,
 ) -> Result<()> {
     if record.done.exists() {
         return Ok(());
@@ -103,13 +102,6 @@ pub(super) fn write_failed_result(
         fs::create_dir_all(parent)
             .with_context(|| format!("failed to create command directory {}", parent.display()))?;
     }
-    let mut stderr = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&record.stderr)
-        .with_context(|| format!("failed to open {}", record.stderr.display()))?;
-    writeln!(stderr, "{message}")
-        .with_context(|| format!("failed to write {}", record.stderr.display()))?;
     let done = FailedDoneFile {
         command_id,
         exit_code: 1_i32,
@@ -128,6 +120,16 @@ pub(super) fn write_failed_result(
         }
         Err(error) => Err(error).context("failed to publish failed done file"),
     }
+}
+pub(super) fn command_note(stdout: &str, stderr: &str, extra: &str) -> String {
+    let mut lines = Vec::new();
+    if !extra.is_empty() {
+        lines.push(extra.to_owned());
+    }
+    if stdout.is_empty() && stderr.is_empty() {
+        lines.push("No stdout or stderr content was captured.".to_owned());
+    }
+    lines.join("\n")
 }
 fn read_optional(path: &Path) -> Result<String> {
     if path.exists() {

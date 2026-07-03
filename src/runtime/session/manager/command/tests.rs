@@ -1,6 +1,7 @@
 use crate::runtime::session::manager::session::{
     KeyboardWriteFailure, ShellSession, ShellSessionParts,
 };
+use crate::runtime::session::support::{TerminalCallbacks, TerminalParser};
 use crate::shell::ShellChoice;
 use alloc::sync::Arc;
 use anyhow::Error;
@@ -86,8 +87,12 @@ fn test_shell(busy: Option<&str>) -> ShellSession {
         choice: ShellChoice::PowerShell,
         cwd: std::env::temp_dir(),
         writer: Arc::new(Mutex::new(writer)),
-        screen: Arc::new(Mutex::new(vt100::Parser::new(30, 120, 0))),
-        last_command: None,
+        screen: Arc::new(Mutex::new(TerminalParser::new_with_callbacks(
+            30,
+            120,
+            0,
+            TerminalCallbacks::default(),
+        ))),
         busy: busy.map(str::to_owned),
         command_root: std::env::temp_dir().join("functerm-test-commands"),
         active_shell_file: std::env::temp_dir()

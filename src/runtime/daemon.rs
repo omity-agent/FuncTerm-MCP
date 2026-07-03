@@ -93,8 +93,8 @@ fn dispatch(manager: &Arc<Manager>, request: Request) -> Result<Payload> {
             Ok(Payload::TabCreated { tab_id })
         }
         Request::ManualWrite { tab_id, bytes } => {
-            let screen = manager.manual_write(&tab_id, &bytes)?;
-            Ok(Payload::KeyboardWritten { screen })
+            let view = manager.manual_write(&tab_id, &bytes)?;
+            Ok(Payload::KeyboardWritten { view })
         }
         Request::SendCommand {
             tab_id,

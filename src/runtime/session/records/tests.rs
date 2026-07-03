@@ -35,19 +35,14 @@ fn failed_result_closes_command_lifecycle() {
     let record = create_record(&root, "command-failed", Path::new("F:\\cwd")).unwrap();
     write_failed_result("command-failed", &record, "shell exited").unwrap();
     assert!(wait_for_done(&record.done, Duration::from_millis(0)).unwrap());
-    let result = read_command_result(&record, Path::new("F:\\fallback")).unwrap();
-    let crate::runtime::protocol::ViewResult::Command {
-        finished,
-        stderr,
-        exit_code,
-        ..
-    } = result
-    else {
-        panic!("failed command should render as command output");
-    };
-    assert!(finished);
-    assert_eq!(exit_code, Some(1_i32));
-    assert!(stderr.contains("shell exited"));
+    let result = read_command_result(&record, "1ms".to_owned()).unwrap();
+    assert!(result.command.finished);
+    assert_eq!(result.command.exit_code, Some(1_i32));
+    assert!(
+        result
+            .note
+            .contains("No stdout or stderr content was captured.")
+    );
     std::fs::remove_dir_all(&root).unwrap();
 }
 #[test]
@@ -60,19 +55,10 @@ fn read_and_clear_keeps_result_while_removing_record_files() {
     std::fs::write(&record.stdout, "kept stdout").unwrap();
     std::fs::write(&record.stderr, "kept stderr").unwrap();
     write_failed_result("command-clear", &record, "done").unwrap();
-    let result = read_and_clear_command_result(&record, Path::new("F:\\fallback")).unwrap();
-    let crate::runtime::protocol::ViewResult::Command {
-        stdout,
-        stderr,
-        finished,
-        ..
-    } = result
-    else {
-        panic!("record should render as command output");
-    };
-    assert!(finished);
-    assert_eq!(stdout, "kept stdout");
-    assert!(stderr.contains("kept stderr"));
+    let result = read_and_clear_command_result(&record, "1ms".to_owned()).unwrap();
+    assert!(result.command.finished);
+    assert_eq!(result.command.stdout, "kept stdout");
+    assert!(result.command.stderr.contains("kept stderr"));
     assert!(!record.directory.exists());
     let _clear_cleanup = std::fs::remove_dir_all(&root);
 }

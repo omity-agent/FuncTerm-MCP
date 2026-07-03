@@ -1,6 +1,6 @@
 use super::process_tree;
 use crate::runtime::session::records::{CommandRecord, read_done};
-use crate::runtime::session::support::lock_mutex;
+use crate::runtime::session::support::{TerminalParser, lock_mutex, screen_title};
 use crate::shell::{ShellChoice, shims};
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
@@ -14,8 +14,7 @@ pub(super) struct ShellSession {
     choice: Mutex<ShellChoice>,
     cwd: Mutex<PathBuf>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
-    screen: Arc<Mutex<vt100::Parser>>,
-    last_command: Mutex<Option<String>>,
+    screen: Arc<Mutex<TerminalParser>>,
     busy: Mutex<Option<String>>,
     command_root: PathBuf,
     active_shell_file: PathBuf,
@@ -33,8 +32,7 @@ pub(super) struct ShellSessionParts {
     pub(super) choice: ShellChoice,
     pub(super) cwd: PathBuf,
     pub(super) writer: Arc<Mutex<Box<dyn Write + Send>>>,
-    pub(super) screen: Arc<Mutex<vt100::Parser>>,
-    pub(super) last_command: Option<String>,
+    pub(super) screen: Arc<Mutex<TerminalParser>>,
     pub(super) busy: Option<String>,
     pub(super) command_root: PathBuf,
     pub(super) active_shell_file: PathBuf,
@@ -50,7 +48,6 @@ impl ShellSession {
             cwd: Mutex::new(parts.cwd),
             writer: parts.writer,
             screen: parts.screen,
-            last_command: Mutex::new(parts.last_command),
             busy: Mutex::new(parts.busy),
             command_root: parts.command_root,
             active_shell_file: parts.active_shell_file,
@@ -70,15 +67,12 @@ impl ShellSession {
         *lock_mutex(&self.cwd, "cwd")? = cwd;
         Ok(())
     }
-    pub(super) fn set_last_command(&self, command: String) -> Result<()> {
-        *lock_mutex(&self.last_command, "last command")? = Some(command);
-        Ok(())
-    }
-    pub(super) fn last_command(&self) -> Result<Option<String>> {
-        Ok(lock_mutex(&self.last_command, "last command")?.clone())
-    }
     pub(super) fn screen_contents(&self) -> Result<String> {
         Ok(lock_mutex(&self.screen, "screen")?.screen().contents())
+    }
+    pub(super) fn screen_title(&self) -> Result<String> {
+        let parser = lock_mutex(&self.screen, "screen")?;
+        screen_title(&parser)
     }
     pub(super) fn current_choice(&self) -> Result<ShellChoice> {
         Ok(*lock_mutex(&self.choice, "choice")?)

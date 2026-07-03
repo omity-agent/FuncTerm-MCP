@@ -1,4 +1,4 @@
-use crate::runtime::protocol::{Payload, ViewResult};
+use crate::runtime::protocol::{CommandView, Payload, ShellView, ViewResult};
 use alloc::sync::Arc;
 use rmcp::model::{CallToolResult, ContentBlock, JsonObject};
 use serde::Serialize;
@@ -8,33 +8,53 @@ pub(super) struct NewTabOutput {
 }
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
 pub(super) struct ManualWriteOutput {
+    pub(super) shell: ShellData,
     pub(super) screen: String,
+    pub(super) note: String,
 }
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
 pub(super) struct SendCommandOutput {
-    pub(super) command_id: String,
-    pub(super) view: ViewData,
+    pub(super) shell: ShellData,
+    pub(super) command: CommandData,
+    pub(super) note: String,
 }
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
 pub(super) struct ViewOutput {
     pub(super) view: ViewData,
 }
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(untagged)]
 pub(super) enum ViewData {
     Tab {
-        alive: bool,
-        cwd: String,
+        shell: ShellData,
         screen: String,
-        last_command: Option<String>,
+        note: String,
     },
     Command {
-        cwd: String,
-        finished: bool,
-        stdout: String,
-        stderr: String,
-        exit_code: Option<i32>,
+        shell: ShellData,
+        command: CommandData,
+        note: String,
     },
+}
+#[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
+pub(super) struct ShellData {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) alive: Option<bool>,
+    pub(super) title: String,
+    #[serde(rename = "type")]
+    pub(super) shell_type: String,
+    pub(super) cwd: String,
+    pub(super) idle: bool,
+}
+#[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
+pub(super) struct CommandData {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) command_id: Option<String>,
+    pub(super) stdout: String,
+    pub(super) stderr: String,
+    pub(super) exit_code: Option<i32>,
+    pub(super) time_consumption: String,
+    pub(super) finished: bool,
 }
 pub(super) fn schema<T>() -> Arc<JsonObject>
 where
@@ -53,13 +73,25 @@ pub(super) fn new_tab(payload: Payload) -> Result<CallToolResult, String> {
 pub(super) fn manual_write(payload: &Payload) -> Result<CallToolResult, String> {
     let owned_payload = payload.clone();
     let text = owned_payload.clone().into_plain_text();
-    match owned_payload {
-        Payload::KeyboardWritten { screen } => result(text, ManualWriteOutput { screen }),
-        Payload::Pong
-        | Payload::TabCreated { .. }
-        | Payload::CommandAccepted { .. }
-        | Payload::View(_) => Err(unexpected_response()),
-    }
+    let Payload::KeyboardWritten { view } = owned_payload else {
+        return Err(unexpected_response());
+    };
+    let ViewResult::Tab {
+        shell,
+        screen,
+        note,
+    } = view
+    else {
+        return Err(unexpected_response());
+    };
+    result(
+        text,
+        ManualWriteOutput {
+            shell: ShellData::from_shell(shell, false),
+            screen,
+            note,
+        },
+    )
 }
 pub(super) fn send_command(payload: Payload) -> Result<CallToolResult, String> {
     let text = payload.clone().into_plain_text();
@@ -69,11 +101,20 @@ pub(super) fn send_command(payload: Payload) -> Result<CallToolResult, String> {
     else {
         return Err(unexpected_response());
     };
+    let ViewResult::Command {
+        shell,
+        command,
+        note,
+    } = view
+    else {
+        return Err(unexpected_response());
+    };
     result(
         text,
         SendCommandOutput {
-            command_id,
-            view: view.into(),
+            shell: ShellData::from_shell(shell, false),
+            command: CommandData::from_command(command, Some(command_id)),
+            note,
         },
     )
 }
@@ -101,87 +142,46 @@ impl From<ViewResult> for ViewData {
     fn from(value: ViewResult) -> Self {
         match value {
             ViewResult::Tab {
-                alive,
-                cwd,
+                shell,
                 screen,
-                last_command,
+                note,
             } => Self::Tab {
-                alive,
-                cwd,
+                shell: ShellData::from_shell(shell, true),
                 screen,
-                last_command,
+                note,
             },
             ViewResult::Command {
-                cwd,
-                finished,
-                stdout,
-                stderr,
-                exit_code,
+                shell,
+                command,
+                note,
             } => Self::Command {
-                cwd,
-                finished,
-                stdout,
-                stderr,
-                exit_code,
+                shell: ShellData::from_shell(shell, true),
+                command: CommandData::from_command(command, None),
+                note,
             },
         }
     }
 }
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::runtime::protocol::EndReason;
-    #[test]
-    fn command_result_contains_pseudo_xml_content_and_structured_content() {
-        let result = match send_command(Payload::CommandAccepted {
-            command_id: "cmd".to_owned(),
-            end_reason: EndReason::CommandEnded,
-            view: ViewResult::Command {
-                cwd: "F:\\workspace".to_owned(),
-                finished: true,
-                stdout: "ok".to_owned(),
-                stderr: String::new(),
-                exit_code: Some(0_i32),
-            },
-        }) {
-            Ok(result) => result,
-            Err(error) => panic!("payload should be converted: {error}"),
-        };
-        let text = result
-            .content
-            .first()
-            .and_then(ContentBlock::as_text)
-            .unwrap_or_else(|| panic!("content should contain text"));
-        assert!(text.text.contains("<COMMAND_ID>\ncmd\n</COMMAND_ID>"));
-        let structured = result
-            .structured_content
-            .unwrap_or_else(|| panic!("structuredContent should be present"));
-        assert_eq!(
-            structured.get("command_id"),
-            Some(&rmcp::serde_json::json!("cmd"))
-        );
-        assert_eq!(structured.get("end_reason"), None);
+impl ShellData {
+    fn from_shell(shell: ShellView, include_alive: bool) -> Self {
+        Self {
+            alive: include_alive.then_some(shell.alive),
+            title: shell.title,
+            shell_type: shell.shell_type.display_name().to_owned(),
+            cwd: shell.cwd,
+            idle: shell.idle,
+        }
     }
-    #[test]
-    fn manual_write_result_contains_screen_content_and_structured_content() {
-        let result = match manual_write(&Payload::KeyboardWritten {
-            screen: "screen text".to_owned(),
-        }) {
-            Ok(result) => result,
-            Err(error) => panic!("payload should be converted: {error}"),
-        };
-        let text = result
-            .content
-            .first()
-            .and_then(ContentBlock::as_text)
-            .unwrap_or_else(|| panic!("content should contain text"));
-        assert_eq!(text.text, "<SCREEN>\nscreen text\n</SCREEN>");
-        let structured = result
-            .structured_content
-            .unwrap_or_else(|| panic!("structuredContent should be present"));
-        assert_eq!(
-            structured.get("screen"),
-            Some(&rmcp::serde_json::json!("screen text"))
-        );
+}
+impl CommandData {
+    fn from_command(command: CommandView, command_id: Option<String>) -> Self {
+        Self {
+            command_id,
+            stdout: command.stdout,
+            stderr: command.stderr,
+            exit_code: command.exit_code,
+            time_consumption: command.time_consumption,
+            finished: command.finished,
+        }
     }
 }

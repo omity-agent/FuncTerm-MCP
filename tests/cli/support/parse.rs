@@ -12,14 +12,6 @@ pub(crate) struct CommandResult {
 pub(crate) struct TabView {
     pub(crate) alive: bool,
     pub(crate) cwd: String,
-    #[cfg_attr(
-        not(windows),
-        expect(
-            dead_code,
-            reason = "last_command assertions are Windows-only CLI coverage"
-        )
-    )]
-    pub(crate) last_command: String,
     pub(crate) screen: String,
 }
 pub(crate) fn parse_command_result(output: &Output) -> CommandResult {
@@ -40,7 +32,6 @@ pub(crate) fn parse_tab_view(output: &Output) -> TabView {
     TabView {
         alive: element(&text, "ALIVE").parse().unwrap(),
         cwd: element(&text, "CWD"),
-        last_command: element(&text, "LAST_COMMAND"),
         screen: element(&text, "SCREEN"),
     }
 }
