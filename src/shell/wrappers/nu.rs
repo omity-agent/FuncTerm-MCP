@@ -41,6 +41,17 @@ const TEMPLATE: &str = r#"def @FUNCTION@ [command_id: string, directory: path, w
     $env.@COMMAND_ID_ENV@ = $command_id
     $env.@COMMAND_DIR_ENV@ = ($directory | path expand)
     let state = try {
+        let shim_dir = $env.FUNCTERM_SHIM_DIR?
+        if not ($shim_dir | is-empty) {
+            let helper = $env.@HELPER_ENV@?
+            if ($helper | is-empty) {
+                error make {msg: '@HELPER_ENV@ is not set'}
+            }
+            ^$helper internal-ensure-shims --directory $shim_dir
+            if $env.LAST_EXIT_CODE != 0 {
+                error make {msg: 'failed to ensure FuncTerm shell shims'}
+            }
+        }
         let payload = (open --raw $payload_file)
         let script = ($payload | decode base64 | decode)
         rm --force $payload_file

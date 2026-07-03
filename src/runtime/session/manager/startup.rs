@@ -19,7 +19,6 @@ pub(super) struct ShellLauncher {
     settings: Settings,
     command_root: std::path::PathBuf,
     shim_dir: std::path::PathBuf,
-    shim_lock: Mutex<()>,
 }
 impl ShellLauncher {
     pub(super) fn new(settings: Settings) -> Result<Self> {
@@ -36,7 +35,6 @@ impl ShellLauncher {
             settings,
             command_root,
             shim_dir,
-            shim_lock: Mutex::new(()),
         })
     }
     pub(super) fn launch(
@@ -48,17 +46,12 @@ impl ShellLauncher {
         let command_root = self.command_root.join(tab_id);
         std::fs::create_dir_all(&command_root).context("failed to create command root")?;
         let mut startup = starting_shell.startup(starting_directory, &command_root)?;
-        let shim_guard = self
-            .shim_lock
-            .lock()
-            .map_err(|error| anyhow::anyhow!("shell shim mutex poisoned: {error}"))?;
         startup.env.extend(shims::environment(
             &self.settings,
             &command_root,
             &self.shim_dir,
             starting_shell,
         )?);
-        drop(shim_guard);
         let pair = native_pty_system()
             .openpty(PtySize {
                 rows: self.settings.terminal_rows,

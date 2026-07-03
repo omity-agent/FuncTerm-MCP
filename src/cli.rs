@@ -49,10 +49,18 @@ enum CliCommand {
         #[arg(long)]
         directory: PathBuf,
     },
+    #[command(hide = true)]
+    InternalEnsureShims {
+        #[arg(long)]
+        directory: PathBuf,
+    },
 }
 pub(crate) async fn run() -> Result<()> {
     let args = Args::parse();
     match args.command.unwrap_or(CliCommand::Mcp) {
+        CliCommand::InternalEnsureShims { directory } => {
+            crate::shell::shims::ensure_directory(&directory)
+        }
         CliCommand::InternalWriteDone {
             command_id,
             exit_code,

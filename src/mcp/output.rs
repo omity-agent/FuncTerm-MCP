@@ -19,12 +19,8 @@ pub(super) struct SendCommandOutput {
     pub(super) note: String,
 }
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
-pub(super) struct ViewOutput {
-    pub(super) view: ViewData,
-}
-#[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
 #[serde(untagged)]
-pub(super) enum ViewData {
+pub(super) enum ViewOutput {
     Tab {
         shell: ShellData,
         screen: String,
@@ -123,7 +119,7 @@ pub(super) fn view(payload: Payload) -> Result<CallToolResult, String> {
     let Payload::View(view) = payload else {
         return Err(unexpected_response());
     };
-    result(text, ViewOutput { view: view.into() })
+    result(text, ViewOutput::from(view))
 }
 fn result<T>(content: String, structured_content: T) -> Result<CallToolResult, String>
 where
@@ -138,7 +134,7 @@ where
 fn unexpected_response() -> String {
     "daemon returned an unexpected response".to_owned()
 }
-impl From<ViewResult> for ViewData {
+impl From<ViewResult> for ViewOutput {
     fn from(value: ViewResult) -> Self {
         match value {
             ViewResult::Tab {

@@ -15,13 +15,7 @@ pub(crate) fn environment(
     shim_dir: &Path,
     current_shell: ShellChoice,
 ) -> Result<Vec<(String, String)>> {
-    fs::create_dir_all(shim_dir).context("failed to create shell shim directory")?;
     let current_exe = std::env::current_exe().context("failed to resolve current executable")?;
-    for shell in ShellChoice::all() {
-        for alias in shell.executable_aliases() {
-            create_shim_alias(&current_exe, &shim_dir.join(alias), alias)?;
-        }
-    }
     let mut env = vec![
         (
             "PATH".to_owned(),
@@ -72,13 +66,37 @@ pub(crate) fn environment(
     }
     Ok(env)
 }
+pub(crate) fn ensure_directory(shim_dir: &Path) -> Result<()> {
+    fs::create_dir_all(shim_dir).context("failed to create shell shim directory")?;
+    let current_exe = std::env::current_exe().context("failed to resolve current executable")?;
+    for shell in ShellChoice::all() {
+        for alias in shell.executable_aliases() {
+            create_shim_alias(&current_exe, &shim_dir.join(alias), alias)?;
+        }
+    }
+    Ok(())
+}
 fn create_shim_alias(current_exe: &Path, alias_path: &Path, alias: &str) -> Result<()> {
     if alias_path.exists() {
         return Ok(());
     }
-    fs::copy(current_exe, alias_path)
-        .with_context(|| format!("failed to create shell shim {alias}"))?;
-    Ok(())
+    let temp_path =
+        alias_path.with_extension(format!("{}.{}.tmp", std::process::id(), nanoid::nanoid!()));
+    fs::copy(current_exe, &temp_path)
+        .with_context(|| format!("failed to stage shell shim {alias}"))?;
+    match fs::rename(&temp_path, alias_path) {
+        Ok(()) => Ok(()),
+        Err(_error) if alias_path.exists() => {
+            fs::remove_file(&temp_path).with_context(|| {
+                format!(
+                    "failed to remove obsolete shell shim {}",
+                    temp_path.display()
+                )
+            })?;
+            Ok(())
+        }
+        Err(error) => Err(error).with_context(|| format!("failed to create shell shim {alias}")),
+    }
 }
 pub(crate) fn write_active_shell(path: &Path, shell: ShellChoice) -> Result<()> {
     let temp_path = active_shell_temp_path(path);
@@ -128,4 +146,49 @@ fn replace_file(source: &Path, destination: &Path) -> Result<()> {
 fn wide_path(path: &Path) -> Vec<u16> {
     use std::os::windows::ffi::OsStrExt as _;
     path.as_os_str().encode_wide().chain([0]).collect()
+}
+#[cfg(test)]
+mod tests {
+    use super::{ensure_directory, environment};
+    use crate::runtime::config::Settings;
+    use crate::shell::ShellChoice;
+    fn test_settings() -> Settings {
+        Settings {
+            daemon_service_name: "functerm/test".to_owned(),
+            terminal_rows: 30,
+            terminal_cols: 120,
+            shell_startup_timeout_seconds: 10.0,
+            powershell: vec!["definitely-missing-powershell".to_owned()],
+            bash: "definitely-missing-bash".to_owned(),
+            nushell: "definitely-missing-nu".to_owned(),
+            zsh: "definitely-missing-zsh".to_owned(),
+            cmd: "definitely-missing-cmd".to_owned(),
+        }
+    }
+    #[test]
+    fn environment_does_not_create_shim_directory() {
+        let root = std::env::temp_dir().join(nanoid::nanoid!());
+        let session_root = root.join("session");
+        let shim_dir = root.join("shims");
+        let env = environment(
+            &test_settings(),
+            &session_root,
+            &shim_dir,
+            ShellChoice::PowerShell,
+        )
+        .unwrap();
+        assert!(!shim_dir.exists());
+        assert!(env.iter().any(|item| item.0 == "FUNCTERM_SHIM_DIR"));
+    }
+    #[test]
+    fn ensure_directory_creates_shell_aliases() {
+        let shim_dir = std::env::temp_dir().join(nanoid::nanoid!());
+        ensure_directory(&shim_dir).unwrap();
+        for shell in ShellChoice::all() {
+            for alias in shell.executable_aliases() {
+                assert!(shim_dir.join(alias).exists());
+            }
+        }
+        std::fs::remove_dir_all(shim_dir).unwrap();
+    }
 }

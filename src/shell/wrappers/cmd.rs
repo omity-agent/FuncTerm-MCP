@@ -43,6 +43,20 @@ set "previous_command_id=%@COMMAND_ID_ENV@%"
 set "previous_command_directory=%@COMMAND_DIR_ENV@%"
 set "@COMMAND_ID_ENV@=%command_id%"
 set "@COMMAND_DIR_ENV@=%directory%"
+if not "%FUNCTERM_SHIM_DIR%"=="" (
+    if "%@HELPER_ENV@%"=="" (
+        echo @HELPER_ENV@ is not set 1>&2
+        call :publish_done 1
+        call :restore_command_environment
+        exit /b 1
+    )
+    "%@HELPER_ENV@%" internal-ensure-shims --directory "%FUNCTERM_SHIM_DIR%"
+    if errorlevel 1 (
+        call :publish_done 1
+        call :restore_command_environment
+        exit /b 1
+    )
+)
 call :prepend_shim_path
 cd /d "%working_directory%"
 if errorlevel 1 (

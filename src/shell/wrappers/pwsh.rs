@@ -38,6 +38,18 @@ const TEMPLATE : & str = "function Set-FuncTermShimPath {
     $env:PATH = (@($env:FUNCTERM_SHIM_DIR) + @($remaining)) -join $separator
 }
 Set-FuncTermShimPath
+function Ensure-FuncTermShims {
+    if ([string]::IsNullOrEmpty($env:FUNCTERM_SHIM_DIR)) {
+        return
+    }
+    if ([string]::IsNullOrEmpty($env:@HELPER_ENV@)) {
+        throw '@HELPER_ENV@ is not set'
+    }
+    & $env:@HELPER_ENV@ internal-ensure-shims --directory $env:FUNCTERM_SHIM_DIR
+    if ($LASTEXITCODE -ne 0) {
+        throw 'failed to ensure FuncTerm shell shims'
+    }
+}
 if (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue) {
     Set-PSReadLineOption -HistorySaveStyle SaveNothing
     $setPsReadLineOption = Get-Command Set-PSReadLineOption
@@ -68,6 +80,8 @@ function @FUNCTION@ {
     $env:@COMMAND_ID_ENV@ = $CommandId
     $env:@COMMAND_DIR_ENV@ = $Directory
     try {
+        Ensure-FuncTermShims
+        Set-FuncTermShimPath
         Set-Location -LiteralPath $WorkingDirectory
         $global:LASTEXITCODE = $null
         $Payload = Get-Content -LiteralPath $payloadFile -Raw -Encoding utf8

@@ -59,6 +59,17 @@ fn command_function(dialect: PosixDialect) -> String {
 {previous_flags}
     export {command_id_env}="$command_id"
     export {command_dir_env}="$directory"
+    if ! functerm_ensure_shims; then
+        local publish_result=0
+        functerm_publish_done "$command_id" 1 "$PWD" "$native_directory" || publish_result=$?
+        functerm_restore_command_environment \
+            "$had_previous_command_id" "$previous_command_id" \
+            "$had_previous_command_directory" "$previous_command_directory"
+        if [ "$publish_result" -ne 0 ]; then
+            return "$publish_result"
+        fi
+        return 1
+    fi
     functerm_prepend_shim_path || return 1
     local script
     if ! script="$(functerm_decode_payload_file "$payload_file" "$stderr_file")"; then
@@ -141,6 +152,19 @@ functerm_publish_done() {{
         --exit-code "$exit_code" \
         --cwd "$cwd" \
         --directory "$native_directory"
+}}
+functerm_ensure_shims() {{
+{emulate}    local shim_dir="${{FUNCTERM_SHIM_DIR-}}"
+    if [ -z "$shim_dir" ]; then
+        return 0
+    fi
+    local helper="${{{helper_env}-}}"
+    if [ -z "$helper" ]; then
+        printf '%s is not set\n' "{helper_env}" >&2
+        return 1
+    fi
+    helper="$(functerm_posix_path "$helper")" || return 1
+    "$helper" internal-ensure-shims --directory "$shim_dir"
 }}"#,
         name = POSIX_COMMAND_FUNCTION,
         emulate = dialect.emulate(),
