@@ -19,18 +19,13 @@ pub(super) struct SendCommandOutput {
     pub(super) note: String,
 }
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
-#[serde(untagged)]
-pub(super) enum ViewOutput {
-    Tab {
-        shell: ShellData,
-        screen: String,
-        note: String,
-    },
-    Command {
-        shell: ShellData,
-        command: CommandData,
-        note: String,
-    },
+pub(super) struct ViewOutput {
+    pub(super) shell: ShellData,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) screen: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) command: Option<CommandData>,
+    pub(super) note: String,
 }
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
 pub(super) struct ShellData {
@@ -141,18 +136,20 @@ impl From<ViewResult> for ViewOutput {
                 shell,
                 screen,
                 note,
-            } => Self::Tab {
+            } => Self {
                 shell: ShellData::from_shell(shell, true),
-                screen,
+                screen: Some(screen),
+                command: None,
                 note,
             },
             ViewResult::Command {
                 shell,
                 command,
                 note,
-            } => Self::Command {
+            } => Self {
                 shell: ShellData::from_shell(shell, true),
-                command: CommandData::from_command(command, None),
+                screen: None,
+                command: Some(CommandData::from_command(command, None)),
                 note,
             },
         }

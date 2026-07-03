@@ -1,0 +1,36 @@
+[project]
+name = "functerm-mcp-path-latency"
+version = "0.1.0"
+description = "Concurrent MCP client path latency measurement for FuncTerm"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=2.0.0b1",
+    "pydantic>=2.14.0a1",
+    "pyyaml>=6.0.3",
+]
+
+[project.scripts]
+functerm-mcp-path-latency = "functerm_mcp_path_latency.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.15.20",
+    "zuban>=0.9.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.0,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
