@@ -1,10 +1,11 @@
-mod cmd;
+mod batch;
 mod nu;
-mod posix;
 mod posix_dialect;
+mod posix_function;
 mod posix_startup;
 mod pwsh;
-pub(super) use cmd::wrapper as cmd_wrapper;
+mod template;
+pub(super) use batch::wrapper as cmd_wrapper;
 pub(super) use nu::wrapper as nushell_wrapper;
-pub(super) use posix::{bash_wrapper, zsh_wrapper};
+pub(super) use posix_function::{bash_wrapper, zsh_wrapper};
 pub(super) use pwsh::wrapper as powershell_wrapper;

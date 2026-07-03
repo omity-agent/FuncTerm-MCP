@@ -1,11 +1,8 @@
-mod cli;
-mod commands;
-mod contract;
-mod mcp;
-mod runtime;
+mod app;
+mod engine;
+pub(crate) use app::{cli, commands, contract, path_text as text};
+pub(crate) use engine::{mcp, runtime, shim};
 pub mod shell;
-mod shim;
-mod text;
 extern crate alloc;
 use anyhow::{Context as _, Result};
 #[inline]

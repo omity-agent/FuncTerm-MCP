@@ -1,34 +1,7 @@
-use crate::contract::{
-    COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV, COMMAND_INPUT_DIRECTORY, COMMAND_OUTPUT_DIRECTORY,
-    COMMAND_PAYLOAD_FILE, COMMAND_STATE_DIRECTORY, DONE_FILE, DONE_TEMP_FILE,
-    HELPER_EXECUTABLE_ENV, POWERSHELL_COMMAND_FUNCTION, STARTED_FILE, STDERR_FILE, STDOUT_FILE,
-};
+use super::template;
+use crate::contract::POWERSHELL_COMMAND_FUNCTION;
 pub(in crate::shell) fn wrapper() -> String {
-    substitute(
-        TEMPLATE,
-        &[
-            ("@COMMAND_DIR_ENV@", COMMAND_DIRECTORY_ENV),
-            ("@COMMAND_ID_ENV@", COMMAND_ID_ENV),
-            ("@INPUT_DIR@", COMMAND_INPUT_DIRECTORY),
-            ("@DONE@", DONE_FILE),
-            ("@DONE_TEMP@", DONE_TEMP_FILE),
-            ("@FUNCTION@", POWERSHELL_COMMAND_FUNCTION),
-            ("@HELPER_ENV@", HELPER_EXECUTABLE_ENV),
-            ("@OUTPUT_DIR@", COMMAND_OUTPUT_DIRECTORY),
-            ("@PAYLOAD@", COMMAND_PAYLOAD_FILE),
-            ("@STATE_DIR@", COMMAND_STATE_DIRECTORY),
-            ("@STDERR@", STDERR_FILE),
-            ("@STARTED@", STARTED_FILE),
-            ("@STDOUT@", STDOUT_FILE),
-        ],
-    )
-}
-fn substitute(template: &str, pairs: &[(&str, &str)]) -> String {
-    let mut text = template.to_owned();
-    for &(placeholder, value) in pairs {
-        text = text.replace(placeholder, value);
-    }
-    text
+    template::render_payload_function(TEMPLATE, POWERSHELL_COMMAND_FUNCTION)
 }
 const TEMPLATE : & str = "function Set-FuncTermShimPath {
     if ([string]::IsNullOrEmpty($env:FUNCTERM_SHIM_DIR)) {
@@ -81,7 +54,6 @@ function @FUNCTION@ {
     $startedFile = Join-Path $stateDir '@STARTED@'
     $payloadFile = Join-Path $inputDir '@PAYLOAD@'
     $doneFile = Join-Path $stateDir '@DONE@'
-    $doneTempFile = Join-Path $stateDir '@DONE_TEMP@'
     $previousCommandId = $env:@COMMAND_ID_ENV@
     $previousCommandDirectory = $env:@COMMAND_DIR_ENV@
     $env:@COMMAND_ID_ENV@ = $CommandId

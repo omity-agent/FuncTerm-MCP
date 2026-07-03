@@ -1,7 +1,7 @@
-mod cmd;
+mod command_prompt;
 mod nushell;
-mod posix;
 mod powershell;
+mod unix_shell;
 use super::ShellChoice;
 use crate::runtime::config::Settings;
 use alloc::borrow::Cow;
@@ -37,10 +37,10 @@ pub(crate) trait ShellDriver {
     fn interactive_arguments(&self, arguments: &[OsString]) -> bool;
 }
 static POWERSHELL: powershell::PowerShellDriver = powershell::PowerShellDriver;
-static BASH: posix::PosixDriver = posix::PosixDriver::bash();
+static BASH: unix_shell::PosixDriver = unix_shell::PosixDriver::bash();
 static NUSHELL: nushell::NuShellDriver = nushell::NuShellDriver;
-static ZSH: posix::PosixDriver = posix::PosixDriver::zsh();
-static CMD: cmd::CmdDriver = cmd::CmdDriver;
+static ZSH: unix_shell::PosixDriver = unix_shell::PosixDriver::zsh();
+static CMD: command_prompt::CmdDriver = command_prompt::CmdDriver;
 pub(crate) fn driver(choice: ShellChoice) -> &'static dyn ShellDriver {
     match choice {
         ShellChoice::PowerShell => &POWERSHELL,

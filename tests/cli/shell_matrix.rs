@@ -1,5 +1,5 @@
 #[cfg(test)]
-#[path = "shell_matrix/support.rs"]
+#[path = "shell_matrix/matrix_support.rs"]
 mod matrix;
 #[cfg(test)]
 mod tests {
