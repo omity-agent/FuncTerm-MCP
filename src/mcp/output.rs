@@ -1,4 +1,4 @@
-use crate::runtime::protocol::{EndReason, Payload, ViewResult};
+use crate::runtime::protocol::{Payload, ViewResult};
 use alloc::sync::Arc;
 use rmcp::model::{CallToolResult, ContentBlock, JsonObject};
 use serde::Serialize;
@@ -13,19 +13,11 @@ pub(super) struct ManualWriteOutput {
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
 pub(super) struct SendCommandOutput {
     pub(super) command_id: String,
-    pub(super) end_reason: OutputEndReason,
     pub(super) view: ViewData,
 }
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
 pub(super) struct ViewOutput {
     pub(super) view: ViewData,
-}
-#[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub(super) enum OutputEndReason {
-    CommandEnded,
-    WaitTimeout,
-    CommandFailed,
 }
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -71,9 +63,7 @@ pub(super) fn manual_write(payload: &Payload) -> Result<CallToolResult, String> 
 pub(super) fn send_command(payload: Payload) -> Result<CallToolResult, String> {
     let text = payload.clone().into_plain_text();
     let Payload::CommandAccepted {
-        command_id,
-        end_reason,
-        view,
+        command_id, view, ..
     } = payload
     else {
         return Err(unexpected_response());
@@ -82,7 +72,6 @@ pub(super) fn send_command(payload: Payload) -> Result<CallToolResult, String> {
         text,
         SendCommandOutput {
             command_id,
-            end_reason: end_reason.into(),
             view: view.into(),
         },
     )
@@ -106,15 +95,6 @@ where
 }
 fn unexpected_response() -> String {
     "daemon returned an unexpected response".to_owned()
-}
-impl From<EndReason> for OutputEndReason {
-    fn from(value: EndReason) -> Self {
-        match value {
-            EndReason::CommandEnded => Self::CommandEnded,
-            EndReason::WaitTimeout => Self::WaitTimeout,
-            EndReason::CommandFailed => Self::CommandFailed,
-        }
-    }
 }
 impl From<ViewResult> for ViewData {
     fn from(value: ViewResult) -> Self {
@@ -149,6 +129,7 @@ impl From<ViewResult> for ViewData {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::runtime::protocol::EndReason;
     #[test]
     fn command_result_contains_pseudo_xml_content_and_structured_content() {
         let result = match send_command(Payload::CommandAccepted {
@@ -178,9 +159,6 @@ mod tests {
             structured.get("command_id"),
             Some(&rmcp::serde_json::json!("cmd"))
         );
-        assert_eq!(
-            structured.get("end_reason"),
-            Some(&rmcp::serde_json::json!("command_ended"))
-        );
+        assert_eq!(structured.get("end_reason"), None);
     }
 }
