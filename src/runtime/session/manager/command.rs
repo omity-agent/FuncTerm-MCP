@@ -16,7 +16,7 @@ pub(super) struct StartedCommand {
     session: Arc<super::session::ShellSession>,
 }
 impl Manager {
-    pub(crate) fn manual_write(&self, tab_id: &str, bytes: &[u8]) -> Result<()> {
+    pub(crate) fn manual_write(&self, tab_id: &str, bytes: &[u8]) -> Result<String> {
         self.tabs.manual_write(tab_id, bytes)
     }
     pub(crate) fn send_command(
@@ -32,7 +32,7 @@ impl Manager {
     }
 }
 impl Tab {
-    pub(super) fn manual_write(&self, bytes: &[u8]) -> Result<()> {
+    pub(super) fn manual_write(&self, bytes: &[u8]) -> Result<String> {
         let session = self.live_session()?;
         if !session.is_alive()? {
             self.close_session(&session)?;
@@ -40,7 +40,7 @@ impl Tab {
         }
         session.refresh_choice()?;
         match session.write_keyboard_for_running_command(bytes) {
-            Ok(()) => Ok(()),
+            Ok(()) => Ok(self.remember(&session)?.into_screen()),
             Err(KeyboardWriteFailure::IdlePrompt) => {
                 anyhow::bail!(
                     "manual_write is unavailable while the prompt is idle; use send_command for prompt commands"

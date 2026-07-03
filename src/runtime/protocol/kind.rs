@@ -25,7 +25,7 @@ impl Payload {
         match *self {
             Self::Pong => PayloadKind::Pong,
             Self::TabCreated { .. } => PayloadKind::TabCreated,
-            Self::KeyboardWritten => PayloadKind::KeyboardWritten,
+            Self::KeyboardWritten { .. } => PayloadKind::KeyboardWritten,
             Self::CommandAccepted { .. } => PayloadKind::CommandAccepted,
             Self::View(_) => PayloadKind::View,
         }

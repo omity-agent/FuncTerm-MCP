@@ -106,6 +106,10 @@ mod tests {
             String::from_utf8_lossy(&written.stdout),
             String::from_utf8_lossy(&written.stderr)
         );
+        assert!(
+            String::from_utf8_lossy(&written.stdout).contains("<SCREEN>\n"),
+            "manual_write should return a screen snapshot"
+        );
         let completed = wait_for_command_finished(&command_id);
         assert!(completed.stdout.contains(marker));
     }

@@ -34,7 +34,7 @@ impl TabDirectory {
         lock_mutex(&self.tabs, "tab")?.insert(tab.id().to_owned(), Arc::new(tab));
         Ok(())
     }
-    pub(super) fn manual_write(&self, tab_id: &str, bytes: &[u8]) -> Result<()> {
+    pub(super) fn manual_write(&self, tab_id: &str, bytes: &[u8]) -> Result<String> {
         self.require_tab(tab_id)?.manual_write(bytes)
     }
     pub(super) fn send_command(
@@ -176,6 +176,9 @@ impl TabSnapshot {
             screen: self.screen,
             last_command: self.last_command,
         }
+    }
+    pub(super) fn into_screen(self) -> String {
+        self.screen
     }
 }
 fn random_id_suffix() -> String {

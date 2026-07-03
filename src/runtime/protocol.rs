@@ -36,7 +36,9 @@ pub(crate) enum Payload {
     TabCreated {
         tab_id: String,
     },
-    KeyboardWritten,
+    KeyboardWritten {
+        screen: String,
+    },
     CommandAccepted {
         command_id: String,
         end_reason: EndReason,
@@ -71,7 +73,7 @@ impl Payload {
         match self {
             Self::Pong => element("PONG", ""),
             Self::TabCreated { tab_id } => element("TAB_ID", &tab_id),
-            Self::KeyboardWritten => element("OK", ""),
+            Self::KeyboardWritten { screen } => element("SCREEN", &screen),
             Self::CommandAccepted {
                 command_id, view, ..
             } => {
@@ -137,7 +139,7 @@ pub(crate) fn waiting_from_seconds(seconds: f64) -> Result<Duration> {
 }
 #[cfg(test)]
 mod tests {
-    use super::ViewResult;
+    use super::{Payload, ViewResult};
     #[doc = " 该程序输出的主要消费者为 LLM，如果输出中存在 JSON/XML 转义会增加认知负荷和无意义的上下文占用，使用伪结构化文本可读性更高。"]
     #[test]
     fn command_output_uses_uppercase_tags_without_escaping_content() {
@@ -163,5 +165,13 @@ mod tests {
         }
         .into_plain_text();
         assert!(text.contains("<LAST_COMMAND>\nWrite-Output 'ok'\n</LAST_COMMAND>"));
+    }
+    #[test]
+    fn manual_write_output_reports_screen() {
+        let text = Payload::KeyboardWritten {
+            screen: "running screen".to_owned(),
+        }
+        .into_plain_text();
+        assert_eq!(text, "<SCREEN>\nrunning screen\n</SCREEN>");
     }
 }

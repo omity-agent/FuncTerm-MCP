@@ -8,7 +8,7 @@ pub(super) struct NewTabOutput {
 }
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
 pub(super) struct ManualWriteOutput {
-    pub(super) ok: bool,
+    pub(super) screen: String,
 }
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
 pub(super) struct SendCommandOutput {
@@ -51,13 +51,14 @@ pub(super) fn new_tab(payload: Payload) -> Result<CallToolResult, String> {
     result(text, NewTabOutput { tab_id })
 }
 pub(super) fn manual_write(payload: &Payload) -> Result<CallToolResult, String> {
-    let text = payload.clone().into_plain_text();
-    match payload {
-        &Payload::KeyboardWritten => result(text, ManualWriteOutput { ok: true }),
-        &Payload::Pong
-        | &Payload::TabCreated { .. }
-        | &Payload::CommandAccepted { .. }
-        | &Payload::View(_) => Err(unexpected_response()),
+    let owned_payload = payload.clone();
+    let text = owned_payload.clone().into_plain_text();
+    match owned_payload {
+        Payload::KeyboardWritten { screen } => result(text, ManualWriteOutput { screen }),
+        Payload::Pong
+        | Payload::TabCreated { .. }
+        | Payload::CommandAccepted { .. }
+        | Payload::View(_) => Err(unexpected_response()),
     }
 }
 pub(super) fn send_command(payload: Payload) -> Result<CallToolResult, String> {
@@ -160,5 +161,27 @@ mod tests {
             Some(&rmcp::serde_json::json!("cmd"))
         );
         assert_eq!(structured.get("end_reason"), None);
+    }
+    #[test]
+    fn manual_write_result_contains_screen_content_and_structured_content() {
+        let result = match manual_write(&Payload::KeyboardWritten {
+            screen: "screen text".to_owned(),
+        }) {
+            Ok(result) => result,
+            Err(error) => panic!("payload should be converted: {error}"),
+        };
+        let text = result
+            .content
+            .first()
+            .and_then(ContentBlock::as_text)
+            .unwrap_or_else(|| panic!("content should contain text"));
+        assert_eq!(text.text, "<SCREEN>\nscreen text\n</SCREEN>");
+        let structured = result
+            .structured_content
+            .unwrap_or_else(|| panic!("structuredContent should be present"));
+        assert_eq!(
+            structured.get("screen"),
+            Some(&rmcp::serde_json::json!("screen text"))
+        );
     }
 }
