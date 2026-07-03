@@ -1,6 +1,6 @@
 use crate::contract::{
     COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV, COMMAND_PAYLOAD_FILE, DONE_FILE, DONE_TEMP_FILE,
-    POWERSHELL_COMMAND_FUNCTION, STARTED_FILE, STDERR_FILE, STDOUT_FILE,
+    HELPER_EXECUTABLE_ENV, POWERSHELL_COMMAND_FUNCTION, STARTED_FILE, STDERR_FILE, STDOUT_FILE,
 };
 pub(in crate::shell) fn wrapper() -> String {
     substitute(
@@ -11,6 +11,7 @@ pub(in crate::shell) fn wrapper() -> String {
             ("@DONE@", DONE_FILE),
             ("@DONE_TEMP@", DONE_TEMP_FILE),
             ("@FUNCTION@", POWERSHELL_COMMAND_FUNCTION),
+            ("@HELPER_ENV@", HELPER_EXECUTABLE_ENV),
             ("@PAYLOAD@", COMMAND_PAYLOAD_FILE),
             ("@STDERR@", STDERR_FILE),
             ("@STARTED@", STARTED_FILE),
@@ -92,15 +93,17 @@ function @FUNCTION@ {
         $exitCode = 1
     }
     if (-not (Test-Path -LiteralPath $doneFile)) {
-        $done = @{
-            command_id   = $CommandId
-            exit_code    = $exitCode
-            cwd          = (Get-Location).Path
-            completed_at = (Get-Date).ToUniversalTime().ToString('o')
-        } | ConvertTo-Json -Compress
         New-Item -ItemType Directory -Force -Path $Directory | Out-Null
-        Set-Content -LiteralPath $doneTempFile -Value $done -Encoding utf8
-        Move-Item -LiteralPath $doneTempFile -Destination $doneFile -Force
+        if ([string]::IsNullOrEmpty($env:@HELPER_ENV@)) {
+            [Console]::Error.WriteLine('@HELPER_ENV@ is not set')
+            $exitCode = 1
+        }
+        else {
+            & $env:@HELPER_ENV@ internal-write-done --command-id $CommandId --exit-code $exitCode --cwd (Get-Location).Path --directory $Directory
+            if ($LASTEXITCODE -ne 0) {
+                $exitCode = $LASTEXITCODE
+            }
+        }
     }
     if ($null -eq $previousCommandId) {
         Remove-Item Env:@COMMAND_ID_ENV@ -ErrorAction SilentlyContinue

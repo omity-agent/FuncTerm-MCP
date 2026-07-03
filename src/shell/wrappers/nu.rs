@@ -1,6 +1,6 @@
 use crate::contract::{
     COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV, COMMAND_PAYLOAD_FILE, DONE_FILE, DONE_TEMP_FILE,
-    POSIX_COMMAND_FUNCTION, STARTED_FILE, STDERR_FILE, STDOUT_FILE,
+    HELPER_EXECUTABLE_ENV, POSIX_COMMAND_FUNCTION, STARTED_FILE, STDERR_FILE, STDOUT_FILE,
 };
 pub(in crate::shell) fn wrapper() -> String {
     substitute(
@@ -11,6 +11,7 @@ pub(in crate::shell) fn wrapper() -> String {
             ("@DONE@", DONE_FILE),
             ("@DONE_TEMP@", DONE_TEMP_FILE),
             ("@FUNCTION@", POSIX_COMMAND_FUNCTION),
+            ("@HELPER_ENV@", HELPER_EXECUTABLE_ENV),
             ("@PAYLOAD@", COMMAND_PAYLOAD_FILE),
             ("@STDERR@", STDERR_FILE),
             ("@STARTED@", STARTED_FILE),
@@ -76,13 +77,12 @@ const TEMPLATE: &str = r#"def @FUNCTION@ [command_id: string, directory: path, w
     }
     mkdir $directory
     if not ($done_file | path exists) {
-        {
-            command_id: $command_id,
-            exit_code: $state.exit_code,
-            cwd: $state.cwd,
-            completed_at: (date now | date to-timezone UTC | format date '%+')
-        } | to json --raw | save --force $done_temp_file
-        mv --force $done_temp_file $done_file
+        let helper = $env.@HELPER_ENV@?
+        if ($helper | is-empty) {
+            print --stderr '@HELPER_ENV@ is not set'
+            return 1
+        }
+        ^$helper internal-write-done --command-id $command_id --exit-code $state.exit_code --cwd $state.cwd --directory $directory
     }
     if ($previous_command_id | is-empty) {
         hide-env @COMMAND_ID_ENV@

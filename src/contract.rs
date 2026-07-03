@@ -1,6 +1,7 @@
 pub(crate) const COMMAND_DIRECTORY_ENV: &str = "FUNCTERM_COMMAND_DIRECTORY";
 pub(crate) const COMMAND_ID_ENV: &str = "FUNCTERM_COMMAND_ID";
 pub(crate) const COMMAND_PAYLOAD_FILE: &str = "command.b64";
+pub(crate) const COMMAND_SCRIPT_FILE: &str = "command.cmd";
 pub(crate) const DONE_FILE: &str = "done.json";
 pub(crate) const DONE_TEMP_FILE: &str = "done.json.tmp";
 pub(crate) const HELPER_EXECUTABLE_ENV: &str = "FUNCTERM_HELPER_EXECUTABLE";

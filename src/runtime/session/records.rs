@@ -1,4 +1,6 @@
-use crate::contract::{COMMAND_PAYLOAD_FILE, DONE_FILE, STARTED_FILE, STDERR_FILE, STDOUT_FILE};
+use crate::contract::{
+    COMMAND_PAYLOAD_FILE, COMMAND_SCRIPT_FILE, DONE_FILE, STARTED_FILE, STDERR_FILE, STDOUT_FILE,
+};
 use crate::runtime::protocol::ViewResult;
 mod wait;
 use anyhow::{Context as _, Result, bail};
@@ -14,6 +16,7 @@ pub(super) struct CommandRecord {
     pub(super) stdout: PathBuf,
     pub(super) stderr: PathBuf,
     pub(super) payload: PathBuf,
+    pub(super) script: PathBuf,
     pub(super) started: PathBuf,
     pub(super) done: PathBuf,
 }
@@ -41,6 +44,7 @@ pub(super) fn create_record(
         stdout: command_dir.join(STDOUT_FILE),
         stderr: command_dir.join(STDERR_FILE),
         payload: command_dir.join(COMMAND_PAYLOAD_FILE),
+        script: command_dir.join(COMMAND_SCRIPT_FILE),
         started: command_dir.join(STARTED_FILE),
         done: command_dir.join(DONE_FILE),
     })

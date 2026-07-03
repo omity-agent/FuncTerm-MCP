@@ -45,39 +45,7 @@ fn is_shim_invocation() -> Result<bool> {
         .context("failed to resolve shim directory")?)
 }
 fn interactive_arguments(choice: ShellChoice, arguments: &[std::ffi::OsString]) -> bool {
-    let Some(values) = arguments
-        .iter()
-        .map(|argument| argument.to_str().map(str::to_ascii_lowercase))
-        .collect::<Option<Vec<_>>>()
-    else {
-        return false;
-    };
-    match choice {
-        ShellChoice::PowerShell => powershell_interactive_arguments(&values),
-        ShellChoice::Bash | ShellChoice::Zsh => values
-            .iter()
-            .all(|value| matches!(value.as_str(), "-i" | "-l" | "--login")),
-        ShellChoice::NuShell => values.iter().all(|value| {
-            matches!(
-                value.as_str(),
-                "--login" | "--no-config-file" | "--no-history"
-            )
-        }),
-    }
-}
-fn powershell_interactive_arguments(values: &[String]) -> bool {
-    let mut index = 0_usize;
-    while index < values.len() {
-        let Some(value) = values.get(index) else {
-            return false;
-        };
-        match value.as_str() {
-            "-nologo" | "-noexit" | "-noprofile" => index += 1,
-            "-executionpolicy" if index + 1 < values.len() => index += 2,
-            _ => return false,
-        }
-    }
-    true
+    choice.interactive_arguments(arguments)
 }
 fn run_passthrough(choice: ShellChoice, arguments: Vec<std::ffi::OsString>) -> Result<i32> {
     let status = Command::new(real_executable(choice)?)

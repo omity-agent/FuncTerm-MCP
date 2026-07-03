@@ -1,8 +1,10 @@
+mod cmd;
 mod nu;
 mod posix;
 mod posix_dialect;
 mod posix_startup;
 mod pwsh;
+pub(super) use cmd::wrapper as cmd_wrapper;
 pub(super) use nu::wrapper as nushell_wrapper;
 pub(super) use posix::{bash_wrapper, zsh_wrapper};
 pub(super) use pwsh::wrapper as powershell_wrapper;

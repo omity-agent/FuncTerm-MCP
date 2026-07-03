@@ -30,6 +30,12 @@ pub(super) fn shell_cases() -> &'static [ShellCase] {
             executables: &["nu", "nu.exe"],
             expected_exit_code: 0,
         },
+        ShellCase {
+            name: "cmd",
+            env_var: "FUNCTERM_CMD",
+            executables: &["cmd", "cmd.exe"],
+            expected_exit_code: 7,
+        },
     ]
 }
 #[cfg(not(windows))]
@@ -96,6 +102,10 @@ pub(super) fn case_command(shell: &str, next: &Path) -> String {
             "print 'MCP_PTY_STDOUT'; print --stderr 'MCP_PTY_STDERR'; cd {}",
             quote::nushell_path(next).unwrap()
         ),
+        "cmd" => format!(
+            "echo MCP_PTY_STDOUT& echo MCP_PTY_STDERR 1>&2& cd /d {}& exit /b 7",
+            quote::cmd_string(&quote::native_path(next).unwrap())
+        ),
         other => panic!("unsupported shell case {other}"),
     }
 }
@@ -105,6 +115,7 @@ pub(super) fn nested_launch_command(shell: &str) -> &'static str {
         "bash" => "bash -i",
         "nu" => "nu --no-history",
         "zsh" => "zsh -i",
+        "cmd" => "cmd",
         other => panic!("unsupported shell case {other}"),
     }
 }
@@ -113,12 +124,13 @@ pub(super) fn nested_marker_command(shell: &str, marker: &str) -> String {
         "powershell" => format!("Write-Output {}", quote::powershell_string(marker)),
         "bash" | "zsh" => format!("printf '%s\\n' {}", quote::posix_string(marker)),
         "nu" => format!("print {}", quote::nushell_string(marker)),
+        "cmd" => format!("echo {marker}"),
         other => panic!("unsupported shell case {other}"),
     }
 }
 pub(super) fn exit_command(shell: &str) -> &'static str {
     match shell {
-        "powershell" | "bash" | "nu" | "zsh" => "exit 42",
+        "powershell" | "bash" | "nu" | "zsh" | "cmd" => "exit 42",
         other => panic!("unsupported shell case {other}"),
     }
 }

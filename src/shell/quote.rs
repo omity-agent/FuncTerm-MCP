@@ -5,6 +5,11 @@ use std::path::Path;
 pub fn native_path(path: &Path) -> Result<String> {
     crate::text::path_text(path, "shell path")
 }
+#[must_use]
+#[inline]
+pub fn cmd_string(value: &str) -> String {
+    format!("\"{}\"", value.replace('"', "\"\""))
+}
 #[inline]
 pub fn powershell_path(path: &Path) -> Result<String> {
     Ok(powershell_string(&native_path(path)?))
@@ -54,5 +59,10 @@ mod tests {
     fn quotes_single_quotes_for_nushell() {
         let quoted = super::nushell_string("a'b");
         assert_eq!(quoted, "('YSdi' | decode base64 | decode)");
+    }
+    #[test]
+    fn quotes_double_quotes_for_cmd() {
+        let quoted = super::cmd_string("a\"b");
+        assert_eq!(quoted, "\"a\"\"b\"");
     }
 }

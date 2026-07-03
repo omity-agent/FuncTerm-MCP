@@ -53,6 +53,7 @@ mod tests {
             bash: "bash.exe".to_owned(),
             nushell: "nu.exe".to_owned(),
             zsh: "zsh".to_owned(),
+            cmd: "cmd.exe".to_owned(),
         }
     }
     #[test]

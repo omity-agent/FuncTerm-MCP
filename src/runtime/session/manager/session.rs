@@ -124,6 +124,7 @@ impl ShellSession {
     ) -> Result<()> {
         let payload = STANDARD.encode(command.as_bytes());
         std::fs::write(&record.payload, payload).context("failed to write command payload")?;
+        std::fs::write(&record.script, command).context("failed to write command script")?;
         let directory = record
             .stdout
             .parent()
