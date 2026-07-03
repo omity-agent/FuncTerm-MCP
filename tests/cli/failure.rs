@@ -51,7 +51,7 @@ mod tests {
     #[cfg(not(windows))]
     fn system_shell_daemon() -> crate::support::TestGuard {
         let bash = required_executable("bash");
-        locked_with_env(&[("SHELL_MCP_PTY_BASH", &bash)])
+        locked_with_env(&[("FUNCTERM_BASH", &bash)])
     }
     #[cfg(windows)]
     const fn system_shell_name() -> &'static str {

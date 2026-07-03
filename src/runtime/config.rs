@@ -16,13 +16,13 @@ pub(crate) fn load() -> Result<Settings> {
     let mut settings =
         toml::from_str::<Settings>(SETTINGS).context("failed to parse embedded settings")?;
     apply_string_override(
-        "SHELL_MCP_PTY_DAEMON_SERVICE_NAME",
+        "FUNCTERM_DAEMON_SERVICE_NAME",
         &mut settings.daemon_service_name,
     );
-    apply_list_override("SHELL_MCP_PTY_POWERSHELL", &mut settings.powershell);
-    apply_string_override("SHELL_MCP_PTY_BASH", &mut settings.bash);
-    apply_string_override("SHELL_MCP_PTY_NUSHELL", &mut settings.nushell);
-    apply_string_override("SHELL_MCP_PTY_ZSH", &mut settings.zsh);
+    apply_list_override("FUNCTERM_POWERSHELL", &mut settings.powershell);
+    apply_string_override("FUNCTERM_BASH", &mut settings.bash);
+    apply_string_override("FUNCTERM_NUSHELL", &mut settings.nushell);
+    apply_string_override("FUNCTERM_ZSH", &mut settings.zsh);
     Ok(settings)
 }
 fn apply_list_override(name: &str, value: &mut Vec<String>) {

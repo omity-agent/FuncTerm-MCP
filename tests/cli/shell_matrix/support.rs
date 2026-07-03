@@ -14,19 +14,19 @@ pub(super) fn shell_cases() -> &'static [ShellCase] {
     &[
         ShellCase {
             name: "powershell",
-            env_var: "SHELL_MCP_PTY_POWERSHELL",
+            env_var: "FUNCTERM_POWERSHELL",
             executables: &["pwsh", "pwsh.exe", "powershell", "powershell.exe"],
             expected_exit_code: 7,
         },
         ShellCase {
             name: "bash",
-            env_var: "SHELL_MCP_PTY_BASH",
+            env_var: "FUNCTERM_BASH",
             executables: &["bash", "bash.exe"],
             expected_exit_code: 1,
         },
         ShellCase {
             name: "nu",
-            env_var: "SHELL_MCP_PTY_NUSHELL",
+            env_var: "FUNCTERM_NUSHELL",
             executables: &["nu", "nu.exe"],
             expected_exit_code: 0,
         },
@@ -37,13 +37,13 @@ pub(super) fn shell_cases() -> &'static [ShellCase] {
     &[
         ShellCase {
             name: "bash",
-            env_var: "SHELL_MCP_PTY_BASH",
+            env_var: "FUNCTERM_BASH",
             executables: &["bash", "bash.exe"],
             expected_exit_code: 1,
         },
         ShellCase {
             name: "zsh",
-            env_var: "SHELL_MCP_PTY_ZSH",
+            env_var: "FUNCTERM_ZSH",
             executables: &["zsh"],
             expected_exit_code: 1,
         },

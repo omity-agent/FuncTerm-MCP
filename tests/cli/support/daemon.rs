@@ -74,7 +74,7 @@ pub(crate) fn locked_with_env(extra_env: &[(&str, &str)]) -> TestGuard {
     let slot = DaemonSlot::acquire();
     let service_name = unique_service_name();
     let mut env = vec![(
-        "SHELL_MCP_PTY_DAEMON_SERVICE_NAME".to_owned(),
+        "FUNCTERM_DAEMON_SERVICE_NAME".to_owned(),
         service_name.clone(),
     )];
     env.extend(extra_env.iter().map(|pair| {

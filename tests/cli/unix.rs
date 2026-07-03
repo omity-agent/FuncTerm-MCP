@@ -10,7 +10,7 @@ mod tests {
     #[test]
     fn cli_keeps_starting_directory_shell_syntax_literal_on_unix_shell() {
         let bash = required_executable("bash");
-        let _guard = locked_with_env(&[("SHELL_MCP_PTY_BASH", &bash)]);
+        let _guard = locked_with_env(&[("FUNCTERM_BASH", &bash)]);
         let output = run_cli(&[
             "new-tab",
             "--starting-directory",
@@ -45,7 +45,7 @@ mod tests {
     #[test]
     fn cli_view_reports_unix_shell_liveness_after_keyboard_exit() {
         let bash = required_executable("bash");
-        let _guard = locked_with_env(&[("SHELL_MCP_PTY_BASH", &bash)]);
+        let _guard = locked_with_env(&[("FUNCTERM_BASH", &bash)]);
         let shell = create_tab(&std::env::temp_dir(), "bash");
         let alive = parse_tab_view(&run_cli(&["view", &shell.tab_id]));
         assert!(alive.alive);
@@ -61,7 +61,7 @@ mod tests {
     #[test]
     fn cli_waiting_unix_command_does_not_block_other_requests() {
         let bash = required_executable("bash");
-        let guard = locked_with_env(&[("SHELL_MCP_PTY_BASH", &bash)]);
+        let guard = locked_with_env(&[("FUNCTERM_BASH", &bash)]);
         let first = create_tab(&std::env::temp_dir(), "bash");
         let second = create_tab(&std::env::temp_dir(), "bash");
         let env = guard.env();
@@ -91,7 +91,7 @@ mod tests {
     #[test]
     fn cli_unix_command_timeout_can_be_queried_after_completion() {
         let bash = required_executable("bash");
-        let _guard = locked_with_env(&[("SHELL_MCP_PTY_BASH", &bash)]);
+        let _guard = locked_with_env(&[("FUNCTERM_BASH", &bash)]);
         let shell = create_tab(&std::env::temp_dir(), "bash");
         let accepted = send_command(
             &shell.tab_id,
@@ -116,12 +116,12 @@ mod tests {
             KeyboardCase {
                 shell: "bash",
                 executable: "bash",
-                env_var: "SHELL_MCP_PTY_BASH",
+                env_var: "FUNCTERM_BASH",
             },
             KeyboardCase {
                 shell: "zsh",
                 executable: "zsh",
-                env_var: "SHELL_MCP_PTY_ZSH",
+                env_var: "FUNCTERM_ZSH",
             },
         ]
     }

@@ -17,7 +17,7 @@ mod tests {
         let bash_text = bash.to_string_lossy();
         let _guard = locked_with_env(&[
             ("HISTFILE", history_file.to_str().unwrap()),
-            ("SHELL_MCP_PTY_BASH", &bash_text),
+            ("FUNCTERM_BASH", &bash_text),
         ]);
         let shell = create_tab(&std::env::temp_dir(), "bash");
         let options = parse_command_result(&send_command(
@@ -45,7 +45,7 @@ mod tests {
         let zsh_text = zsh.to_string_lossy();
         let _guard = locked_with_env(&[
             ("HISTFILE", history_file.to_str().unwrap()),
-            ("SHELL_MCP_PTY_ZSH", &zsh_text),
+            ("FUNCTERM_ZSH", &zsh_text),
         ]);
         let shell = create_tab(&std::env::temp_dir(), "zsh");
         let options = parse_command_result(&send_command(
