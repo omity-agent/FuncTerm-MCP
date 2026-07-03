@@ -399,6 +399,7 @@ dependencies = [
  "rmcp",
  "schemars",
  "serde",
+ "shell-words",
  "sonic-rs",
  "tokio",
  "toml",

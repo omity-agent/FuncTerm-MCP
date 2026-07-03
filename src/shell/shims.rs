@@ -1,4 +1,5 @@
 use super::ShellChoice;
+use crate::contract::HELPER_EXECUTABLE_ENV;
 use crate::runtime::config::Settings;
 use anyhow::{Context as _, Result};
 use std::fs;
@@ -43,6 +44,11 @@ pub(crate) fn environment(
                 "active shell state path",
             )
             .context("failed to encode active shell state path")?,
+        ),
+        (
+            HELPER_EXECUTABLE_ENV.to_owned(),
+            crate::text::path_text(&current_exe, "FuncTerm helper executable")
+                .context("failed to encode FuncTerm helper executable")?,
         ),
         (
             CURRENT_SHELL_ENV.to_owned(),

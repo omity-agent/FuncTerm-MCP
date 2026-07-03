@@ -1,7 +1,7 @@
 use super::posix_dialect::PosixDialect;
 use super::posix_startup::{path_function, shim_path_function};
 use crate::contract::{
-    COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV, COMMAND_PAYLOAD_FILE, DONE_FILE, DONE_TEMP_FILE,
+    COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV, COMMAND_PAYLOAD_FILE, DONE_FILE, HELPER_EXECUTABLE_ENV,
     POSIX_COMMAND_FUNCTION, STARTED_FILE, STDERR_FILE, STDOUT_FILE,
 };
 pub(in crate::shell) fn bash_wrapper() -> String {
@@ -43,7 +43,8 @@ fn command_function(dialect: PosixDialect) -> String {
     format!(
         r#"{name}() {{
 {emulate}    local command_id="$1"
-    local directory="$2"
+    local native_directory="$2"
+    local directory="$native_directory"
     local working_directory="$3"
     directory="$(functerm_posix_path "$directory")" || return 1
     working_directory="$(functerm_posix_path "$working_directory")" || return 1
@@ -53,7 +54,6 @@ fn command_function(dialect: PosixDialect) -> String {
     local started_file="$directory/{started}"
     local payload_file="$directory/{payload}"
     local done_file="$directory/{done}"
-    local done_temp_file="$directory/{done_temp}"
     local previous_command_id="${{{command_id_env}-}}"
     local previous_command_directory="${{{command_dir_env}-}}"
 {previous_flags}
@@ -62,23 +62,27 @@ fn command_function(dialect: PosixDialect) -> String {
     functerm_prepend_shim_path || return 1
     local script
     if ! script="$(functerm_decode_payload_file "$payload_file" "$stderr_file")"; then
-        local cwd_json
-        cwd_json="$(functerm_json_string "$PWD")"
-        functerm_publish_done "$command_id" 1 "$cwd_json" "$done_file" "$done_temp_file"
+        local publish_result=0
+        functerm_publish_done "$command_id" 1 "$PWD" "$native_directory" || publish_result=$?
         cat "$stderr_file" >&2
         functerm_restore_command_environment \
             "$had_previous_command_id" "$previous_command_id" \
             "$had_previous_command_directory" "$previous_command_directory"
+        if [ "$publish_result" -ne 0 ]; then
+            return "$publish_result"
+        fi
         return 1
     fi
     rm -f -- "$payload_file" || return 1
     if ! {cd} "$working_directory"; then
-        local cwd_json
-        cwd_json="$(functerm_json_string "$PWD")"
-        functerm_publish_done "$command_id" 1 "$cwd_json" "$done_file" "$done_temp_file"
+        local publish_result=0
+        functerm_publish_done "$command_id" 1 "$PWD" "$native_directory" || publish_result=$?
         functerm_restore_command_environment \
             "$had_previous_command_id" "$previous_command_id" \
             "$had_previous_command_directory" "$previous_command_directory"
+        if [ "$publish_result" -ne 0 ]; then
+            return "$publish_result"
+        fi
         return 1
     fi
     : {write_started} "$started_file"
@@ -86,10 +90,13 @@ fn command_function(dialect: PosixDialect) -> String {
     local exit_code=$?
     cat "$stdout_file"
     cat "$stderr_file" >&2
-    local cwd_json
-    cwd_json="$(functerm_json_string "$PWD")"
     {mkdir} "$directory" || return 1
-    functerm_publish_done "$command_id" "$exit_code" "$cwd_json" "$done_file" "$done_temp_file"
+    if ! functerm_publish_done "$command_id" "$exit_code" "$PWD" "$native_directory"; then
+        functerm_restore_command_environment \
+            "$had_previous_command_id" "$previous_command_id" \
+            "$had_previous_command_directory" "$previous_command_directory"
+        return 1
+    fi
     functerm_restore_command_environment \
         "$had_previous_command_id" "$previous_command_id" \
         "$had_previous_command_directory" "$previous_command_directory"
@@ -107,17 +114,6 @@ functerm_restore_command_environment() {{
         unset {command_dir_env}
     fi
 }}
-functerm_json_string() {{
-{emulate}    local value="$1"
-    value="${{value//\\/\\\\}}"
-    value="${{value//\"/\\\"}}"
-    value="${{value//$'\b'/\\b}}"
-    value="${{value//$'\t'/\\t}}"
-    value="${{value//$'\n'/\\n}}"
-    value="${{value//$'\f'/\\f}}"
-    value="${{value//$'\r'/\\r}}"
-    printf '"%s"' "$value"
-}}
 functerm_decode_payload_file() {{
 {emulate}    local payload_file="$1"
     local stderr_file="$2"
@@ -129,15 +125,22 @@ functerm_decode_payload_file() {{
 functerm_publish_done() {{
 {emulate}    local command_id="$1"
     local exit_code="$2"
-    local cwd_json="$3"
-    local done_file="$4"
-    local done_temp_file="$5"
+    local cwd="$3"
+    local native_directory="$4"
+    local helper="${{{helper_env}-}}"
     if [ -e "$done_file" ]; then
         return 0
     fi
-    printf '{{"command_id":"%s","exit_code":%s,"cwd":%s,"completed_at":"%s"}}\n' \
-        "$command_id" "$exit_code" "$cwd_json" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" {write_done_temp} "$done_temp_file"
-    {move_done}
+    if [ -z "$helper" ]; then
+        printf '%s is not set\n' "{helper_env}" >&2
+        return 1
+    fi
+    helper="$(functerm_posix_path "$helper")" || return 1
+    "$helper" internal-write-done \
+        --command-id "$command_id" \
+        --exit-code "$exit_code" \
+        --cwd "$cwd" \
+        --directory "$native_directory"
 }}"#,
         name = POSIX_COMMAND_FUNCTION,
         emulate = dialect.emulate(),
@@ -147,13 +150,11 @@ functerm_publish_done() {{
         started = STARTED_FILE,
         payload = COMMAND_PAYLOAD_FILE,
         done = DONE_FILE,
-        done_temp = DONE_TEMP_FILE,
+        helper_env = HELPER_EXECUTABLE_ENV,
         command_id_env = COMMAND_ID_ENV,
         command_dir_env = COMMAND_DIRECTORY_ENV,
         previous_flags = dialect.previous_flags(),
-        write_done_temp = dialect.write_done_temp(),
         write_started = dialect.write_done_temp(),
-        move_done = dialect.move_done(),
         cd = dialect.cd(),
         test_one = dialect.test_arg("1"),
         test_three = dialect.test_arg("3"),

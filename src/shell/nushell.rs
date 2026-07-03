@@ -43,7 +43,7 @@ mod tests {
     #[test]
     fn quotes_single_quotes_for_nushell() {
         let quoted = super::quote::nushell_string("a'b");
-        assert_eq!(quoted, "\"a'b\"");
+        assert_eq!(quoted, "('YSdi' | decode base64 | decode)");
     }
     #[test]
     fn initialization_defines_function_and_cwd() {
@@ -53,8 +53,10 @@ mod tests {
         )
         .unwrap();
         assert!(script.contains("def functerm_run_command"));
-        assert!(script.contains("cd \"F:\\\\dir with ' quote\""));
-        assert!(script.contains("save --force --raw \"F:\\\\ready'file\""));
+        assert!(script.contains("cd ('RjpcZGlyIHdpdGggJyBxdW90ZQ==' | decode base64 | decode)"));
+        assert!(
+            script.contains("save --force --raw ('RjpccmVhZHknZmlsZQ==' | decode base64 | decode)")
+        );
     }
     #[test]
     fn invocation_references_payload_file_by_directory() {
@@ -64,7 +66,7 @@ mod tests {
             std::path::Path::new("F:\\cwd"),
         )
         .unwrap();
-        assert_eq!(line.matches("\"command\"").count(), 1);
-        assert!(line.contains("\"F:\\\\dir with ' quote\""));
+        assert_eq!(line.matches("Y29tbWFuZA==").count(), 1);
+        assert!(line.contains("RjpcZGlyIHdpdGggJyBxdW90ZQ=="));
     }
 }

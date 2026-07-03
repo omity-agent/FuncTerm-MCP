@@ -40,12 +40,6 @@ impl PosixDialect {
             Self::Zsh => ">|",
         }
     }
-    pub(super) const fn move_done(self) -> &'static str {
-        match self {
-            Self::Bash => "mv \"$done_temp_file\" \"$done_file\"",
-            Self::Zsh => "mv -f -- \"$done_temp_file\" \"$done_file\"",
-        }
-    }
     pub(super) const fn cd(self) -> &'static str {
         match self {
             Self::Bash => "cd",

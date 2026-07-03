@@ -21,8 +21,9 @@ pub(super) fn startup_args(cwd: &Path, ready_file: &Path) -> Result<Vec<String>>
 pub(super) fn invocation(command_id: &str, directory: &Path, cwd: &Path) -> Result<String> {
     let quoted_directory = quote::powershell_path(directory)?;
     let quoted_cwd = quote::powershell_path(cwd)?;
+    let quoted_command_id = quote::powershell_string(command_id);
     Ok(format!(
-        "{POWERSHELL_COMMAND_FUNCTION} -CommandId '{command_id}' -Directory {quoted_directory} -WorkingDirectory {quoted_cwd}\r\n"
+        "{POWERSHELL_COMMAND_FUNCTION} -CommandId {quoted_command_id} -Directory {quoted_directory} -WorkingDirectory {quoted_cwd}\r\n"
     ))
 }
 pub(super) fn keyboard_bytes(bytes: &[u8]) -> Cow<'_, [u8]> {
@@ -61,7 +62,7 @@ mod tests {
     #[test]
     fn quotes_literal_paths_for_powershell() {
         let quoted = super::quote::powershell_path(Path::new("F:\\dir with ' quote")).unwrap();
-        assert_eq!(quoted, "'F:\\dir with '' quote'");
+        assert!(quoted.contains("FromBase64String"));
     }
     #[test]
     fn initialization_sets_literal_location() {
@@ -71,8 +72,8 @@ mod tests {
         )
         .unwrap();
         assert!(script.contains("Invoke-FuncTermCommand"));
-        assert!(script.contains("Set-Location -LiteralPath 'F:\\dir with '' quote'"));
-        assert!(script.contains("Set-Content -LiteralPath 'F:\\ready''file'"));
+        assert!(script.contains("Set-Location -LiteralPath ([Text.Encoding]::UTF8.GetString"));
+        assert!(script.contains("Set-Content -LiteralPath ([Text.Encoding]::UTF8.GetString"));
     }
     #[test]
     fn invocation_references_payload_file_by_directory() {
@@ -83,7 +84,7 @@ mod tests {
         )
         .unwrap();
         assert!(!line.contains("-Payload"));
-        assert!(line.contains("-Directory 'F:\\dir with '' quote'"));
+        assert!(line.contains("-Directory ([Text.Encoding]::UTF8.GetString"));
     }
     #[test]
     fn encoded_command_round_trips_as_utf16() {
