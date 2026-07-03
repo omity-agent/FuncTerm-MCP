@@ -1,0 +1,104 @@
+name: stream_observer
+variables:
+  role: stream
+scenario:
+  - name: open_stream_tab
+    tool: new_tab
+    arguments:
+      starting_directory: "."
+      starting_shell: "powershell"
+    capture:
+      tab_id: "TAB_ID"
+  - name: view_stream_prompt
+    tool: view
+    arguments:
+      id: "${tab_id}"
+      waiting: 0
+  - name: emit_stdout_sequence
+    tool: send_command
+    arguments:
+      tab_id: "${tab_id}"
+      command: "1..5 | ForEach-Object { Write-Output \"stdout item $_ for ${client.name} ${profile.name}\" }"
+      waiting: 5
+    capture:
+      stdout_command_id: "COMMAND_ID"
+  - name: view_stdout_sequence
+    tool: view
+    arguments:
+      id: "${stdout_command_id}"
+      waiting: 0
+  - name: emit_stderr_sequence
+    tool: send_command
+    arguments:
+      tab_id: "${tab_id}"
+      command: "Write-Error 'expected stderr sample for ${client.name} ${profile.name}'; Write-Output 'stdout still continues'"
+      waiting: 5
+    capture:
+      stderr_command_id: "COMMAND_ID"
+  - name: view_stderr_sequence
+    tool: view
+    arguments:
+      id: "${stderr_command_id}"
+      waiting: 0
+  - name: run_short_waiting_command
+    tool: send_command
+    arguments:
+      tab_id: "${tab_id}"
+      command: "Start-Sleep -Milliseconds 250; Write-Output 'delayed output for ${client.name} ${profile.name}'"
+      waiting: 5
+    capture:
+      delayed_command_id: "COMMAND_ID"
+  - name: view_delayed_command
+    tool: view
+    arguments:
+      id: "${delayed_command_id}"
+      waiting: 0
+  - name: detach_running_command
+    tool: send_command
+    arguments:
+      tab_id: "${tab_id}"
+      command: "Start-Sleep -Milliseconds 600; Write-Output 'detached completion for ${client.name} ${profile.name}'"
+      waiting: 0
+    capture:
+      detached_command_id: "COMMAND_ID"
+  - name: wait_for_detached_command
+    tool: view
+    arguments:
+      id: "${detached_command_id}"
+      waiting: 5
+  - name: inspect_stream_screen
+    tool: view
+    arguments:
+      id: "${tab_id}"
+      waiting: 0
+  - name: emit_structured_stream_marker
+    tool: send_command
+    arguments:
+      tab_id: "${tab_id}"
+      command: "[pscustomobject]@{client='${client.name}';profile='${profile.name}';role='${role}';streams='stdout-stderr-detached'} | ConvertTo-Json -Compress"
+      waiting: 5
+    capture:
+      marker_command_id: "COMMAND_ID"
+  - name: view_stream_marker
+    tool: view
+    arguments:
+      id: "${marker_command_id}"
+      waiting: 0
+  - name: complete_stream_path
+    tool: send_command
+    arguments:
+      tab_id: "${tab_id}"
+      command: "Write-Output 'stream path complete for ${client.name} ${profile.name}'"
+      waiting: 5
+    capture:
+      complete_command_id: "COMMAND_ID"
+  - name: view_stream_completion
+    tool: view
+    arguments:
+      id: "${complete_command_id}"
+      waiting: 0
+  - name: view_stream_final_screen
+    tool: view
+    arguments:
+      id: "${tab_id}"
+      waiting: 0

@@ -1,0 +1,104 @@
+name: toolchain_checker
+variables:
+  role: diagnostics
+scenario:
+  - name: open_toolchain_tab
+    tool: new_tab
+    arguments:
+      starting_directory: "."
+      starting_shell: "powershell"
+    capture:
+      tab_id: "TAB_ID"
+  - name: view_toolchain_prompt
+    tool: view
+    arguments:
+      id: "${tab_id}"
+      waiting: 0
+  - name: inspect_powershell_version
+    tool: send_command
+    arguments:
+      tab_id: "${tab_id}"
+      command: "$PSVersionTable | Out-String"
+      waiting: 5
+    capture:
+      ps_command_id: "COMMAND_ID"
+  - name: view_powershell_version
+    tool: view
+    arguments:
+      id: "${ps_command_id}"
+      waiting: 0
+  - name: inspect_rust_tooling
+    tool: send_command
+    arguments:
+      tab_id: "${tab_id}"
+      command: "Get-Command cargo,rustc -ErrorAction SilentlyContinue | Select-Object Name,Source | Format-Table -AutoSize | Out-String"
+      waiting: 5
+    capture:
+      rust_tools_command_id: "COMMAND_ID"
+  - name: view_rust_tooling
+    tool: view
+    arguments:
+      id: "${rust_tools_command_id}"
+      waiting: 0
+  - name: inspect_search_tooling
+    tool: send_command
+    arguments:
+      tab_id: "${tab_id}"
+      command: "Get-Command rg,uv,essence -ErrorAction SilentlyContinue | Select-Object Name,Source | Format-Table -AutoSize | Out-String"
+      waiting: 5
+    capture:
+      search_tools_command_id: "COMMAND_ID"
+  - name: view_search_tooling
+    tool: view
+    arguments:
+      id: "${search_tools_command_id}"
+      waiting: 0
+  - name: inspect_selected_environment
+    tool: send_command
+    arguments:
+      tab_id: "${tab_id}"
+      command: "Get-ChildItem Env: | Where-Object Name -in 'PATH','TEMP','USERPROFILE' | Select-Object Name,Value | Out-String"
+      waiting: 5
+    capture:
+      env_command_id: "COMMAND_ID"
+  - name: view_selected_environment
+    tool: view
+    arguments:
+      id: "${env_command_id}"
+      waiting: 0
+  - name: inspect_settings_file
+    tool: send_command
+    arguments:
+      tab_id: "${tab_id}"
+      command: "Get-Content .\\settings.toml -TotalCount 20 | Out-String"
+      waiting: 5
+    capture:
+      settings_command_id: "COMMAND_ID"
+  - name: view_settings_file
+    tool: view
+    arguments:
+      id: "${settings_command_id}"
+      waiting: 0
+  - name: view_toolchain_screen
+    tool: view
+    arguments:
+      id: "${tab_id}"
+      waiting: 0
+  - name: complete_toolchain_path
+    tool: send_command
+    arguments:
+      tab_id: "${tab_id}"
+      command: "Write-Output 'toolchain path complete for ${client.name} ${profile.name}'"
+      waiting: 5
+    capture:
+      complete_command_id: "COMMAND_ID"
+  - name: view_toolchain_completion
+    tool: view
+    arguments:
+      id: "${complete_command_id}"
+      waiting: 0
+  - name: view_toolchain_final_screen
+    tool: view
+    arguments:
+      id: "${tab_id}"
+      waiting: 0

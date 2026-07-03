@@ -1,0 +1,104 @@
+name: inventory_reader
+variables:
+  role: inventory
+scenario:
+  - name: open_inventory_tab
+    tool: new_tab
+    arguments:
+      starting_directory: "."
+      starting_shell: "powershell"
+    capture:
+      tab_id: "TAB_ID"
+  - name: inspect_initial_screen
+    tool: view
+    arguments:
+      id: "${tab_id}"
+      waiting: 0
+  - name: locate_workspace
+    tool: send_command
+    arguments:
+      tab_id: "${tab_id}"
+      command: "Get-Location | Select-Object -ExpandProperty Path"
+      waiting: 5
+    capture:
+      locate_command_id: "COMMAND_ID"
+  - name: inspect_location_result
+    tool: view
+    arguments:
+      id: "${locate_command_id}"
+      waiting: 0
+  - name: list_workspace_roots
+    tool: send_command
+    arguments:
+      tab_id: "${tab_id}"
+      command: "Get-ChildItem -Force | Select-Object -First 12 Name,Mode | Format-Table -AutoSize | Out-String"
+      waiting: 5
+    capture:
+      list_command_id: "COMMAND_ID"
+  - name: inspect_root_listing
+    tool: view
+    arguments:
+      id: "${list_command_id}"
+      waiting: 0
+  - name: count_source_files
+    tool: send_command
+    arguments:
+      tab_id: "${tab_id}"
+      command: "(Get-ChildItem -Recurse -File .\\src | Measure-Object).Count"
+      waiting: 5
+    capture:
+      count_command_id: "COMMAND_ID"
+  - name: inspect_source_count
+    tool: view
+    arguments:
+      id: "${count_command_id}"
+      waiting: 0
+  - name: sample_docs
+    tool: send_command
+    arguments:
+      tab_id: "${tab_id}"
+      command: "Get-ChildItem .\\docs -Recurse -File | Select-Object -First 5 FullName | Out-String"
+      waiting: 5
+    capture:
+      docs_command_id: "COMMAND_ID"
+  - name: inspect_docs_sample
+    tool: view
+    arguments:
+      id: "${docs_command_id}"
+      waiting: 0
+  - name: emit_inventory_marker
+    tool: send_command
+    arguments:
+      tab_id: "${tab_id}"
+      command: "[pscustomobject]@{client='${client.name}';profile='${profile.name}';role='${role}';phase='marker'} | ConvertTo-Json -Compress"
+      waiting: 5
+    capture:
+      marker_command_id: "COMMAND_ID"
+  - name: inspect_inventory_marker
+    tool: view
+    arguments:
+      id: "${marker_command_id}"
+      waiting: 0
+  - name: inspect_inventory_screen
+    tool: view
+    arguments:
+      id: "${tab_id}"
+      waiting: 0
+  - name: complete_inventory_path
+    tool: send_command
+    arguments:
+      tab_id: "${tab_id}"
+      command: "Write-Output 'inventory path complete for ${client.name} ${profile.name}'"
+      waiting: 5
+    capture:
+      done_command_id: "COMMAND_ID"
+  - name: inspect_inventory_completion
+    tool: view
+    arguments:
+      id: "${done_command_id}"
+      waiting: 0
+  - name: inspect_inventory_final_screen
+    tool: view
+    arguments:
+      id: "${tab_id}"
+      waiting: 0

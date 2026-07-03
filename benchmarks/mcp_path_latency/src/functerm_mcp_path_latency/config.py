@@ -36,34 +36,8 @@ class ClientProfileConfig(BaseModel):
 
 
 class ClientConfig(BaseModel):
-    count: PositiveInt | None = None
     loop_count: PositiveInt = 1
     list_tools_on_connect: bool
-    profiles: list[ClientProfileConfig] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def validate_profiles(self) -> ClientConfig:
-        if not self.profiles and self.count is None:
-            raise ValueError("clients.count is required when clients.profiles is empty")
-        if self.profiles:
-            names = [profile.name for profile in self.profiles]
-            if len(names) != len(set(names)):
-                raise ValueError("client profile names must be unique")
-            if self.count is None:
-                self.count = len(self.profiles)
-            if self.count != len(self.profiles):
-                raise ValueError("clients.count must match the number of client profiles")
-        return self
-
-    def resolved_count(self) -> int:
-        if self.count is None:
-            raise ValueError("client count has not been resolved")
-        return self.count
-
-    def profile_for(self, index: int) -> ClientProfileConfig | None:
-        if not self.profiles:
-            return None
-        return self.profiles[index]
 
 
 class PlatformCommand(BaseModel):
@@ -98,17 +72,26 @@ class BenchConfig(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     clients: ClientConfig
     server: ServerConfig
-    scenario: list[StepConfig] = Field(default_factory=list)
     report: ReportConfig
+    profiles: list[ClientProfileConfig] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def require_steps(self) -> BenchConfig:
-        if not self.scenario and not self.clients.profiles:
-            raise ValueError("scenario must contain at least one step")
-        for profile in self.clients.profiles:
-            if not profile.scenario and not self.scenario:
+    def require_profiles(self) -> BenchConfig:
+        if not self.profiles:
+            raise ValueError("at least one profile file is required")
+        names = [profile.name for profile in self.profiles]
+        if len(names) != len(set(names)):
+            raise ValueError("client profile names must be unique")
+        for profile in self.profiles:
+            if not profile.scenario:
                 raise ValueError(f"profile {profile.name} must contain at least one step")
         return self
+
+    def client_count(self) -> int:
+        return len(self.profiles)
+
+    def profile_order_for(self, client_index: int) -> list[ClientProfileConfig]:
+        return self.profiles[client_index:] + self.profiles[:client_index]
 
 
 def load_config(path: Path) -> BenchConfig:
@@ -116,8 +99,24 @@ def load_config(path: Path) -> BenchConfig:
         data = yaml.safe_load(file)
     if not isinstance(data, dict):
         raise ValueError("configuration root must be a mapping")
+    data["profiles"] = load_profiles(path.parent / "profiles")
     config = BenchConfig.model_validate(data)
     return resolve_config_paths(config, path.parent)
+
+
+def load_profiles(directory: Path) -> list[ClientProfileConfig]:
+    paths = sorted(directory.glob("*.yaml"))
+    if not paths:
+        raise ValueError(f"profile directory contains no yaml files: {directory}")
+    return [load_profile(path) for path in paths]
+
+
+def load_profile(path: Path) -> ClientProfileConfig:
+    with path.open("r", encoding="utf-8") as file:
+        data = yaml.safe_load(file)
+    if not isinstance(data, dict):
+        raise ValueError(f"profile root must be a mapping: {path}")
+    return ClientProfileConfig.model_validate(data)
 
 
 def resolve_config_paths(config: BenchConfig, base_dir: Path) -> BenchConfig:

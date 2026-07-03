@@ -6,7 +6,12 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
-from functerm_mcp_path_latency.config import BenchConfig, ServerConfig, StepConfig
+from functerm_mcp_path_latency.config import (
+    BenchConfig,
+    ClientProfileConfig,
+    ServerConfig,
+    StepConfig,
+)
 from functerm_mcp_path_latency.extraction import extract_tag
 from functerm_mcp_path_latency.mcp_session import open_mcp_session, tool_result_text
 from functerm_mcp_path_latency.result import BenchmarkResult, ClientResult, StepEvent
@@ -24,8 +29,7 @@ async def run_benchmark(config: BenchConfig) -> BenchmarkResult:
     started_at = datetime.now(UTC)
     started = time.perf_counter()
     tasks = [
-        asyncio.create_task(run_client(index, config))
-        for index in range(config.clients.resolved_count())
+        asyncio.create_task(run_client(index, config)) for index in range(config.client_count())
     ]
     clients = await asyncio.gather(*tasks)
     return BenchmarkResult(
@@ -36,42 +40,67 @@ async def run_benchmark(config: BenchConfig) -> BenchmarkResult:
 async def run_client(config_index: int, config: BenchConfig) -> ClientResult:
     started = time.perf_counter()
     events: list[StepEvent] = []
-    profile = config.clients.profile_for(config_index)
-    profile_name = None if profile is None else profile.name
-    profile_variables = {} if profile is None else profile.variables
-    steps = config.scenario if profile is None or not profile.scenario else profile.scenario
+    profile_order = config.profile_order_for(config_index)
     base_variables = {
-        **profile_variables,
         "client.index": str(config_index),
         "client.number": str(config_index + 1),
-        "client.name": f"client-{config_index}" if profile_name is None else profile_name,
+        "client.name": f"client-{config_index + 1}",
     }
     try:
         async with open_mcp_session(
             config.server, list_tools_on_connect=config.clients.list_tools_on_connect
         ) as session:
             for loop_index in range(config.clients.loop_count):
-                variables = {
-                    **base_variables,
-                    "loop.index": str(loop_index),
-                    "loop.number": str(loop_index + 1),
-                }
-                for step in steps:
-                    event, captures = await run_step(
-                        config_index, loop_index, step, session, variables
+                for profile in profile_order:
+                    profile_events = await run_profile(
+                        config_index, loop_index, profile, session, base_variables
                     )
-                    variables.update(captures)
-                    events.append(event)
-        return ClientResult(config_index, profile_name, time.perf_counter() - started, events, None)
+                    events.extend(profile_events)
+        return ClientResult(
+            config_index,
+            [profile.name for profile in profile_order],
+            time.perf_counter() - started,
+            events,
+            None,
+        )
     except Exception as error:
         return ClientResult(
-            config_index, profile_name, time.perf_counter() - started, events, repr(error)
+            config_index,
+            [profile.name for profile in profile_order],
+            time.perf_counter() - started,
+            events,
+            repr(error),
         )
+
+
+async def run_profile(
+    client_index: int,
+    loop_index: int,
+    profile: ClientProfileConfig,
+    session: ToolSession,
+    base_variables: dict[str, str],
+) -> list[StepEvent]:
+    variables = {
+        **profile.variables,
+        **base_variables,
+        "loop.index": str(loop_index),
+        "loop.number": str(loop_index + 1),
+        "profile.name": profile.name,
+    }
+    events: list[StepEvent] = []
+    for step in profile.scenario:
+        event, captures = await run_step(
+            client_index, loop_index, profile.name, step, session, variables
+        )
+        variables.update(captures)
+        events.append(event)
+    return events
 
 
 async def run_step(
     client_index: int,
     loop_index: int,
+    profile_name: str,
     step: StepConfig,
     session: ToolSession,
     variables: dict[str, str],
@@ -87,6 +116,7 @@ async def run_step(
     event = StepEvent(
         client_index=client_index,
         loop_index=loop_index,
+        profile_name=profile_name,
         name=step.name,
         tool=step.tool,
         elapsed_seconds=elapsed,

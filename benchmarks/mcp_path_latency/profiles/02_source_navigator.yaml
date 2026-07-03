@@ -1,0 +1,104 @@
+name: source_navigator
+variables:
+  role: navigation
+scenario:
+  - name: open_source_tab
+    tool: new_tab
+    arguments:
+      starting_directory: "."
+      starting_shell: "powershell"
+    capture:
+      tab_id: "TAB_ID"
+  - name: view_source_prompt
+    tool: view
+    arguments:
+      id: "${tab_id}"
+      waiting: 0
+  - name: enter_src
+    tool: send_command
+    arguments:
+      tab_id: "${tab_id}"
+      command: "Set-Location .\\src; Get-Location | Select-Object -ExpandProperty Path"
+      waiting: 5
+    capture:
+      enter_src_command_id: "COMMAND_ID"
+  - name: view_enter_src
+    tool: view
+    arguments:
+      id: "${enter_src_command_id}"
+      waiting: 0
+  - name: list_engine_modules
+    tool: send_command
+    arguments:
+      tab_id: "${tab_id}"
+      command: "Get-ChildItem .\\engine -File | Select-Object Name,Length | Format-Table -AutoSize | Out-String"
+      waiting: 5
+    capture:
+      engine_command_id: "COMMAND_ID"
+  - name: view_engine_modules
+    tool: view
+    arguments:
+      id: "${engine_command_id}"
+      waiting: 0
+  - name: enter_runtime
+    tool: send_command
+    arguments:
+      tab_id: "${tab_id}"
+      command: "Set-Location .\\engine\\runtime; Get-ChildItem -Directory | Select-Object Name | Out-String"
+      waiting: 5
+    capture:
+      runtime_command_id: "COMMAND_ID"
+  - name: view_runtime_directories
+    tool: view
+    arguments:
+      id: "${runtime_command_id}"
+      waiting: 0
+  - name: inspect_protocol_files
+    tool: send_command
+    arguments:
+      tab_id: "${tab_id}"
+      command: "Get-ChildItem .\\protocol -File | Select-Object Name,Length | Format-Table -AutoSize | Out-String"
+      waiting: 5
+    capture:
+      protocol_command_id: "COMMAND_ID"
+  - name: view_protocol_files
+    tool: view
+    arguments:
+      id: "${protocol_command_id}"
+      waiting: 0
+  - name: return_workspace
+    tool: send_command
+    arguments:
+      tab_id: "${tab_id}"
+      command: "Set-Location ..\\..\\..; Get-Location | Select-Object -ExpandProperty Path"
+      waiting: 5
+    capture:
+      return_command_id: "COMMAND_ID"
+  - name: view_return_workspace
+    tool: view
+    arguments:
+      id: "${return_command_id}"
+      waiting: 0
+  - name: inspect_source_screen
+    tool: view
+    arguments:
+      id: "${tab_id}"
+      waiting: 0
+  - name: summarize_navigation
+    tool: send_command
+    arguments:
+      tab_id: "${tab_id}"
+      command: "Write-Output 'navigation path complete for ${client.name} ${profile.name}'"
+      waiting: 5
+    capture:
+      summary_command_id: "COMMAND_ID"
+  - name: view_navigation_summary
+    tool: view
+    arguments:
+      id: "${summary_command_id}"
+      waiting: 0
+  - name: view_navigation_final_screen
+    tool: view
+    arguments:
+      id: "${tab_id}"
+      waiting: 0
