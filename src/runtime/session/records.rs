@@ -1,5 +1,6 @@
 use crate::contract::{
-    COMMAND_PAYLOAD_FILE, COMMAND_SCRIPT_FILE, DONE_FILE, STARTED_FILE, STDERR_FILE, STDOUT_FILE,
+    COMMAND_INPUT_DIRECTORY, COMMAND_OUTPUT_DIRECTORY, COMMAND_PAYLOAD_FILE, COMMAND_SCRIPT_FILE,
+    COMMAND_STATE_DIRECTORY, DONE_FILE, STARTED_FILE, STDERR_FILE, STDOUT_FILE,
 };
 use crate::runtime::protocol::{CommandSnapshot, CommandView};
 mod wait;
@@ -36,16 +37,21 @@ pub(super) fn create_record(
     initial_cwd: &Path,
 ) -> Result<CommandRecord> {
     let command_dir = command_root.join(command_id);
-    fs::create_dir_all(&command_dir).context("failed to create command directory")?;
+    let input_dir = command_dir.join(COMMAND_INPUT_DIRECTORY);
+    let output_dir = command_dir.join(COMMAND_OUTPUT_DIRECTORY);
+    let state_dir = command_dir.join(COMMAND_STATE_DIRECTORY);
+    fs::create_dir_all(&input_dir).context("failed to create command input directory")?;
+    fs::create_dir_all(&output_dir).context("failed to create command output directory")?;
+    fs::create_dir_all(&state_dir).context("failed to create command state directory")?;
     Ok(CommandRecord {
-        directory: command_dir.clone(),
+        directory: command_dir,
         initial_cwd: initial_cwd.to_path_buf(),
-        stdout: command_dir.join(STDOUT_FILE),
-        stderr: command_dir.join(STDERR_FILE),
-        payload: command_dir.join(COMMAND_PAYLOAD_FILE),
-        script: command_dir.join(COMMAND_SCRIPT_FILE),
-        started: command_dir.join(STARTED_FILE),
-        done: command_dir.join(DONE_FILE),
+        stdout: output_dir.join(STDOUT_FILE),
+        stderr: output_dir.join(STDERR_FILE),
+        payload: input_dir.join(COMMAND_PAYLOAD_FILE),
+        script: input_dir.join(COMMAND_SCRIPT_FILE),
+        started: state_dir.join(STARTED_FILE),
+        done: state_dir.join(DONE_FILE),
     })
 }
 pub(super) fn read_command_result(

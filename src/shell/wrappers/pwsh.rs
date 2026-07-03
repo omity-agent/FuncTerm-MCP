@@ -1,5 +1,6 @@
 use crate::contract::{
-    COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV, COMMAND_PAYLOAD_FILE, DONE_FILE, DONE_TEMP_FILE,
+    COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV, COMMAND_INPUT_DIRECTORY, COMMAND_OUTPUT_DIRECTORY,
+    COMMAND_PAYLOAD_FILE, COMMAND_STATE_DIRECTORY, DONE_FILE, DONE_TEMP_FILE,
     HELPER_EXECUTABLE_ENV, POWERSHELL_COMMAND_FUNCTION, STARTED_FILE, STDERR_FILE, STDOUT_FILE,
 };
 pub(in crate::shell) fn wrapper() -> String {
@@ -8,11 +9,14 @@ pub(in crate::shell) fn wrapper() -> String {
         &[
             ("@COMMAND_DIR_ENV@", COMMAND_DIRECTORY_ENV),
             ("@COMMAND_ID_ENV@", COMMAND_ID_ENV),
+            ("@INPUT_DIR@", COMMAND_INPUT_DIRECTORY),
             ("@DONE@", DONE_FILE),
             ("@DONE_TEMP@", DONE_TEMP_FILE),
             ("@FUNCTION@", POWERSHELL_COMMAND_FUNCTION),
             ("@HELPER_ENV@", HELPER_EXECUTABLE_ENV),
+            ("@OUTPUT_DIR@", COMMAND_OUTPUT_DIRECTORY),
             ("@PAYLOAD@", COMMAND_PAYLOAD_FILE),
+            ("@STATE_DIR@", COMMAND_STATE_DIRECTORY),
             ("@STDERR@", STDERR_FILE),
             ("@STARTED@", STARTED_FILE),
             ("@STDOUT@", STDOUT_FILE),
@@ -68,13 +72,16 @@ function @FUNCTION@ {
         [Parameter(Mandatory = $true)][string]$WorkingDirectory
     )
     Set-FuncTermShimPath
-    New-Item -ItemType Directory -Force -Path $Directory | Out-Null
-    $stdoutFile = Join-Path $Directory '@STDOUT@'
-    $stderrFile = Join-Path $Directory '@STDERR@'
-    $startedFile = Join-Path $Directory '@STARTED@'
-    $payloadFile = Join-Path $Directory '@PAYLOAD@'
-    $doneFile = Join-Path $Directory '@DONE@'
-    $doneTempFile = Join-Path $Directory '@DONE_TEMP@'
+    $inputDir = Join-Path $Directory '@INPUT_DIR@'
+    $outputDir = Join-Path $Directory '@OUTPUT_DIR@'
+    $stateDir = Join-Path $Directory '@STATE_DIR@'
+    New-Item -ItemType Directory -Force -Path $inputDir, $outputDir, $stateDir | Out-Null
+    $stdoutFile = Join-Path $outputDir '@STDOUT@'
+    $stderrFile = Join-Path $outputDir '@STDERR@'
+    $startedFile = Join-Path $stateDir '@STARTED@'
+    $payloadFile = Join-Path $inputDir '@PAYLOAD@'
+    $doneFile = Join-Path $stateDir '@DONE@'
+    $doneTempFile = Join-Path $stateDir '@DONE_TEMP@'
     $previousCommandId = $env:@COMMAND_ID_ENV@
     $previousCommandDirectory = $env:@COMMAND_DIR_ENV@
     $env:@COMMAND_ID_ENV@ = $CommandId
@@ -107,7 +114,7 @@ function @FUNCTION@ {
         $exitCode = 1
     }
     if (-not (Test-Path -LiteralPath $doneFile)) {
-        New-Item -ItemType Directory -Force -Path $Directory | Out-Null
+        New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
         if ([string]::IsNullOrEmpty($env:@HELPER_ENV@)) {
             [Console]::Error.WriteLine('@HELPER_ENV@ is not set')
             $exitCode = 1

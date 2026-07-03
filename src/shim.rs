@@ -1,6 +1,6 @@
 mod startup;
 mod stdio;
-use crate::contract::{DONE_FILE, DONE_TEMP_FILE};
+use crate::contract::{COMMAND_STATE_DIRECTORY, DONE_FILE, DONE_TEMP_FILE};
 use crate::shell::{ShellChoice, ShellStartup, shims};
 use anyhow::{Context as _, Result};
 use serde::Serialize;
@@ -90,7 +90,8 @@ fn complete_active_command(cwd: &Path) -> Result<()> {
         return Ok(());
     };
     let directory_path = PathBuf::from(directory);
-    let done_path = directory_path.join(DONE_FILE);
+    let state_dir = directory_path.join(COMMAND_STATE_DIRECTORY);
+    let done_path = state_dir.join(DONE_FILE);
     if done_path.exists() {
         return Ok(());
     }
@@ -100,7 +101,13 @@ fn complete_active_command(cwd: &Path) -> Result<()> {
         cwd: cwd.to_string_lossy().into_owned(),
     };
     let text = sonic_rs::to_string(&done).context("failed to serialize early done file")?;
-    let temp_path = directory_path.join(DONE_TEMP_FILE);
+    fs::create_dir_all(&state_dir).with_context(|| {
+        format!(
+            "failed to create command state directory {}",
+            state_dir.display()
+        )
+    })?;
+    let temp_path = state_dir.join(DONE_TEMP_FILE);
     fs::write(&temp_path, text).context("failed to write early done file")?;
     match fs::rename(&temp_path, &done_path) {
         Ok(()) => Ok(()),

@@ -23,8 +23,8 @@ impl ShellDriver for CmdDriver {
         Ok(vec![settings.cmd.clone()])
     }
     fn startup(&self, context: StartupContext<'_>) -> Result<DriverStartup> {
-        let runner = context.session_root.join("cmd_run.bat");
-        let init = context.session_root.join("cmd_init.bat");
+        let runner = context.startup_directory.join("cmd_run.bat");
+        let init = context.startup_directory.join("cmd_init.bat");
         std::fs::write(&runner, cmd_wrapper()).context("failed to write Cmd command wrapper")?;
         std::fs::write(&init, initialization_script(context)?)
             .context("failed to write Cmd initialization script")?;
@@ -40,7 +40,7 @@ impl ShellDriver for CmdDriver {
     }
     fn invocation(&self, context: InvocationContext<'_>) -> Result<String> {
         Ok(format!(
-            "call \"%FUNCTERM_SESSION_ROOT%\\cmd_run.bat\" {} {} {}\r\n",
+            "call \"%FUNCTERM_SESSION_ROOT%\\startup\\cmd_run.bat\" {} {} {}\r\n",
             quote::cmd_string(context.command_id),
             quote::cmd_string(&quote::native_path(context.directory)?),
             quote::cmd_string(&quote::native_path(context.cwd)?)

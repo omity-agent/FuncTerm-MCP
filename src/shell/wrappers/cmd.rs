@@ -1,6 +1,7 @@
 use crate::contract::{
-    COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV, COMMAND_SCRIPT_FILE, DONE_FILE, HELPER_EXECUTABLE_ENV,
-    STARTED_FILE, STDERR_FILE, STDOUT_FILE,
+    COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV, COMMAND_INPUT_DIRECTORY, COMMAND_OUTPUT_DIRECTORY,
+    COMMAND_SCRIPT_FILE, COMMAND_STATE_DIRECTORY, DONE_FILE, HELPER_EXECUTABLE_ENV, STARTED_FILE,
+    STDERR_FILE, STDOUT_FILE,
 };
 pub(in crate::shell) fn wrapper() -> String {
     substitute(
@@ -8,9 +9,12 @@ pub(in crate::shell) fn wrapper() -> String {
         &[
             ("@COMMAND_DIR_ENV@", COMMAND_DIRECTORY_ENV),
             ("@COMMAND_ID_ENV@", COMMAND_ID_ENV),
+            ("@INPUT_DIR@", COMMAND_INPUT_DIRECTORY),
             ("@DONE@", DONE_FILE),
             ("@HELPER_ENV@", HELPER_EXECUTABLE_ENV),
+            ("@OUTPUT_DIR@", COMMAND_OUTPUT_DIRECTORY),
             ("@SCRIPT@", COMMAND_SCRIPT_FILE),
+            ("@STATE_DIR@", COMMAND_STATE_DIRECTORY),
             ("@STDERR@", STDERR_FILE),
             ("@STARTED@", STARTED_FILE),
             ("@STDOUT@", STDOUT_FILE),
@@ -29,12 +33,17 @@ setlocal DisableDelayedExpansion
 set "command_id=%~1"
 set "directory=%~2"
 set "working_directory=%~3"
-if not exist "%directory%" mkdir "%directory%" || exit /b 1
-set "stdout_file=%directory%\@STDOUT@"
-set "stderr_file=%directory%\@STDERR@"
-set "started_file=%directory%\@STARTED@"
-set "script_file=%directory%\@SCRIPT@"
-set "done_file=%directory%\@DONE@"
+set "input_dir=%directory%\@INPUT_DIR@"
+set "output_dir=%directory%\@OUTPUT_DIR@"
+set "state_dir=%directory%\@STATE_DIR@"
+if not exist "%input_dir%" mkdir "%input_dir%" || exit /b 1
+if not exist "%output_dir%" mkdir "%output_dir%" || exit /b 1
+if not exist "%state_dir%" mkdir "%state_dir%" || exit /b 1
+set "stdout_file=%output_dir%\@STDOUT@"
+set "stderr_file=%output_dir%\@STDERR@"
+set "started_file=%state_dir%\@STARTED@"
+set "script_file=%input_dir%\@SCRIPT@"
+set "done_file=%state_dir%\@DONE@"
 set "had_previous_command_id="
 set "had_previous_command_directory="
 if defined @COMMAND_ID_ENV@ set "had_previous_command_id=1"
@@ -69,7 +78,7 @@ call "%script_file%" > "%stdout_file%" 2> "%stderr_file%"
 set "exit_code=%ERRORLEVEL%"
 if exist "%stdout_file%" type "%stdout_file%"
 if exist "%stderr_file%" type "%stderr_file%" 1>&2
-if not exist "%directory%" mkdir "%directory%" || exit /b 1
+if not exist "%state_dir%" mkdir "%state_dir%" || exit /b 1
 call :publish_done %exit_code%
 if errorlevel 1 (
     call :restore_command_environment

@@ -17,7 +17,7 @@ use std::path::Path;
 use std::sync::Mutex;
 pub(super) struct ShellLauncher {
     settings: Settings,
-    command_root: std::path::PathBuf,
+    generation_root: std::path::PathBuf,
     shim_dir: std::path::PathBuf,
 }
 impl ShellLauncher {
@@ -25,15 +25,12 @@ impl ShellLauncher {
         let root = temp::daemon_root()?;
         temp::remove_stale_service_runtime(&root, &settings.daemon_service_name);
         let generation = runtime_generation();
-        let command_root =
-            temp::service_runtime_directory(&root, "commands", &settings.daemon_service_name)
-                .join(&generation);
-        let shim_dir =
-            temp::service_runtime_directory(&root, "shell-shims", &settings.daemon_service_name)
-                .join(generation);
+        let generation_root =
+            temp::generation_root(&root, &settings.daemon_service_name, &generation);
+        let shim_dir = temp::shim_directory(&generation_root);
         Ok(Self {
             settings,
-            command_root,
+            generation_root,
             shim_dir,
         })
     }
@@ -43,12 +40,15 @@ impl ShellLauncher {
         starting_directory: &Path,
         starting_shell: ShellChoice,
     ) -> Result<Arc<ShellSession>> {
-        let command_root = self.command_root.join(tab_id);
+        let tab_root = temp::tab_root(&self.generation_root, tab_id);
+        let tab_state = temp::tab_state_directory(&tab_root);
+        let command_root = temp::tab_commands_directory(&tab_root);
+        std::fs::create_dir_all(&tab_state).context("failed to create tab state directory")?;
         std::fs::create_dir_all(&command_root).context("failed to create command root")?;
-        let mut startup = starting_shell.startup(starting_directory, &command_root)?;
+        let mut startup = starting_shell.startup(starting_directory, &tab_root)?;
         startup.env.extend(shims::environment(
             &self.settings,
-            &command_root,
+            &tab_root,
             &self.shim_dir,
             starting_shell,
         )?);
@@ -97,7 +97,7 @@ impl ShellLauncher {
             Duration::try_from_secs_f64(self.settings.shell_startup_timeout_seconds)
                 .context("shell_startup_timeout_seconds must be finite and non-negative")?;
         wait_for_shell_startup(&mut child, &ready_file, &screen, startup_timeout)?;
-        let active_shell_file = command_root.join("active-shell.txt");
+        let active_shell_file = tab_state.join("active-shell.txt");
         Ok(Arc::new(ShellSession::new(ShellSessionParts {
             choice: starting_shell,
             cwd: starting_directory.to_path_buf(),

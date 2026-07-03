@@ -21,10 +21,24 @@ impl ShellChoice {
         select_available_executable(&self.driver().executable_candidates(settings)?)
     }
     pub(crate) fn startup(self, cwd: &Path, session_root: &Path) -> Result<ShellStartup> {
-        let ready_file = session_root.join("startup.ready");
+        let state_directory = session_root.join("state");
+        let startup_directory = session_root.join("startup");
+        std::fs::create_dir_all(&state_directory).with_context(|| {
+            format!(
+                "failed to create shell session state directory {}",
+                state_directory.display()
+            )
+        })?;
+        std::fs::create_dir_all(&startup_directory).with_context(|| {
+            format!(
+                "failed to create shell startup directory {}",
+                startup_directory.display()
+            )
+        })?;
+        let ready_file = state_directory.join("ready");
         let startup = self.driver().startup(drivers::StartupContext {
             cwd,
-            session_root,
+            startup_directory: &startup_directory,
             ready_file: &ready_file,
         })?;
         let args = startup.args;

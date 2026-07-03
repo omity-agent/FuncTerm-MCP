@@ -1,23 +1,69 @@
 use anyhow::{Context as _, Result};
 use std::path::PathBuf;
 const DAEMON_ROOT: &str = "functerm";
+const GENERATIONS_DIRECTORY: &str = "generations";
+const SERVICE_HASH_LENGTH: usize = 12;
+const SERVICES_DIRECTORY: &str = "services";
+const SHIMS_DIRECTORY: &str = "shims";
+const TAB_COMMANDS_DIRECTORY: &str = "commands";
+const TAB_STATE_DIRECTORY: &str = "state";
+const TABS_DIRECTORY: &str = "tabs";
 pub(crate) fn daemon_root() -> Result<PathBuf> {
     create_root(&daemon_root_name())
 }
-pub(crate) fn service_runtime_directory(
+pub(crate) fn generation_root(
     root: &std::path::Path,
-    category: &str,
     service_name: &str,
+    generation: &str,
 ) -> PathBuf {
-    root.join(category).join(hex::encode(service_name))
+    service_root(root, service_name)
+        .join(GENERATIONS_DIRECTORY)
+        .join(generation)
+}
+pub(crate) fn shim_directory(generation_root: &std::path::Path) -> PathBuf {
+    generation_root.join(SHIMS_DIRECTORY)
+}
+pub(crate) fn tab_commands_directory(tab_root: &std::path::Path) -> PathBuf {
+    tab_root.join(TAB_COMMANDS_DIRECTORY)
+}
+pub(crate) fn tab_root(generation_root: &std::path::Path, tab_id: &str) -> PathBuf {
+    generation_root.join(TABS_DIRECTORY).join(tab_id)
+}
+pub(crate) fn tab_state_directory(tab_root: &std::path::Path) -> PathBuf {
+    tab_root.join(TAB_STATE_DIRECTORY)
 }
 pub(crate) fn remove_stale_service_runtime(root: &std::path::Path, service_name: &str) {
-    for category in ["commands", "shell-shims"] {
-        if let Err(error) =
-            remove_directory_if_present(&service_runtime_directory(root, category, service_name))
-        {
-            eprintln!("{error:#}");
+    if let Err(error) = remove_directory_if_present(&service_root(root, service_name)) {
+        eprintln!("{error:#}");
+    }
+}
+fn service_root(root: &std::path::Path, service_name: &str) -> PathBuf {
+    root.join(SERVICES_DIRECTORY)
+        .join(service_directory_name(service_name))
+}
+fn service_directory_name(service_name: &str) -> String {
+    let slug = service_slug(service_name);
+    let hash = blake3::hash(service_name.as_bytes())
+        .to_hex()
+        .chars()
+        .take(SERVICE_HASH_LENGTH)
+        .collect::<String>();
+    format!("{slug}-{hash}")
+}
+fn service_slug(service_name: &str) -> String {
+    let mut slug = String::new();
+    for character in service_name.chars() {
+        if character.is_ascii_alphanumeric() {
+            slug.push(character.to_ascii_lowercase());
+        } else if !slug.ends_with('-') {
+            slug.push('-');
         }
+    }
+    let trimmed = slug.trim_matches('-');
+    if trimmed.is_empty() {
+        "service".to_owned()
+    } else {
+        trimmed.to_owned()
     }
 }
 #[cfg(unix)]

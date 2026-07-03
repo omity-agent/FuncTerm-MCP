@@ -118,7 +118,7 @@ mod tests {
     fn initialization_sets_literal_location() {
         let script = super::initialization_script(StartupContext {
             cwd: Path::new("F:\\dir with ' quote"),
-            session_root: Path::new("F:\\session"),
+            startup_directory: Path::new("F:\\session\\startup"),
             ready_file: Path::new("F:\\ready'file"),
         })
         .unwrap();

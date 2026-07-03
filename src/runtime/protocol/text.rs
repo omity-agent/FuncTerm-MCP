@@ -87,16 +87,16 @@ fn command_text(command: &CommandView, command_id: Option<&str>) -> String {
         .map_or_else(|| "pending".to_owned(), |code| code.to_string());
     let mut items = Vec::new();
     if let Some(id) = command_id {
-        items.push(("COMMAND_ID", id.to_owned()));
+        items.push(element("COMMAND_ID", id));
     }
     items.extend([
-        ("STDOUT", command.stdout.clone()),
-        ("STDERR", command.stderr.clone()),
-        ("EXIT_CODE", exit_code),
-        ("TIME_CONSUMPTION", command.time_consumption.clone()),
-        ("FINISHED", command.finished.to_string()),
+        inline_element("STDOUT", &command.stdout),
+        inline_element("STDERR", &command.stderr),
+        element("EXIT_CODE", &exit_code),
+        element("TIME_CONSUMPTION", &command.time_consumption),
+        element("FINISHED", &command.finished.to_string()),
     ]);
-    elements_vec(items)
+    items.join("\n")
 }
 fn elements<const COUNT: usize>(items: [(&str, String); COUNT]) -> String {
     elements_vec(Vec::from(items))
@@ -113,4 +113,7 @@ fn elements_vec(items: Vec<(&str, String)>) -> String {
 }
 fn element(tag: &str, content: &str) -> String {
     format!("<{tag}>\n{content}\n</{tag}>")
+}
+fn inline_element(tag: &str, content: &str) -> String {
+    format!("<{tag}>{content}</{tag}>")
 }

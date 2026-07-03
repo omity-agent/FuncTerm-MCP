@@ -11,7 +11,7 @@ use std::path::Path;
 #[derive(Clone, Copy)]
 pub(crate) struct StartupContext<'value> {
     pub(crate) cwd: &'value Path,
-    pub(crate) session_root: &'value Path,
+    pub(crate) startup_directory: &'value Path,
     pub(crate) ready_file: &'value Path,
 }
 pub(crate) struct InvocationContext<'value> {

@@ -120,19 +120,24 @@ fn print_result(result: Result<String>) -> Result<()> {
     Ok(())
 }
 fn write_done(command_id: &str, exit_code: i32, cwd: &str, directory: &Path) -> Result<()> {
-    let done_path = directory.join(crate::contract::DONE_FILE);
+    let state_dir = directory.join(crate::contract::COMMAND_STATE_DIRECTORY);
+    let done_path = state_dir.join(crate::contract::DONE_FILE);
     if done_path.exists() {
         return Ok(());
     }
-    fs::create_dir_all(directory)
-        .with_context(|| format!("failed to create command directory {}", directory.display()))?;
+    fs::create_dir_all(&state_dir).with_context(|| {
+        format!(
+            "failed to create command state directory {}",
+            state_dir.display()
+        )
+    })?;
     let done = DoneOutput {
         command_id,
         exit_code,
         cwd,
     };
     let text = sonic_rs::to_string(&done).context("failed to serialize done file")?;
-    let temp_path = directory.join(crate::contract::DONE_TEMP_FILE);
+    let temp_path = state_dir.join(crate::contract::DONE_TEMP_FILE);
     fs::write(&temp_path, text)
         .with_context(|| format!("failed to write done file {}", temp_path.display()))?;
     match fs::rename(&temp_path, &done_path) {
@@ -170,7 +175,12 @@ mod tests {
             .join("functerm-internal-done-writer-test")
             .join(nanoid::nanoid!());
         super::write_done("command\"id", 7, "cwd\nwith\\chars", &directory).unwrap();
-        let text = std::fs::read_to_string(directory.join(crate::contract::DONE_FILE)).unwrap();
+        let text = std::fs::read_to_string(
+            directory
+                .join(crate::contract::COMMAND_STATE_DIRECTORY)
+                .join(crate::contract::DONE_FILE),
+        )
+        .unwrap();
         let done = sonic_rs::from_str::<WrittenDone>(&text).unwrap();
         assert_eq!(done.command_id, "command\"id");
         assert_eq!(done.exit_code, 7_i32);

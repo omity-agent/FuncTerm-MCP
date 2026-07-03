@@ -81,7 +81,7 @@ impl ShellDriver for PosixDriver {
     }
 }
 fn bash_startup(context: StartupContext<'_>) -> Result<DriverStartup> {
-    let init_path = context.session_root.join("bash_init.sh");
+    let init_path = context.startup_directory.join("bash_init.sh");
     let script = initialization_script(context, "bash", &bash_wrapper(), ">")?;
     std::fs::write(&init_path, script).context("failed to write Bash initialization script")?;
     Ok(DriverStartup {
@@ -95,14 +95,14 @@ fn bash_startup(context: StartupContext<'_>) -> Result<DriverStartup> {
     })
 }
 fn zsh_startup(context: StartupContext<'_>) -> Result<DriverStartup> {
-    let init_path = context.session_root.join(".zshrc");
+    let init_path = context.startup_directory.join(".zshrc");
     let script = initialization_script(context, "zsh", &zsh_wrapper(), ">|")?;
     std::fs::write(&init_path, script).context("failed to write Zsh initialization script")?;
     Ok(DriverStartup {
         args: vec!["-i".to_owned()],
         env: vec![(
             "ZDOTDIR".to_owned(),
-            quote::native_path(context.session_root)?,
+            quote::native_path(context.startup_directory)?,
         )],
     })
 }

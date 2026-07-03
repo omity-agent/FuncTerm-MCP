@@ -10,7 +10,7 @@ fn zero_wait_does_not_block_for_missing_done_file() {
     assert!(!wait_for_done(missing_path, Duration::from_millis(0)).unwrap());
 }
 #[test]
-fn command_record_places_payload_next_to_output_files() {
+fn command_record_separates_input_output_and_state_files() {
     let root = std::env::temp_dir()
         .join("functerm-record-payload-test")
         .join(std::process::id().to_string());
@@ -18,11 +18,15 @@ fn command_record_places_payload_next_to_output_files() {
     let record = create_record(&root, "command-test", Path::new("F:\\cwd")).unwrap();
     assert_eq!(
         record.payload,
-        root.join("command-test").join("command.b64")
+        root.join("command-test").join("input").join("command.b64")
     );
     assert_eq!(
-        record.stdout.parent().unwrap(),
-        record.payload.parent().unwrap()
+        record.stdout,
+        root.join("command-test").join("output").join("stdout.txt")
+    );
+    assert_eq!(
+        record.done,
+        root.join("command-test").join("state").join("done.json")
     );
     std::fs::remove_dir_all(&root).unwrap();
 }

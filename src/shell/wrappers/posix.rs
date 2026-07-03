@@ -1,7 +1,8 @@
 use super::posix_dialect::PosixDialect;
 use super::posix_startup::{path_function, shim_path_function};
 use crate::contract::{
-    COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV, COMMAND_PAYLOAD_FILE, DONE_FILE, HELPER_EXECUTABLE_ENV,
+    COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV, COMMAND_INPUT_DIRECTORY, COMMAND_OUTPUT_DIRECTORY,
+    COMMAND_PAYLOAD_FILE, COMMAND_STATE_DIRECTORY, DONE_FILE, HELPER_EXECUTABLE_ENV,
     POSIX_COMMAND_FUNCTION, STARTED_FILE, STDERR_FILE, STDOUT_FILE,
 };
 pub(in crate::shell) fn bash_wrapper() -> String {
@@ -48,12 +49,15 @@ fn command_function(dialect: PosixDialect) -> String {
     local working_directory="$3"
     directory="$(functerm_posix_path "$directory")" || return 1
     working_directory="$(functerm_posix_path "$working_directory")" || return 1
-    {mkdir} "$directory" || return 1
-    local stdout_file="$directory/{stdout}"
-    local stderr_file="$directory/{stderr}"
-    local started_file="$directory/{started}"
-    local payload_file="$directory/{payload}"
-    local done_file="$directory/{done}"
+    local input_dir="$directory/{input_dir}"
+    local output_dir="$directory/{output_dir}"
+    local state_dir="$directory/{state_dir}"
+    {mkdir} "$input_dir" "$output_dir" "$state_dir" || return 1
+    local stdout_file="$output_dir/{stdout}"
+    local stderr_file="$output_dir/{stderr}"
+    local started_file="$state_dir/{started}"
+    local payload_file="$input_dir/{payload}"
+    local done_file="$state_dir/{done}"
     local previous_command_id="${{{command_id_env}-}}"
     local previous_command_directory="${{{command_dir_env}-}}"
 {previous_flags}
@@ -101,7 +105,7 @@ fn command_function(dialect: PosixDialect) -> String {
     local exit_code=$?
     cat "$stdout_file"
     cat "$stderr_file" >&2
-    {mkdir} "$directory" || return 1
+    {mkdir} "$state_dir" || return 1
     if ! functerm_publish_done "$command_id" "$exit_code" "$PWD" "$native_directory"; then
         functerm_restore_command_environment \
             "$had_previous_command_id" "$previous_command_id" \
@@ -169,6 +173,9 @@ functerm_ensure_shims() {{
         name = POSIX_COMMAND_FUNCTION,
         emulate = dialect.emulate(),
         mkdir = dialect.mkdir(),
+        input_dir = COMMAND_INPUT_DIRECTORY,
+        output_dir = COMMAND_OUTPUT_DIRECTORY,
+        state_dir = COMMAND_STATE_DIRECTORY,
         stdout = STDOUT_FILE,
         stderr = STDERR_FILE,
         started = STARTED_FILE,

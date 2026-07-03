@@ -34,7 +34,7 @@ pub(crate) fn environment(
         (
             ACTIVE_SHELL_FILE_ENV.to_owned(),
             crate::text::path_text(
-                &session_root.join("active-shell.txt"),
+                &session_root.join("state").join("active-shell.txt"),
                 "active shell state path",
             )
             .context("failed to encode active shell state path")?,

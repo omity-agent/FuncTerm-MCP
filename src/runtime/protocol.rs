@@ -111,8 +111,10 @@ mod tests {
         }
         .into_plain_text();
         assert!(text.contains("<CWD>\nF:\\workspace\\A&B\n</CWD>"));
-        assert!(text.contains("<STDOUT>\nleft < right\n</STDOUT>"));
-        assert!(text.contains("<STDERR>\nraw </STDERR> allowed\n</STDERR>"));
+        assert!(text.contains("<STDOUT>left < right</STDOUT>"));
+        assert!(text.contains("<STDERR>raw </STDERR> allowed</STDERR>"));
+        assert!(!text.contains("<STDOUT>\nleft < right"));
+        assert!(!text.contains("<STDERR>\nraw </STDERR> allowed"));
     }
     #[test]
     fn tab_output_reports_shell_state() {

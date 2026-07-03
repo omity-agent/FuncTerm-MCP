@@ -119,13 +119,11 @@ impl ShellSession {
         let payload = STANDARD.encode(command.as_bytes());
         std::fs::write(&record.payload, payload).context("failed to write command payload")?;
         std::fs::write(&record.script, command).context("failed to write command script")?;
-        let directory = record
-            .stdout
-            .parent()
-            .context("missing command directory")?;
-        let line = self
-            .current_choice()?
-            .invocation(command_id, directory, &record.initial_cwd)?;
+        let line = self.current_choice()?.invocation(
+            command_id,
+            &record.directory,
+            &record.initial_cwd,
+        )?;
         let mut writer = lock_mutex(&self.writer, "writer")?;
         writer
             .write_all(line.as_bytes())

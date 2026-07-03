@@ -1,5 +1,6 @@
 use crate::contract::{
-    COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV, COMMAND_PAYLOAD_FILE, DONE_FILE, DONE_TEMP_FILE,
+    COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV, COMMAND_INPUT_DIRECTORY, COMMAND_OUTPUT_DIRECTORY,
+    COMMAND_PAYLOAD_FILE, COMMAND_STATE_DIRECTORY, DONE_FILE, DONE_TEMP_FILE,
     HELPER_EXECUTABLE_ENV, POSIX_COMMAND_FUNCTION, STARTED_FILE, STDERR_FILE, STDOUT_FILE,
 };
 pub(in crate::shell) fn wrapper() -> String {
@@ -8,11 +9,14 @@ pub(in crate::shell) fn wrapper() -> String {
         &[
             ("@COMMAND_DIR_ENV@", COMMAND_DIRECTORY_ENV),
             ("@COMMAND_ID_ENV@", COMMAND_ID_ENV),
+            ("@INPUT_DIR@", COMMAND_INPUT_DIRECTORY),
             ("@DONE@", DONE_FILE),
             ("@DONE_TEMP@", DONE_TEMP_FILE),
             ("@FUNCTION@", POSIX_COMMAND_FUNCTION),
             ("@HELPER_ENV@", HELPER_EXECUTABLE_ENV),
+            ("@OUTPUT_DIR@", COMMAND_OUTPUT_DIRECTORY),
             ("@PAYLOAD@", COMMAND_PAYLOAD_FILE),
+            ("@STATE_DIR@", COMMAND_STATE_DIRECTORY),
             ("@STDERR@", STDERR_FILE),
             ("@STARTED@", STARTED_FILE),
             ("@STDOUT@", STDOUT_FILE),
@@ -27,15 +31,18 @@ fn substitute(template: &str, pairs: &[(&str, &str)]) -> String {
     text
 }
 const TEMPLATE: &str = r#"def @FUNCTION@ [command_id: string, directory: path, working_directory: path] {
-    mkdir $directory
-    let stdout_file = ($directory | path join '@STDOUT@')
-    let stderr_file = ($directory | path join '@STDERR@')
-    let started_file = ($directory | path join '@STARTED@')
-    let payload_file = ($directory | path join '@PAYLOAD@')
-    let done_file = ($directory | path join '@DONE@')
-    let done_temp_file = ($directory | path join '@DONE_TEMP@')
-    let state_file = ($directory | path join 'state.json')
-    let script_file = ($directory | path join 'command.nu')
+    let input_dir = ($directory | path join '@INPUT_DIR@')
+    let output_dir = ($directory | path join '@OUTPUT_DIR@')
+    let state_dir = ($directory | path join '@STATE_DIR@')
+    mkdir $input_dir $output_dir $state_dir
+    let stdout_file = ($output_dir | path join '@STDOUT@')
+    let stderr_file = ($output_dir | path join '@STDERR@')
+    let started_file = ($state_dir | path join '@STARTED@')
+    let payload_file = ($input_dir | path join '@PAYLOAD@')
+    let done_file = ($state_dir | path join '@DONE@')
+    let done_temp_file = ($state_dir | path join '@DONE_TEMP@')
+    let state_file = ($state_dir | path join 'nushell-state.json')
+    let script_file = ($input_dir | path join 'command.nu')
     let previous_command_id = $env.@COMMAND_ID_ENV@?
     let previous_command_directory = $env.@COMMAND_DIR_ENV@?
     $env.@COMMAND_ID_ENV@ = $command_id
@@ -86,7 +93,7 @@ const TEMPLATE: &str = r#"def @FUNCTION@ [command_id: string, directory: path, w
         print --stderr $error.msg
         { cwd: ($working_directory | path expand), exit_code: 1 }
     }
-    mkdir $directory
+    mkdir $state_dir
     if not ($done_file | path exists) {
         let helper = $env.@HELPER_ENV@?
         if ($helper | is-empty) {
