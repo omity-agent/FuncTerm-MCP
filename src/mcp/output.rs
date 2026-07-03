@@ -25,6 +25,7 @@ pub(super) struct ViewOutput {
 pub(super) enum OutputEndReason {
     CommandEnded,
     WaitTimeout,
+    CommandFailed,
 }
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -111,6 +112,7 @@ impl From<EndReason> for OutputEndReason {
         match value {
             EndReason::CommandEnded => Self::CommandEnded,
             EndReason::WaitTimeout => Self::WaitTimeout,
+            EndReason::CommandFailed => Self::CommandFailed,
         }
     }
 }

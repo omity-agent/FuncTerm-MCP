@@ -1,3 +1,5 @@
+mod view;
+use super::command::ManagedCommand;
 use super::session::ShellSession;
 use crate::runtime::protocol::ViewResult;
 use crate::runtime::session::support::lock_mutex;
@@ -5,6 +7,11 @@ use alloc::sync::Arc;
 use anyhow::{Result, bail};
 use std::collections::HashMap;
 use std::sync::Mutex;
+const ID_LENGTH: usize = 12;
+const ID_ALPHABET: [char; 36] = [
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i',
+    'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+];
 #[derive(Default)]
 pub(super) struct TabDirectory {
     tabs: Mutex<HashMap<String, Arc<Tab>>>,
@@ -14,7 +21,7 @@ pub(super) struct Tab {
     id: String,
     session: Mutex<Option<Arc<ShellSession>>>,
     snapshot: Mutex<TabSnapshot>,
-    commands: Mutex<HashMap<String, crate::runtime::session::records::CommandRecord>>,
+    commands: Mutex<HashMap<String, Arc<ManagedCommand>>>,
 }
 #[derive(Clone)]
 pub(super) struct TabSnapshot {
@@ -70,7 +77,7 @@ impl TabDirectory {
     }
     fn next_id(&self, prefix: &str) -> Result<String> {
         loop {
-            let id = format!("{prefix}{}", super::state::random_id_suffix());
+            let id = format!("{prefix}{}", random_id_suffix());
             if !self.id_exists(&id)? {
                 return Ok(id);
             }
@@ -125,24 +132,14 @@ impl Tab {
     pub(super) fn optional_session(&self) -> Result<Option<Arc<ShellSession>>> {
         Ok(lock_mutex(&self.session, "tab session")?.clone())
     }
-    pub(super) fn insert_command(
-        &self,
-        command_id: String,
-        record: crate::runtime::session::records::CommandRecord,
-    ) -> Result<()> {
-        lock_mutex(&self.commands, "tab command")?.insert(command_id, record);
+    pub(super) fn insert_command(&self, command: Arc<ManagedCommand>) -> Result<()> {
+        lock_mutex(&self.commands, "tab command")?.insert(command.id().to_owned(), command);
         Ok(())
     }
-    pub(super) fn remove_command(
-        &self,
-        command_id: &str,
-    ) -> Result<Option<crate::runtime::session::records::CommandRecord>> {
+    pub(super) fn remove_command(&self, command_id: &str) -> Result<Option<Arc<ManagedCommand>>> {
         Ok(lock_mutex(&self.commands, "tab command")?.remove(command_id))
     }
-    pub(super) fn find_command(
-        &self,
-        command_id: &str,
-    ) -> Result<Option<crate::runtime::session::records::CommandRecord>> {
+    pub(super) fn find_command(&self, command_id: &str) -> Result<Option<Arc<ManagedCommand>>> {
         Ok(lock_mutex(&self.commands, "tab command")?
             .get(command_id)
             .cloned())
@@ -180,4 +177,7 @@ impl TabSnapshot {
             last_command: self.last_command,
         }
     }
+}
+fn random_id_suffix() -> String {
+    nanoid::nanoid!(ID_LENGTH, &ID_ALPHABET)
 }

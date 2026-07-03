@@ -1,4 +1,4 @@
-use super::{create_record, wait_for_done};
+use super::{create_record, read_command_result, wait_for_done, write_failed_result};
 use core::time::Duration;
 use std::path::Path;
 #[test]
@@ -21,6 +21,30 @@ fn command_record_places_payload_next_to_output_files() {
         record.stdout.parent().unwrap(),
         record.payload.parent().unwrap()
     );
+    std::fs::remove_dir_all(&root).unwrap();
+}
+#[test]
+fn failed_result_closes_command_lifecycle() {
+    let root = std::env::temp_dir()
+        .join("functerm-record-failed-result-test")
+        .join(std::process::id().to_string());
+    let _ignored = std::fs::remove_dir_all(&root);
+    let record = create_record(&root, "command-failed", Path::new("F:\\cwd")).unwrap();
+    write_failed_result("command-failed", &record, "shell exited").unwrap();
+    assert!(wait_for_done(&record.done, Duration::from_millis(0)).unwrap());
+    let result = read_command_result(&record, Path::new("F:\\fallback")).unwrap();
+    let crate::runtime::protocol::ViewResult::Command {
+        finished,
+        stderr,
+        exit_code,
+        ..
+    } = result
+    else {
+        panic!("failed command should render as command output");
+    };
+    assert!(finished);
+    assert_eq!(exit_code, Some(1_i32));
+    assert!(stderr.contains("shell exited"));
     std::fs::remove_dir_all(&root).unwrap();
 }
 #[test]

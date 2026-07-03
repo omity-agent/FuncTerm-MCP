@@ -48,6 +48,7 @@ pub(crate) enum Payload {
 pub(crate) enum EndReason {
     CommandEnded,
     WaitTimeout,
+    CommandFailed,
 }
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) enum ViewResult {

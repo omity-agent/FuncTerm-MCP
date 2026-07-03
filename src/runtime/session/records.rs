@@ -3,8 +3,9 @@ use crate::runtime::protocol::ViewResult;
 use anyhow::{Context as _, Result, bail};
 use core::time::Duration;
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher as _};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::Instant;
@@ -20,6 +21,12 @@ pub(super) struct CommandRecord {
 pub(super) struct DoneFile {
     pub(super) exit_code: i32,
     pub(super) cwd: String,
+}
+#[derive(Serialize)]
+struct FailedDoneFile<'value> {
+    command_id: &'value str,
+    exit_code: i32,
+    cwd: String,
 }
 pub(super) fn create_record(
     command_root: &Path,
@@ -100,6 +107,44 @@ pub(super) fn read_command_result(
         stderr,
         exit_code,
     })
+}
+pub(super) fn write_failed_result(
+    command_id: &str,
+    record: &CommandRecord,
+    message: &str,
+) -> Result<()> {
+    if record.done.exists() {
+        return Ok(());
+    }
+    if let Some(parent) = record.stderr.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create command directory {}", parent.display()))?;
+    }
+    let mut stderr = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&record.stderr)
+        .with_context(|| format!("failed to open {}", record.stderr.display()))?;
+    writeln!(stderr, "{message}")
+        .with_context(|| format!("failed to write {}", record.stderr.display()))?;
+    let done = FailedDoneFile {
+        command_id,
+        exit_code: 1_i32,
+        cwd: crate::text::path_text(&record.initial_cwd, "cwd")?,
+    };
+    let text = sonic_rs::to_string(&done).context("failed to serialize failed done file")?;
+    let temp_path = record.done.with_extension("json.tmp");
+    fs::write(&temp_path, text)
+        .with_context(|| format!("failed to write {}", temp_path.display()))?;
+    match fs::rename(&temp_path, &record.done) {
+        Ok(()) => Ok(()),
+        Err(_error) if record.done.exists() => {
+            fs::remove_file(&temp_path)
+                .with_context(|| format!("failed to remove {}", temp_path.display()))?;
+            Ok(())
+        }
+        Err(error) => Err(error).context("failed to publish failed done file"),
+    }
 }
 fn read_optional(path: &Path) -> Result<String> {
     if path.exists() {

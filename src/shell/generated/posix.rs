@@ -113,6 +113,11 @@ fn command_function(dialect: PosixDialect) -> String {
         return 1
     fi
     if ! {cd} "$working_directory"; then
+        local cwd_json
+        cwd_json="$(functerm_json_string "$PWD")"
+        printf '{{"command_id":"%s","exit_code":1,"cwd":%s,"completed_at":"%s"}}\n' \
+            "$command_id" "$cwd_json" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" {write_done_temp} "$done_temp_file"
+        {move_done}
         functerm_restore_command_environment \
             "$had_previous_command_id" "$previous_command_id" \
             "$had_previous_command_directory" "$previous_command_directory"
