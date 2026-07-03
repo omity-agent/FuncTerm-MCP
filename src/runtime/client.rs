@@ -1,12 +1,12 @@
-use crate::runtime::daemon::startup::{StartupReply, READY_ENDPOINT_ENV};
+use crate::runtime::daemon::startup::{READY_ENDPOINT_ENV, StartupReply};
 use crate::runtime::daemon::{BootstrapReply, DaemonRequest};
 use crate::runtime::protocol::{Payload, Request, Response};
-use anyhow::{bail, Context as _, Result};
+use anyhow::{Context as _, Result, bail};
 use core::time::Duration;
 use ipc_channel::ipc::{self, IpcOneShotServer, IpcSender};
 use std::process::{Command, Stdio};
 use std::time::Instant;
-const IPC_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+const IPC_SETUP_TIMEOUT: Duration = Duration::from_secs(15);
 pub(crate) struct DaemonClient {
     sender: IpcSender<DaemonRequest>,
 }
@@ -44,7 +44,7 @@ fn connect_to_endpoint(service_name: &str) -> Result<DaemonClient> {
         match try_connect_to_endpoint(service_name, endpoint_name) {
             Ok(client) => return Ok(client),
             Err(error)
-                if is_busy_bootstrap_pipe(&error) && start.elapsed() < IPC_CONNECT_TIMEOUT =>
+                if is_retryable_bootstrap_error(&error) && start.elapsed() < IPC_SETUP_TIMEOUT =>
             {
                 std::thread::yield_now();
             }
@@ -61,18 +61,24 @@ fn try_connect_to_endpoint(service_name: &str, endpoint_name: String) -> Result<
         .send(reply_sender)
         .context("failed to request daemon IPC channel")?;
     let sender = reply_receiver
-        .try_recv_timeout(IPC_CONNECT_TIMEOUT)
+        .try_recv_timeout(IPC_SETUP_TIMEOUT)
         .context("failed to receive daemon IPC channel")?;
     Ok(DaemonClient { sender })
 }
-fn is_busy_bootstrap_pipe(error: &anyhow::Error) -> bool {
+fn is_retryable_bootstrap_error(error: &anyhow::Error) -> bool {
     let text = format!("{error:#}");
+    is_busy_bootstrap_pipe(&text) || is_disconnected_bootstrap_reply(&text)
+}
+fn is_busy_bootstrap_pipe(text: &str) -> bool {
     text.contains("-2147024665")
         || text.contains("-2147024360")
         || text.contains("All pipe instances are busy")
         || text.contains("waiting for a process to open the other end of the pipe")
         || text.contains("所有的管道范例都在使用中")
         || text.contains("等候打开管道另一端的进程")
+}
+fn is_disconnected_bootstrap_reply(text: &str) -> bool {
+    text.contains("failed to receive daemon IPC channel") && text.contains("Ipc Disconnected")
 }
 pub(crate) fn call(service_name: &str, request: &Request) -> Result<Payload> {
     let client = DaemonClient::connect(service_name)?;
@@ -113,7 +119,7 @@ fn wait_for_existing_daemon(service_name: &str) -> Result<()> {
         match call(service_name, &Request::Ping) {
             Ok(Payload::Pong) => return Ok(()),
             Ok(_payload) => bail!("daemon returned an unexpected response to ping"),
-            Err(_error) if start.elapsed() < IPC_CONNECT_TIMEOUT => {
+            Err(_error) if start.elapsed() < IPC_SETUP_TIMEOUT => {
                 std::thread::yield_now();
             }
             Err(error) => {
@@ -125,36 +131,50 @@ fn wait_for_existing_daemon(service_name: &str) -> Result<()> {
 fn is_daemon_already_running(error: &anyhow::Error) -> bool {
     format!("{error:#}").contains("daemon is already running")
 }
-enum StartupEvent {
-    Reply(Result<StartupReply>),
-    Exit(Result<std::process::ExitStatus>),
-}
 fn wait_for_daemon_startup(
     startup_server: IpcOneShotServer<StartupReply>,
     mut child: std::process::Child,
 ) -> Result<()> {
-    let (event_sender, event_receiver) = std::sync::mpsc::channel();
-    let reply_sender = event_sender.clone();
+    let (reply_sender, reply_receiver) = std::sync::mpsc::channel();
     let _reply_worker = std::thread::spawn(move || {
         let reply = startup_server
             .accept()
             .map(|(_receiver, reply)| reply)
             .context("failed to receive daemon startup status");
-        let _send_result = reply_sender.send(StartupEvent::Reply(reply));
+        let _send_result = reply_sender.send(reply);
     });
-    let _exit_worker = std::thread::spawn(move || {
-        let status = child.wait().context("failed to wait for daemon startup");
-        let _send_result = event_sender.send(StartupEvent::Exit(status));
-    });
-    match event_receiver
-        .recv()
-        .context("failed to receive daemon startup event")?
+    match reply_receiver.recv_timeout(IPC_SETUP_TIMEOUT) {
+        Ok(Ok(StartupReply::Ready)) => Ok(()),
+        Ok(Ok(StartupReply::Failed { message })) => bail!(message),
+        Ok(Err(error)) => Err(error),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => fail_daemon_startup_timeout(&mut child),
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+            bail!("daemon startup reporter disconnected")
+        }
+    }
+}
+fn fail_daemon_startup_timeout(child: &mut std::process::Child) -> Result<()> {
+    if let Some(status) = child
+        .try_wait()
+        .context("failed to poll daemon startup status")?
     {
-        StartupEvent::Reply(Ok(StartupReply::Ready)) => Ok(()),
-        StartupEvent::Reply(Ok(StartupReply::Failed { message })) => bail!(message),
-        StartupEvent::Reply(Err(error)) | StartupEvent::Exit(Err(error)) => Err(error),
-        StartupEvent::Exit(Ok(status)) => {
-            bail!("daemon exited during startup with status {status}")
+        bail!("daemon exited during startup with status {status}");
+    }
+    match child.kill() {
+        Ok(()) => {
+            let _status = child
+                .wait()
+                .context("failed to wait for daemon after startup timeout")?;
+            bail!("daemon startup timed out after {IPC_SETUP_TIMEOUT:?}");
+        }
+        Err(kill_error) => {
+            if let Some(status) = child
+                .try_wait()
+                .context("failed to poll daemon startup status after kill failed")?
+            {
+                bail!("daemon exited during startup with status {status}");
+            }
+            Err(kill_error).context("failed to kill daemon after startup timeout")
         }
     }
 }
