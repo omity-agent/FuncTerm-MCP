@@ -3,7 +3,7 @@ mod lifecycle;
 mod tests;
 use super::{Manager, session::KeyboardWriteFailure, tab::Tab};
 use crate::runtime::protocol::{EndReason, ViewResult};
-use crate::runtime::session::records::create_record;
+use crate::runtime::session::records::{create_record, remove_record_directory};
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use core::time::Duration;
@@ -72,6 +72,17 @@ impl Tab {
         self.insert_command(Arc::clone(&managed))?;
         if let Err(error) = session.write_invocation(managed.id(), command_text, managed.record()) {
             self.remove_command(managed.id())?;
+            if let Err(cleanup_error) = remove_record_directory(managed.record()) {
+                eprintln!("{cleanup_error:#}");
+            }
+            self.close_session(&session)?;
+            return Err(error);
+        }
+        if let Err(error) = session.wait_for_command_start(managed.record()) {
+            self.remove_command(managed.id())?;
+            if let Err(cleanup_error) = remove_record_directory(managed.record()) {
+                eprintln!("{cleanup_error:#}");
+            }
             self.close_session(&session)?;
             return Err(error);
         }
@@ -122,12 +133,13 @@ impl Tab {
         });
     }
     pub(super) fn finish_done_command(&self, command: &ManagedCommand) -> Result<()> {
-        command.mark_finished()?;
         if let Some(session) = self.optional_session()? {
             session.update_cwd_from_done(command.record())?;
             self.remember(&session)?;
             session.release(command.id())?;
         }
+        let fallback_cwd = self.command_fallback_cwd(command.record())?;
+        command.mark_finished(&fallback_cwd)?;
         Ok(())
     }
     pub(super) fn abort_if_shell_dead(

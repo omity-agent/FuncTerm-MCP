@@ -5,6 +5,7 @@ use crate::shell::{ShellChoice, shims};
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use base64_turbo::STANDARD;
+use core::time::Duration;
 use portable_pty::{Child, SlavePty};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -18,6 +19,7 @@ pub(super) struct ShellSession {
     busy: Mutex<Option<String>>,
     command_root: PathBuf,
     active_shell_file: PathBuf,
+    command_start_timeout: Duration,
     process_tree: process_tree::ProcessTree,
     child: Mutex<Box<dyn Child + Send + Sync>>,
     _slave: Mutex<Box<dyn SlavePty + Send>>,
@@ -36,6 +38,7 @@ pub(super) struct ShellSessionParts {
     pub(super) busy: Option<String>,
     pub(super) command_root: PathBuf,
     pub(super) active_shell_file: PathBuf,
+    pub(super) command_start_timeout: Duration,
     pub(super) process_tree: process_tree::ProcessTree,
     pub(super) child: Box<dyn Child + Send + Sync>,
     pub(super) slave: Box<dyn SlavePty + Send>,
@@ -51,6 +54,7 @@ impl ShellSession {
             busy: Mutex::new(parts.busy),
             command_root: parts.command_root,
             active_shell_file: parts.active_shell_file,
+            command_start_timeout: parts.command_start_timeout,
             process_tree: parts.process_tree,
             child: Mutex::new(parts.child),
             _slave: Mutex::new(parts.slave),
@@ -138,6 +142,18 @@ impl ShellSession {
             self.set_cwd(PathBuf::from(done.cwd))?;
         }
         Ok(())
+    }
+    pub(super) fn wait_for_command_start(&self, record: &CommandRecord) -> Result<()> {
+        if crate::runtime::session::records::wait_for_start_or_done(
+            record,
+            self.command_start_timeout,
+        )? {
+            return Ok(());
+        }
+        anyhow::bail!(
+            "shell did not start command within {:?}",
+            self.command_start_timeout
+        );
     }
     pub(super) fn reserve(&self, command_id: &str) -> Result<()> {
         let mut busy = lock_mutex(&self.busy, "busy")?;

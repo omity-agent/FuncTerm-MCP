@@ -4,6 +4,22 @@ const DAEMON_ROOT: &str = "functerm";
 pub(crate) fn daemon_root() -> Result<PathBuf> {
     create_root(&daemon_root_name())
 }
+pub(crate) fn service_runtime_directory(
+    root: &std::path::Path,
+    category: &str,
+    service_name: &str,
+) -> PathBuf {
+    root.join(category).join(hex::encode(service_name))
+}
+pub(crate) fn remove_stale_service_runtime(root: &std::path::Path, service_name: &str) {
+    for category in ["commands", "shell-shims"] {
+        if let Err(error) =
+            remove_directory_if_present(&service_runtime_directory(root, category, service_name))
+        {
+            eprintln!("{error:#}");
+        }
+    }
+}
 #[cfg(unix)]
 fn daemon_root_name() -> String {
     let uid = unsafe { libc::geteuid() };
@@ -20,6 +36,22 @@ fn create_root(name: &str) -> Result<PathBuf> {
     #[cfg(unix)]
     secure_root(&root)?;
     Ok(root)
+}
+#[expect(
+    clippy::std_instead_of_core,
+    reason = "ErrorKind is only available from std"
+)]
+fn remove_directory_if_present(path: &std::path::Path) -> Result<()> {
+    match std::fs::remove_dir_all(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| {
+            format!(
+                "failed to remove stale runtime directory {}",
+                path.display()
+            )
+        }),
+    }
 }
 #[cfg(unix)]
 fn secure_root(root: &std::path::Path) -> Result<()> {

@@ -6,4 +6,5 @@ pub(crate) const DONE_TEMP_FILE: &str = "done.json.tmp";
 pub(crate) const POWERSHELL_COMMAND_FUNCTION: &str = "Invoke-FuncTermCommand";
 pub(crate) const POSIX_COMMAND_FUNCTION: &str = "functerm_run_command";
 pub(crate) const STDERR_FILE: &str = "stderr.txt";
+pub(crate) const STARTED_FILE: &str = "started";
 pub(crate) const STDOUT_FILE: &str = "stdout.txt";

@@ -1,4 +1,7 @@
-use super::{create_record, read_command_result, wait_for_done, write_failed_result};
+use super::{
+    create_record, read_and_clear_command_result, read_command_result, wait_for_done,
+    write_failed_result,
+};
 use core::time::Duration;
 use std::path::Path;
 #[test]
@@ -11,7 +14,7 @@ fn command_record_places_payload_next_to_output_files() {
     let root = std::env::temp_dir()
         .join("functerm-record-payload-test")
         .join(std::process::id().to_string());
-    let _ignored = std::fs::remove_dir_all(&root);
+    let _cleanup = std::fs::remove_dir_all(&root);
     let record = create_record(&root, "command-test", Path::new("F:\\cwd")).unwrap();
     assert_eq!(
         record.payload,
@@ -28,7 +31,7 @@ fn failed_result_closes_command_lifecycle() {
     let root = std::env::temp_dir()
         .join("functerm-record-failed-result-test")
         .join(std::process::id().to_string());
-    let _ignored = std::fs::remove_dir_all(&root);
+    let _final_cleanup = std::fs::remove_dir_all(&root);
     let record = create_record(&root, "command-failed", Path::new("F:\\cwd")).unwrap();
     write_failed_result("command-failed", &record, "shell exited").unwrap();
     assert!(wait_for_done(&record.done, Duration::from_millis(0)).unwrap());
@@ -46,6 +49,32 @@ fn failed_result_closes_command_lifecycle() {
     assert_eq!(exit_code, Some(1_i32));
     assert!(stderr.contains("shell exited"));
     std::fs::remove_dir_all(&root).unwrap();
+}
+#[test]
+fn read_and_clear_keeps_result_while_removing_record_files() {
+    let root = std::env::temp_dir()
+        .join("functerm-record-clear-test")
+        .join(std::process::id().to_string());
+    let _ignored = std::fs::remove_dir_all(&root);
+    let record = create_record(&root, "command-clear", Path::new("F:\\cwd")).unwrap();
+    std::fs::write(&record.stdout, "kept stdout").unwrap();
+    std::fs::write(&record.stderr, "kept stderr").unwrap();
+    write_failed_result("command-clear", &record, "done").unwrap();
+    let result = read_and_clear_command_result(&record, Path::new("F:\\fallback")).unwrap();
+    let crate::runtime::protocol::ViewResult::Command {
+        stdout,
+        stderr,
+        finished,
+        ..
+    } = result
+    else {
+        panic!("record should render as command output");
+    };
+    assert!(finished);
+    assert_eq!(stdout, "kept stdout");
+    assert!(stderr.contains("kept stderr"));
+    assert!(!record.directory.exists());
+    let _clear_cleanup = std::fs::remove_dir_all(&root);
 }
 #[test]
 fn reads_utf16_little_endian_output() {

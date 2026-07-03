@@ -1,6 +1,6 @@
 use crate::contract::{
     COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV, COMMAND_PAYLOAD_FILE, DONE_FILE, DONE_TEMP_FILE,
-    POWERSHELL_COMMAND_FUNCTION, STDERR_FILE, STDOUT_FILE,
+    POWERSHELL_COMMAND_FUNCTION, STARTED_FILE, STDERR_FILE, STDOUT_FILE,
 };
 pub(in crate::shell) fn wrapper() -> String {
     substitute(
@@ -13,6 +13,7 @@ pub(in crate::shell) fn wrapper() -> String {
             ("@FUNCTION@", POWERSHELL_COMMAND_FUNCTION),
             ("@PAYLOAD@", COMMAND_PAYLOAD_FILE),
             ("@STDERR@", STDERR_FILE),
+            ("@STARTED@", STARTED_FILE),
             ("@STDOUT@", STDOUT_FILE),
         ],
     )
@@ -57,6 +58,7 @@ function @FUNCTION@ {
     New-Item -ItemType Directory -Force -Path $Directory | Out-Null
     $stdoutFile = Join-Path $Directory '@STDOUT@'
     $stderrFile = Join-Path $Directory '@STDERR@'
+    $startedFile = Join-Path $Directory '@STARTED@'
     $payloadFile = Join-Path $Directory '@PAYLOAD@'
     $doneFile = Join-Path $Directory '@DONE@'
     $doneTempFile = Join-Path $Directory '@DONE_TEMP@'
@@ -64,13 +66,12 @@ function @FUNCTION@ {
     $previousCommandDirectory = $env:@COMMAND_DIR_ENV@
     $env:@COMMAND_ID_ENV@ = $CommandId
     $env:@COMMAND_DIR_ENV@ = $Directory
-    Set-Content -LiteralPath $stdoutFile -Value '' -NoNewline -Encoding utf8
-    Set-Content -LiteralPath $stderrFile -Value '' -NoNewline -Encoding utf8
     try {
         Set-Location -LiteralPath $WorkingDirectory
         $global:LASTEXITCODE = $null
         $Payload = Get-Content -LiteralPath $payloadFile -Raw -Encoding utf8
         $script = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Payload))
+        Set-Content -LiteralPath $startedFile -Value '' -NoNewline -Encoding utf8
         & ([scriptblock]::Create($script)) 2> $stderrFile | Tee-Object -FilePath $stdoutFile
         if ($null -ne $global:LASTEXITCODE) {
             $exitCode = [int]$global:LASTEXITCODE

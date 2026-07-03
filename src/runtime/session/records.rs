@@ -1,20 +1,20 @@
-use crate::contract::{COMMAND_PAYLOAD_FILE, DONE_FILE, STDERR_FILE, STDOUT_FILE};
+use crate::contract::{COMMAND_PAYLOAD_FILE, DONE_FILE, STARTED_FILE, STDERR_FILE, STDOUT_FILE};
 use crate::runtime::protocol::ViewResult;
+mod wait;
 use anyhow::{Context as _, Result, bail};
-use core::time::Duration;
-use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher as _};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
-use std::time::Instant;
+pub(super) use wait::{wait_for_done, wait_for_path, wait_for_start_or_done};
 #[derive(Clone)]
 pub(super) struct CommandRecord {
+    pub(super) directory: PathBuf,
     pub(super) initial_cwd: PathBuf,
     pub(super) stdout: PathBuf,
     pub(super) stderr: PathBuf,
     pub(super) payload: PathBuf,
+    pub(super) started: PathBuf,
     pub(super) done: PathBuf,
 }
 #[derive(Deserialize)]
@@ -36,57 +36,14 @@ pub(super) fn create_record(
     let command_dir = command_root.join(command_id);
     fs::create_dir_all(&command_dir).context("failed to create command directory")?;
     Ok(CommandRecord {
+        directory: command_dir.clone(),
         initial_cwd: initial_cwd.to_path_buf(),
         stdout: command_dir.join(STDOUT_FILE),
         stderr: command_dir.join(STDERR_FILE),
         payload: command_dir.join(COMMAND_PAYLOAD_FILE),
+        started: command_dir.join(STARTED_FILE),
         done: command_dir.join(DONE_FILE),
     })
-}
-pub(super) fn wait_for_done(done: &Path, limit: Duration) -> Result<bool> {
-    wait_for_path(done, limit)
-}
-pub(super) fn wait_for_path(path: &Path, limit: Duration) -> Result<bool> {
-    if path.exists() {
-        return Ok(true);
-    }
-    if limit.is_zero() {
-        return Ok(false);
-    }
-    let parent = path.parent().context("watched path has no parent")?;
-    fs::create_dir_all(parent).with_context(|| {
-        format!(
-            "failed to create watched parent directory {}",
-            parent.display()
-        )
-    })?;
-    let (tx, rx) = mpsc::channel();
-    let mut watcher = RecommendedWatcher::new(tx, Config::default())
-        .context("failed to create filesystem watcher")?;
-    watcher
-        .watch(parent, RecursiveMode::NonRecursive)
-        .with_context(|| format!("failed to watch directory {}", parent.display()))?;
-    if path.exists() {
-        return Ok(true);
-    }
-    let start = Instant::now();
-    loop {
-        let Some(remaining) = limit.checked_sub(start.elapsed()) else {
-            return Ok(false);
-        };
-        match rx.recv_timeout(remaining) {
-            Ok(Ok(_event)) => {
-                if path.exists() {
-                    return Ok(true);
-                }
-            }
-            Ok(Err(error)) => return Err(error).context("filesystem watcher failed"),
-            Err(mpsc::RecvTimeoutError::Timeout) => return Ok(path.exists()),
-            Err(mpsc::RecvTimeoutError::Disconnected) => {
-                anyhow::bail!("filesystem watcher disconnected")
-            }
-        }
-    }
 }
 pub(super) fn read_command_result(
     record: &CommandRecord,
@@ -107,6 +64,32 @@ pub(super) fn read_command_result(
         stderr,
         exit_code,
     })
+}
+pub(super) fn read_and_clear_command_result(
+    record: &CommandRecord,
+    fallback_cwd: &Path,
+) -> Result<ViewResult> {
+    let result = read_command_result(record, fallback_cwd)?;
+    if let Err(error) = remove_record_directory(record) {
+        eprintln!("{error:#}");
+    }
+    Ok(result)
+}
+#[expect(
+    clippy::std_instead_of_core,
+    reason = "ErrorKind is only available from std"
+)]
+pub(super) fn remove_record_directory(record: &CommandRecord) -> Result<()> {
+    match fs::remove_dir_all(&record.directory) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| {
+            format!(
+                "failed to remove command directory {}",
+                record.directory.display()
+            )
+        }),
+    }
 }
 pub(super) fn write_failed_result(
     command_id: &str,

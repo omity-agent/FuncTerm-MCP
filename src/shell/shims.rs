@@ -3,7 +3,6 @@ use crate::runtime::config::Settings;
 use anyhow::{Context as _, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
-const SHIM_DIR: &str = "shell-shims";
 pub(crate) const ACTIVE_SHELL_FILE_ENV: &str = "FUNCTERM_ACTIVE_SHELL_FILE";
 pub(crate) const CURRENT_SHELL_ENV: &str = "FUNCTERM_CURRENT_SHELL";
 pub(crate) const SESSION_ROOT_ENV: &str = "FUNCTERM_SESSION_ROOT";
@@ -12,25 +11,24 @@ pub(crate) use crate::contract::{COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV};
 pub(crate) fn environment(
     settings: &Settings,
     session_root: &Path,
+    shim_dir: &Path,
     current_shell: ShellChoice,
 ) -> Result<Vec<(String, String)>> {
-    let shim_dir = session_root.join(SHIM_DIR);
-    fs::create_dir_all(&shim_dir).context("failed to create shell shim directory")?;
+    fs::create_dir_all(shim_dir).context("failed to create shell shim directory")?;
     let current_exe = std::env::current_exe().context("failed to resolve current executable")?;
     for shell in ShellChoice::all() {
         for alias in shell.executable_aliases() {
-            fs::copy(&current_exe, shim_dir.join(alias))
-                .with_context(|| format!("failed to create shell shim {alias}"))?;
+            create_shim_alias(&current_exe, &shim_dir.join(alias), alias)?;
         }
     }
     let mut env = vec![
         (
             "PATH".to_owned(),
-            prepend_path(&shim_dir).context("failed to build shim PATH")?,
+            prepend_path(shim_dir).context("failed to build shim PATH")?,
         ),
         (
             SHIM_DIR_ENV.to_owned(),
-            crate::text::path_text(&shim_dir, "shell shim directory")
+            crate::text::path_text(shim_dir, "shell shim directory")
                 .context("failed to encode shell shim directory")?,
         ),
         (
@@ -67,6 +65,14 @@ pub(crate) fn environment(
         }
     }
     Ok(env)
+}
+fn create_shim_alias(current_exe: &Path, alias_path: &Path, alias: &str) -> Result<()> {
+    if alias_path.exists() {
+        return Ok(());
+    }
+    fs::copy(current_exe, alias_path)
+        .with_context(|| format!("failed to create shell shim {alias}"))?;
+    Ok(())
 }
 pub(crate) fn write_active_shell(path: &Path, shell: ShellChoice) -> Result<()> {
     let temp_path = active_shell_temp_path(path);

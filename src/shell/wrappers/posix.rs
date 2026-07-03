@@ -1,9 +1,9 @@
 use super::posix_dialect::PosixDialect;
+use super::posix_startup::{path_function, shim_path_function};
 use crate::contract::{
     COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV, COMMAND_PAYLOAD_FILE, DONE_FILE, DONE_TEMP_FILE,
-    POSIX_COMMAND_FUNCTION, STDERR_FILE, STDOUT_FILE,
+    POSIX_COMMAND_FUNCTION, STARTED_FILE, STDERR_FILE, STDOUT_FILE,
 };
-use crate::shell::shims::SHIM_DIR_ENV;
 pub(in crate::shell) fn bash_wrapper() -> String {
     format!(
         "set +o history
@@ -39,57 +39,6 @@ unset HISTFILE
         command = command_function(PosixDialect::Zsh)
     )
 }
-fn path_function(zsh: bool) -> String {
-    let local_options = if zsh {
-        "\n    emulate -L zsh\n    setopt sh_word_split"
-    } else {
-        ""
-    };
-    format!(
-        r#"functerm_posix_path() {{{local_options}
-    local value="$1"
-    if command -v cygpath > /dev/null 2>&1; then
-        cygpath -u "$value"
-        return $?
-    fi
-    case "$value" in
-        [A-Za-z]:\\*|[A-Za-z]:/*)
-            printf 'cygpath is required to convert Windows path: %s\n' "$value" >&2
-            return 1
-            ;;
-    esac
-    printf '%s\n' "$value"
-}}"#
-    )
-}
-fn shim_path_function(zsh: bool) -> String {
-    let local_options = if zsh {
-        "\n    emulate -L zsh\n    setopt sh_word_split"
-    } else {
-        ""
-    };
-    format!(
-        r#"functerm_prepend_shim_path() {{{local_options}
-    if [ -z "${{{SHIM_DIR_ENV}-}}" ]; then
-        return 0
-    fi
-    local shim_dir="${{{SHIM_DIR_ENV}}}"
-    shim_dir="$(functerm_posix_path "$shim_dir")" || return 1
-    local new_path="$shim_dir"
-    local old_ifs="$IFS"
-    local entry
-    IFS=:
-    for entry in $PATH; do
-        if [ "$entry" != "$shim_dir" ]; then
-            new_path="$new_path:$entry"
-        fi
-    done
-    IFS="$old_ifs"
-    export PATH="$new_path"
-}}
-functerm_prepend_shim_path"#
-    )
-}
 fn command_function(dialect: PosixDialect) -> String {
     format!(
         r#"{name}() {{
@@ -101,6 +50,7 @@ fn command_function(dialect: PosixDialect) -> String {
     {mkdir} "$directory" || return 1
     local stdout_file="$directory/{stdout}"
     local stderr_file="$directory/{stderr}"
+    local started_file="$directory/{started}"
     local payload_file="$directory/{payload}"
     local done_file="$directory/{done}"
     local done_temp_file="$directory/{done_temp}"
@@ -110,8 +60,6 @@ fn command_function(dialect: PosixDialect) -> String {
     export {command_id_env}="$command_id"
     export {command_dir_env}="$directory"
     functerm_prepend_shim_path || return 1
-    {truncate} "$stdout_file"
-    {truncate} "$stderr_file"
     local script
     if ! script="$(functerm_decode_payload_file "$payload_file" "$stderr_file")"; then
         local cwd_json
@@ -123,6 +71,7 @@ fn command_function(dialect: PosixDialect) -> String {
             "$had_previous_command_directory" "$previous_command_directory"
         return 1
     fi
+    rm -f -- "$payload_file" || return 1
     if ! {cd} "$working_directory"; then
         local cwd_json
         cwd_json="$(functerm_json_string "$PWD")"
@@ -132,6 +81,7 @@ fn command_function(dialect: PosixDialect) -> String {
             "$had_previous_command_directory" "$previous_command_directory"
         return 1
     fi
+    : {write_started} "$started_file"
     {{ eval "$script"; }} > "$stdout_file" 2> "$stderr_file"
     local exit_code=$?
     cat "$stdout_file"
@@ -194,14 +144,15 @@ functerm_publish_done() {{
         mkdir = dialect.mkdir(),
         stdout = STDOUT_FILE,
         stderr = STDERR_FILE,
+        started = STARTED_FILE,
         payload = COMMAND_PAYLOAD_FILE,
         done = DONE_FILE,
         done_temp = DONE_TEMP_FILE,
         command_id_env = COMMAND_ID_ENV,
         command_dir_env = COMMAND_DIRECTORY_ENV,
         previous_flags = dialect.previous_flags(),
-        truncate = dialect.truncate(),
         write_done_temp = dialect.write_done_temp(),
+        write_started = dialect.write_done_temp(),
         move_done = dialect.move_done(),
         cd = dialect.cd(),
         test_one = dialect.test_arg("1"),

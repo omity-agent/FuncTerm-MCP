@@ -42,7 +42,7 @@ pub(super) fn keyboard_bytes(bytes: &[u8]) -> Cow<'_, [u8]> {
 }
 fn initialization_script(cwd: &Path, ready_file: &Path) -> Result<String> {
     Ok(format!(
-        "$env:{CURRENT_SHELL_ENV} = 'powershell'\n{}\nSet-Location -LiteralPath {}\nSet-Content -LiteralPath {} -Value '' -NoNewline",
+        "$env:{CURRENT_SHELL_ENV} = 'powershell'\n{}\nSet-Location -LiteralPath {}\n$script:FuncTermReadyWritten = $false\n$script:FuncTermOriginalPrompt = (Get-Command prompt).ScriptBlock\nfunction prompt {{\n    if (-not $script:FuncTermReadyWritten) {{\n        Set-Content -LiteralPath {} -Value '' -NoNewline\n        $script:FuncTermReadyWritten = $true\n    }}\n    & $script:FuncTermOriginalPrompt\n}}",
         powershell_wrapper(),
         quote::powershell_path(cwd)?,
         quote::powershell_path(ready_file)?

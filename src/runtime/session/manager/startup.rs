@@ -15,13 +15,26 @@ use std::path::Path;
 use std::sync::Mutex;
 pub(super) struct ShellLauncher {
     settings: Settings,
-    root: std::path::PathBuf,
+    command_root: std::path::PathBuf,
+    shim_dir: std::path::PathBuf,
+    shim_lock: Mutex<()>,
 }
 impl ShellLauncher {
     pub(super) fn new(settings: Settings) -> Result<Self> {
+        let root = temp::daemon_root()?;
+        temp::remove_stale_service_runtime(&root, &settings.daemon_service_name);
+        let generation = runtime_generation();
+        let command_root =
+            temp::service_runtime_directory(&root, "commands", &settings.daemon_service_name)
+                .join(&generation);
+        let shim_dir =
+            temp::service_runtime_directory(&root, "shell-shims", &settings.daemon_service_name)
+                .join(generation);
         Ok(Self {
             settings,
-            root: temp::daemon_root()?,
+            command_root,
+            shim_dir,
+            shim_lock: Mutex::new(()),
         })
     }
     pub(super) fn launch(
@@ -30,14 +43,20 @@ impl ShellLauncher {
         starting_directory: &Path,
         starting_shell: ShellChoice,
     ) -> Result<Arc<ShellSession>> {
-        let command_root = self.root.join("commands").join(tab_id);
+        let command_root = self.command_root.join(tab_id);
         std::fs::create_dir_all(&command_root).context("failed to create command root")?;
         let mut startup = starting_shell.startup(starting_directory, &command_root)?;
+        let shim_guard = self
+            .shim_lock
+            .lock()
+            .map_err(|error| anyhow::anyhow!("shell shim mutex poisoned: {error}"))?;
         startup.env.extend(shims::environment(
             &self.settings,
             &command_root,
+            &self.shim_dir,
             starting_shell,
         )?);
+        drop(shim_guard);
         let pair = native_pty_system()
             .openpty(PtySize {
                 rows: self.settings.terminal_rows,
@@ -84,7 +103,6 @@ impl ShellLauncher {
                 .context("shell_startup_timeout_seconds must be finite and non-negative")?;
         wait_for_shell_startup(&mut child, &ready_file, &screen, startup_timeout)?;
         let active_shell_file = command_root.join("active-shell.txt");
-        shims::write_active_shell(&active_shell_file, starting_shell)?;
         Ok(Arc::new(ShellSession::new(ShellSessionParts {
             choice: starting_shell,
             cwd: starting_directory.to_path_buf(),
@@ -94,11 +112,15 @@ impl ShellLauncher {
             busy: None,
             command_root,
             active_shell_file,
+            command_start_timeout: startup_timeout,
             process_tree,
             child,
             slave: pair.slave,
         })))
     }
+}
+fn runtime_generation() -> String {
+    format!("{}-{}", std::process::id(), nanoid::nanoid!())
 }
 pub(super) fn apply_startup(command: &mut CommandBuilder, startup: ShellStartup) {
     for (name, value) in startup.env {
