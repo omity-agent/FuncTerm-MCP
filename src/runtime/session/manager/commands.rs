@@ -7,10 +7,6 @@ use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use core::time::Duration;
 use std::thread;
-#[derive(Clone)]
-pub(super) struct StoredCommand {
-    record: CommandRecord,
-}
 pub(super) struct StartedCommand {
     command_id: String,
     tab: Arc<Tab>,
@@ -27,14 +23,6 @@ impl Manager {
         waiting: Duration,
     ) -> Result<(String, EndReason, ViewResult)> {
         self.tabs.send_command(tab_id, command, waiting)
-    }
-}
-impl StoredCommand {
-    pub(super) const fn new(record: CommandRecord) -> Self {
-        Self { record }
-    }
-    pub(super) fn record(&self) -> CommandRecord {
-        self.record.clone()
     }
 }
 impl Tab {

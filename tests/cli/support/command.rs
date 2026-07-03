@@ -118,7 +118,7 @@ fn output_from_pipes(mut command: Command, timeout: Duration) -> Output {
     )
 }
 fn output_paths() -> (PathBuf, PathBuf) {
-    let output_dir = std::env::temp_dir().join("shell-mcp-test-output");
+    let output_dir = std::env::temp_dir().join("functerm-test-output");
     fs::create_dir_all(&output_dir).unwrap();
     let unique = OUTPUT_COUNTER.fetch_add(1, Ordering::Relaxed);
     let prefix = format!("{}-{unique}", std::process::id());

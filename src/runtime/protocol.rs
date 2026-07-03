@@ -3,6 +3,7 @@ use anyhow::{Context as _, Result};
 use core::time::Duration;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+mod kind;
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) enum Request {
     Ping,

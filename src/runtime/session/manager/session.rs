@@ -109,7 +109,7 @@ impl ShellSession {
             .context("missing command directory")?;
         let line = self
             .current_choice()?
-            .invocation(command_id, directory, &record.initial_cwd);
+            .invocation(command_id, directory, &record.initial_cwd)?;
         let mut writer = lock_mutex(&self.writer, "writer")?;
         writer
             .write_all(line.as_bytes())

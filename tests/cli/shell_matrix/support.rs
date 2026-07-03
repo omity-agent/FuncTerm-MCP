@@ -1,4 +1,5 @@
 use core::sync::atomic::{AtomicU64, Ordering};
+use functerm::shell::quote;
 use std::fs;
 use std::path::{Path, PathBuf};
 static CASE_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -74,7 +75,7 @@ pub(super) fn immediately_exiting_executable() -> &'static str {
 pub(super) fn case_dir(shell: &str, leaf: &str) -> PathBuf {
     let unique = CASE_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
     let path = std::env::temp_dir()
-        .join("shell-mcp-cli")
+        .join("functerm-cli")
         .join(format!("{shell}-{}-{unique}", std::process::id()))
         .join("quote ' segment")
         .join(leaf);
@@ -85,15 +86,15 @@ pub(super) fn case_command(shell: &str, next: &Path) -> String {
     match shell {
         "powershell" => format!(
             "Write-Output 'MCP_PTY_STDOUT'; Write-Error 'MCP_PTY_STDERR'; Set-Location -LiteralPath {}; cmd /c exit 7",
-            ps_quote(next)
+            quote::powershell_path(next).unwrap()
         ),
         "bash" | "zsh" => format!(
             "printf 'MCP_PTY_STDOUT\\n'; printf 'MCP_PTY_STDERR\\n' >&2; cd {}; false",
-            sh_quote(&bash_path(next))
+            quote::posix_string(&quote::native_path(next).unwrap().replace('\\', "/"))
         ),
         "nu" => format!(
             "print 'MCP_PTY_STDOUT'; print --stderr 'MCP_PTY_STDERR'; cd {}",
-            nu_quote(&next.to_string_lossy())
+            quote::nushell_path(next).unwrap()
         ),
         other => panic!("unsupported shell case {other}"),
     }
@@ -109,9 +110,9 @@ pub(super) fn nested_launch_command(shell: &str) -> &'static str {
 }
 pub(super) fn nested_marker_command(shell: &str, marker: &str) -> String {
     match shell {
-        "powershell" => format!("Write-Output '{marker}'"),
-        "bash" | "zsh" => format!("printf '{}\\n'", marker.replace('\'', "'\\''")),
-        "nu" => format!("print '{}'", marker.replace('\'', "\\'")),
+        "powershell" => format!("Write-Output {}", quote::powershell_string(marker)),
+        "bash" | "zsh" => format!("printf '%s\\n' {}", quote::posix_string(marker)),
+        "nu" => format!("print {}", quote::nushell_string(marker)),
         other => panic!("unsupported shell case {other}"),
     }
 }
@@ -130,18 +131,4 @@ pub(super) fn assert_cwd(actual: &str, expected: &Path, shell: &str) {
         "{shell} cwd should include {}, got {actual}",
         expected.display()
     );
-}
-fn ps_quote(path: &Path) -> String {
-    let text = path.to_string_lossy().replace('\'', "''");
-    format!("'{text}'")
-}
-fn bash_path(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
-}
-fn sh_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\\''"))
-}
-fn nu_quote(value: &str) -> String {
-    let text = value.replace('\\', "\\\\").replace('"', "\\\"");
-    format!("\"{text}\"")
 }

@@ -44,9 +44,10 @@ fn run_interactive(choice: ShellChoice) -> Result<i32> {
     let startup = choice.startup(&cwd, &session_root)?;
     let ready_file = startup.ready_file.clone();
     let child = spawn_shell(choice, startup)?;
+    complete_active_command(&cwd)?;
     let status = startup::run_shell_until_exit(child, &ready_file, || {
         shims::write_active_shell(&active_shell_file, choice)?;
-        complete_active_command(&cwd)
+        Ok(())
     })?;
     shims::write_active_shell(&active_shell_file, parent_shell)?;
     Ok(exit_code(status))

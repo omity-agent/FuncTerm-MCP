@@ -99,7 +99,7 @@ mod tests {
     fn history_root(shell: &str) -> PathBuf {
         let unique = HISTORY_COUNTER.fetch_add(1, Ordering::Relaxed);
         let root = std::env::temp_dir()
-            .join("shell-mcp-history-tests")
+            .join("functerm-history-tests")
             .join(format!("{shell}-{}-{unique}", std::process::id()));
         fs::create_dir_all(&root).unwrap();
         root

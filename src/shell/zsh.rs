@@ -10,28 +10,28 @@ use std::path::Path;
 type Startup = (Vec<String>, Vec<(String, String)>);
 pub(super) fn startup(cwd: &Path, session_root: &Path, ready_file: &Path) -> Result<Startup> {
     let init_path = session_root.join(".zshrc");
-    let script = initialization_script(cwd, ready_file);
+    let script = initialization_script(cwd, ready_file)?;
     fs::write(&init_path, script).context("failed to write Zsh initialization script")?;
     Ok((
         vec!["-i".to_owned()],
-        vec![("ZDOTDIR".to_owned(), sh_path(session_root))],
+        vec![("ZDOTDIR".to_owned(), sh_path(session_root)?)],
     ))
 }
-pub(super) fn invocation(command_id: &str, directory: &Path, cwd: &Path) -> String {
-    format!(
+pub(super) fn invocation(command_id: &str, directory: &Path, cwd: &Path) -> Result<String> {
+    Ok(format!(
         "{POSIX_COMMAND_FUNCTION} {} {} {}\n",
         sh_quote(command_id),
-        sh_quote(&sh_path(directory)),
-        sh_quote(&sh_path(cwd))
-    )
+        sh_quote(&sh_path(directory)?),
+        sh_quote(&sh_path(cwd)?)
+    ))
 }
-fn initialization_script(cwd: &Path, ready_file: &Path) -> String {
-    format!(
+fn initialization_script(cwd: &Path, ready_file: &Path) -> Result<String> {
+    Ok(format!(
         "export {CURRENT_SHELL_ENV}=zsh\n{}\nfuncterm_cwd=$(functerm_posix_path {}) || exit 1\nfuncterm_ready_file=$(functerm_posix_path {}) || exit 1\ncd \"$functerm_cwd\"\n: >| \"$functerm_ready_file\"\n",
         zsh_wrapper(),
-        sh_quote(&sh_path(cwd)),
-        sh_quote(&sh_path(ready_file))
-    )
+        sh_quote(&sh_path(cwd)?),
+        sh_quote(&sh_path(ready_file)?)
+    ))
 }
 #[cfg(test)]
 mod tests {
@@ -45,12 +45,16 @@ mod tests {
         let startup =
             super::startup(Path::new("F:\\cwd"), &root, &root.join("startup.ready")).unwrap();
         assert_eq!(startup.0, ["-i"]);
-        assert_eq!(startup.1, [("ZDOTDIR".to_owned(), super::sh_path(&root))]);
+        assert_eq!(
+            startup.1,
+            [("ZDOTDIR".to_owned(), super::sh_path(&root).unwrap())]
+        );
     }
     #[test]
     fn initialization_defines_function_and_cwd() {
         let script =
-            super::initialization_script(Path::new("F:\\dir with ' quote"), Path::new("F:\\ready"));
+            super::initialization_script(Path::new("F:\\dir with ' quote"), Path::new("F:\\ready"))
+                .unwrap();
         assert!(script.contains("functerm_run_command()"));
         assert!(script.contains("functerm_posix_path 'F:\\dir with '\\'' quote'"));
         assert!(script.contains(": >| \"$functerm_ready_file\""));

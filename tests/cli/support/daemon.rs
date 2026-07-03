@@ -102,7 +102,7 @@ pub(crate) fn set_active_env(env: &[(String, String)]) {
 }
 fn unique_service_name() -> String {
     let unique = SERVICE_COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("shell_mcp_pty/test/{}/{}", unique, std::process::id())
+    format!("functerm/test/{}/{}", unique, std::process::id())
 }
 fn spawn_daemon(env: &[(String, String)], service_name: &str) -> ChildGuard {
     let mut command = Command::new(exe());

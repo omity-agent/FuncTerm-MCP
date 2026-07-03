@@ -4,6 +4,7 @@ mod generated;
 mod nushell;
 mod posix;
 mod powershell;
+pub mod quote;
 pub(crate) mod shims;
 mod zsh;
 use alloc::borrow::Cow;
@@ -24,7 +25,7 @@ pub(crate) struct ShellStartup {
 }
 impl ShellChoice {
     pub(crate) fn executable(self, settings: &Settings) -> Result<String> {
-        path_text(&self.executable_path(settings)?)
+        crate::text::path_text(&self.executable_path(settings)?, "executable path")
     }
     pub(crate) fn executable_path(self, settings: &Settings) -> Result<PathBuf> {
         match self {
@@ -37,12 +38,12 @@ impl ShellChoice {
     pub(crate) fn startup(self, cwd: &Path, session_root: &Path) -> Result<ShellStartup> {
         let ready_file = session_root.join("startup.ready");
         let (args, env) = match self {
-            Self::PowerShell => (powershell::startup_args(cwd, &ready_file), Vec::new()),
+            Self::PowerShell => (powershell::startup_args(cwd, &ready_file)?, Vec::new()),
             Self::Bash => (
                 bash::startup_args(cwd, session_root, &ready_file)?,
                 Vec::new(),
             ),
-            Self::NuShell => (nushell::startup_args(cwd, &ready_file), Vec::new()),
+            Self::NuShell => (nushell::startup_args(cwd, &ready_file)?, Vec::new()),
             Self::Zsh => zsh::startup(cwd, session_root, &ready_file)?,
         };
         Ok(ShellStartup {
@@ -51,7 +52,12 @@ impl ShellChoice {
             ready_file,
         })
     }
-    pub(crate) fn invocation(self, command_id: &str, directory: &Path, cwd: &Path) -> String {
+    pub(crate) fn invocation(
+        self,
+        command_id: &str,
+        directory: &Path,
+        cwd: &Path,
+    ) -> Result<String> {
         match self {
             Self::PowerShell => powershell::invocation(command_id, directory, cwd),
             Self::Bash => bash::invocation(command_id, directory, cwd),
@@ -118,11 +124,6 @@ fn select_available_executable(candidates: &[String]) -> Result<PathBuf> {
 }
 fn resolve_executable(candidate: &str) -> Result<PathBuf> {
     which::which(candidate).map_err(Into::into)
-}
-fn path_text(path: &Path) -> Result<String> {
-    path.to_str()
-        .map(str::to_owned)
-        .ok_or_else(|| anyhow::anyhow!("executable path is not valid UTF-8: {}", path.display()))
 }
 #[cfg(test)]
 mod tests {

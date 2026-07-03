@@ -1,12 +1,14 @@
 use super::generated::powershell_wrapper;
+use super::quote;
 use super::shims::CURRENT_SHELL_ENV;
 use crate::contract::POWERSHELL_COMMAND_FUNCTION;
 use alloc::borrow::Cow;
+use anyhow::Result;
 use base64_turbo::STANDARD;
 use std::path::Path;
-pub(super) fn startup_args(cwd: &Path, ready_file: &Path) -> Vec<String> {
-    let init = initialization_script(cwd, ready_file);
-    vec![
+pub(super) fn startup_args(cwd: &Path, ready_file: &Path) -> Result<Vec<String>> {
+    let init = initialization_script(cwd, ready_file)?;
+    Ok(vec![
         "-NoLogo".to_owned(),
         "-NoProfile".to_owned(),
         "-NoExit".to_owned(),
@@ -14,14 +16,14 @@ pub(super) fn startup_args(cwd: &Path, ready_file: &Path) -> Vec<String> {
         "Bypass".to_owned(),
         "-EncodedCommand".to_owned(),
         encode_command(&init),
-    ]
+    ])
 }
-pub(super) fn invocation(command_id: &str, directory: &Path, cwd: &Path) -> String {
-    let quoted_directory = ps_quote(directory);
-    let quoted_cwd = ps_quote(cwd);
-    format!(
+pub(super) fn invocation(command_id: &str, directory: &Path, cwd: &Path) -> Result<String> {
+    let quoted_directory = quote::powershell_path(directory)?;
+    let quoted_cwd = quote::powershell_path(cwd)?;
+    Ok(format!(
         "{POWERSHELL_COMMAND_FUNCTION} -CommandId '{command_id}' -Directory {quoted_directory} -WorkingDirectory {quoted_cwd}\r\n"
-    )
+    ))
 }
 pub(super) fn keyboard_bytes(bytes: &[u8]) -> Cow<'_, [u8]> {
     if !bytes.contains(&b'\n') {
@@ -38,17 +40,13 @@ pub(super) fn keyboard_bytes(bytes: &[u8]) -> Cow<'_, [u8]> {
     }
     Cow::Owned(normalized)
 }
-fn initialization_script(cwd: &Path, ready_file: &Path) -> String {
-    format!(
+fn initialization_script(cwd: &Path, ready_file: &Path) -> Result<String> {
+    Ok(format!(
         "$env:{CURRENT_SHELL_ENV} = 'powershell'\n{}\nSet-Location -LiteralPath {}\nSet-Content -LiteralPath {} -Value '' -NoNewline",
         powershell_wrapper(),
-        ps_quote(cwd),
-        ps_quote(ready_file)
-    )
-}
-fn ps_quote(path: &Path) -> String {
-    let text = path.to_string_lossy().replace('\'', "''");
-    format!("'{text}'")
+        quote::powershell_path(cwd)?,
+        quote::powershell_path(ready_file)?
+    ))
 }
 fn encode_command(command: &str) -> String {
     let bytes = command
@@ -62,7 +60,7 @@ mod tests {
     use std::path::Path;
     #[test]
     fn quotes_literal_paths_for_powershell() {
-        let quoted = super::ps_quote(Path::new("F:\\dir with ' quote"));
+        let quoted = super::quote::powershell_path(Path::new("F:\\dir with ' quote")).unwrap();
         assert_eq!(quoted, "'F:\\dir with '' quote'");
     }
     #[test]
@@ -70,7 +68,8 @@ mod tests {
         let script = super::initialization_script(
             Path::new("F:\\dir with ' quote"),
             Path::new("F:\\ready'file"),
-        );
+        )
+        .unwrap();
         assert!(script.contains("Invoke-FuncTermCommand"));
         assert!(script.contains("Set-Location -LiteralPath 'F:\\dir with '' quote'"));
         assert!(script.contains("Set-Content -LiteralPath 'F:\\ready''file'"));
@@ -81,7 +80,8 @@ mod tests {
             "command",
             Path::new("F:\\dir with ' quote"),
             Path::new("F:\\cwd"),
-        );
+        )
+        .unwrap();
         assert!(!line.contains("-Payload"));
         assert!(line.contains("-Directory 'F:\\dir with '' quote'"));
     }

@@ -1,7 +1,6 @@
 use super::ShellChoice;
 use crate::runtime::config::Settings;
 use anyhow::{Context as _, Result};
-use std::ffi::OsString;
 use std::fs;
 use std::path::Path;
 const SHIM_DIR: &str = "shell-shims";
@@ -31,16 +30,21 @@ pub(crate) fn environment(
         ),
         (
             SHIM_DIR_ENV.to_owned(),
-            path_text(&shim_dir).context("failed to encode shell shim directory")?,
+            crate::text::path_text(&shim_dir, "shell shim directory")
+                .context("failed to encode shell shim directory")?,
         ),
         (
             SESSION_ROOT_ENV.to_owned(),
-            path_text(session_root).context("failed to encode shell session root")?,
+            crate::text::path_text(session_root, "shell session root")
+                .context("failed to encode shell session root")?,
         ),
         (
             ACTIVE_SHELL_FILE_ENV.to_owned(),
-            path_text(&session_root.join("active-shell.txt"))
-                .context("failed to encode active shell state path")?,
+            crate::text::path_text(
+                &session_root.join("active-shell.txt"),
+                "active shell state path",
+            )
+            .context("failed to encode active shell state path")?,
         ),
         (
             CURRENT_SHELL_ENV.to_owned(),
@@ -51,12 +55,14 @@ pub(crate) fn environment(
         if let Ok(executable) = shell.executable_path(settings) {
             env.push((
                 shell.shim_env_name().to_owned(),
-                path_text(&executable).with_context(|| {
-                    format!(
-                        "failed to encode {} executable path",
-                        shell.canonical_name()
-                    )
-                })?,
+                crate::text::path_text(&executable, "shell executable path").with_context(
+                    || {
+                        format!(
+                            "failed to encode {} executable path",
+                            shell.canonical_name()
+                        )
+                    },
+                )?,
             ));
         }
     }
@@ -80,13 +86,5 @@ fn prepend_path(shim_dir: &Path) -> Result<String> {
         parts.extend(std::env::split_paths(&path).map(std::path::PathBuf::into_os_string));
     }
     let joined = std::env::join_paths(parts).context("failed to join PATH entries")?;
-    os_text(joined)
-}
-fn path_text(path: &Path) -> Result<String> {
-    os_text(path.as_os_str().to_owned())
-}
-fn os_text(value: OsString) -> Result<String> {
-    value
-        .into_string()
-        .map_err(|text| anyhow::anyhow!("value is not valid UTF-8: {}", text.to_string_lossy()))
+    crate::text::os_text(joined, "PATH")
 }

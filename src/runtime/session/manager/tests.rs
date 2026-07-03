@@ -4,7 +4,7 @@ use crate::shell::ShellChoice;
 use std::path::Path;
 fn test_settings() -> Settings {
     Settings {
-        daemon_service_name: "shell_mcp_pty/test".to_owned(),
+        daemon_service_name: "functerm/test".to_owned(),
         terminal_rows: 30,
         terminal_cols: 120,
         shell_startup_timeout_seconds: 10.0,

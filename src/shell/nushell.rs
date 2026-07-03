@@ -1,24 +1,26 @@
 use super::generated::nushell_wrapper;
+use super::quote;
 use super::shims::CURRENT_SHELL_ENV;
 use crate::contract::POSIX_COMMAND_FUNCTION;
+use anyhow::Result;
 use std::path::Path;
-pub(super) fn startup_args(cwd: &Path, ready_file: &Path) -> Vec<String> {
-    vec![
+pub(super) fn startup_args(cwd: &Path, ready_file: &Path) -> Result<Vec<String>> {
+    Ok(vec![
         "--no-config-file".to_owned(),
         "--no-history".to_owned(),
         "--execute".to_owned(),
-        initialization_script(cwd, ready_file),
-    ]
+        initialization_script(cwd, ready_file)?,
+    ])
 }
-pub(super) fn invocation(command_id: &str, directory: &Path, cwd: &Path) -> String {
+pub(super) fn invocation(command_id: &str, directory: &Path, cwd: &Path) -> Result<String> {
     let line_ending = invocation_line_ending();
-    format!(
+    Ok(format!(
         "{POSIX_COMMAND_FUNCTION} {} {} {}{}",
-        nu_quote(command_id),
-        nu_quote(&directory.to_string_lossy()),
-        nu_quote(&cwd.to_string_lossy()),
+        quote::nushell_string(command_id),
+        quote::nushell_path(directory)?,
+        quote::nushell_path(cwd)?,
         line_ending
-    )
+    ))
 }
 #[cfg(windows)]
 const fn invocation_line_ending() -> &'static str {
@@ -28,23 +30,19 @@ const fn invocation_line_ending() -> &'static str {
 const fn invocation_line_ending() -> &'static str {
     "\n"
 }
-fn initialization_script(cwd: &Path, ready_file: &Path) -> String {
-    format!(
+fn initialization_script(cwd: &Path, ready_file: &Path) -> Result<String> {
+    Ok(format!(
         "$env.{CURRENT_SHELL_ENV} = 'nu'\n{}\ncd {}\n'' | save --force --raw {}\n",
         nushell_wrapper(),
-        nu_quote(&cwd.to_string_lossy()),
-        nu_quote(&ready_file.to_string_lossy())
-    )
-}
-fn nu_quote(value: &str) -> String {
-    let text = value.replace('\\', "\\\\").replace('"', "\\\"");
-    format!("\"{text}\"")
+        quote::nushell_path(cwd)?,
+        quote::nushell_path(ready_file)?
+    ))
 }
 #[cfg(test)]
 mod tests {
     #[test]
     fn quotes_single_quotes_for_nushell() {
-        let quoted = super::nu_quote("a'b");
+        let quoted = super::quote::nushell_string("a'b");
         assert_eq!(quoted, "\"a'b\"");
     }
     #[test]
@@ -52,7 +50,8 @@ mod tests {
         let script = super::initialization_script(
             std::path::Path::new("F:\\dir with ' quote"),
             std::path::Path::new("F:\\ready'file"),
-        );
+        )
+        .unwrap();
         assert!(script.contains("def functerm_run_command"));
         assert!(script.contains("cd \"F:\\\\dir with ' quote\""));
         assert!(script.contains("save --force --raw \"F:\\\\ready'file\""));
@@ -63,7 +62,8 @@ mod tests {
             "command",
             std::path::Path::new("F:\\dir with ' quote"),
             std::path::Path::new("F:\\cwd"),
-        );
+        )
+        .unwrap();
         assert_eq!(line.matches("\"command\"").count(), 1);
         assert!(line.contains("\"F:\\\\dir with ' quote\""));
     }

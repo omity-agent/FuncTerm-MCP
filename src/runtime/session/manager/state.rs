@@ -1,5 +1,3 @@
-use anyhow::{Context as _, Result};
-use std::path::Path;
 const ID_LENGTH: usize = 12;
 const ID_ALPHABET: [char; 36] = [
     '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i',
@@ -7,9 +5,4 @@ const ID_ALPHABET: [char; 36] = [
 ];
 pub(super) fn random_id_suffix() -> String {
     nanoid::nanoid!(ID_LENGTH, &ID_ALPHABET)
-}
-pub(super) fn path_text(path: &Path) -> Result<String> {
-    path.to_str()
-        .map(str::to_owned)
-        .with_context(|| format!("cwd is not valid UTF-8: {}", path.display()))
 }

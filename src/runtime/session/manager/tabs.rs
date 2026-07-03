@@ -14,7 +14,7 @@ pub(super) struct Tab {
     id: String,
     session: Mutex<Option<Arc<ShellSession>>>,
     snapshot: Mutex<TabSnapshot>,
-    commands: Mutex<HashMap<String, super::commands::StoredCommand>>,
+    commands: Mutex<HashMap<String, crate::runtime::session::records::CommandRecord>>,
 }
 #[derive(Clone)]
 pub(super) struct TabSnapshot {
@@ -130,14 +130,13 @@ impl Tab {
         command_id: String,
         record: crate::runtime::session::records::CommandRecord,
     ) -> Result<()> {
-        lock_mutex(&self.commands, "tab command")?
-            .insert(command_id, super::commands::StoredCommand::new(record));
+        lock_mutex(&self.commands, "tab command")?.insert(command_id, record);
         Ok(())
     }
     pub(super) fn remove_command(
         &self,
         command_id: &str,
-    ) -> Result<Option<super::commands::StoredCommand>> {
+    ) -> Result<Option<crate::runtime::session::records::CommandRecord>> {
         Ok(lock_mutex(&self.commands, "tab command")?.remove(command_id))
     }
     pub(super) fn find_command(
@@ -146,7 +145,7 @@ impl Tab {
     ) -> Result<Option<crate::runtime::session::records::CommandRecord>> {
         Ok(lock_mutex(&self.commands, "tab command")?
             .get(command_id)
-            .map(super::commands::StoredCommand::record))
+            .cloned())
     }
     pub(super) fn command_fallback_cwd(
         &self,
@@ -160,7 +159,7 @@ impl Tab {
 }
 impl TabSnapshot {
     fn from_session(session: &ShellSession) -> Result<Self> {
-        let cwd = super::state::path_text(&session.cwd()?)?;
+        let cwd = crate::text::path_text(&session.cwd()?, "cwd")?;
         let current_screen = session.screen_contents()?;
         let screen = if current_screen.is_empty() {
             cwd.clone()

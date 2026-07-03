@@ -89,9 +89,10 @@ pub(super) fn read_command_result(
     let stderr = read_optional(&record.stderr)?;
     let done = read_done(&record.done)?;
     let exit_code = done.as_ref().map(|file| file.exit_code);
-    let cwd = done
-        .as_ref()
-        .map_or_else(|| path_text(fallback_cwd), |file| Ok(file.cwd.clone()))?;
+    let cwd = done.as_ref().map_or_else(
+        || crate::text::path_text(fallback_cwd, "cwd"),
+        |file| Ok(file.cwd.clone()),
+    )?;
     Ok(ViewResult::Command {
         cwd,
         finished: done.is_some(),
@@ -132,11 +133,6 @@ pub(super) fn read_done(path: &Path) -> Result<Option<DoneFile>> {
     let text = decode_text(&bytes).context("failed to decode done file")?;
     let done = sonic_rs::from_str::<DoneFile>(&text).context("failed to parse done file")?;
     Ok(Some(done))
-}
-fn path_text(path: &Path) -> Result<String> {
-    path.to_str()
-        .map(str::to_owned)
-        .with_context(|| format!("cwd is not valid UTF-8: {}", path.display()))
 }
 #[cfg(test)]
 mod tests;
