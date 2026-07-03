@@ -12,10 +12,13 @@ export HISTSIZE=0
 export HISTFILESIZE=0
 history -c
 
+{path}
+
 {shim_path}
 
 {command}
 ",
+        path = path_function(false),
         shim_path = shim_path_function(false),
         command = command_function(PosixDialect::Bash)
     )
@@ -31,12 +34,34 @@ setopt no_inc_append_history
 fc -p /dev/null 0 0 2> /dev/null || true
 unset HISTFILE
 
+{path}
+
 {shim_path}
 
 {command}
 ",
+        path = path_function(true),
         shim_path = shim_path_function(true),
         command = command_function(PosixDialect::Zsh)
+    )
+}
+fn path_function(zsh: bool) -> String {
+    let local_options = if zsh { "\n    emulate -L zsh" } else { "" };
+    format!(
+        r#"functerm_posix_path() {{{local_options}
+    local value="$1"
+    if command -v cygpath > /dev/null 2>&1; then
+        cygpath -u "$value"
+        return $?
+    fi
+    case "$value" in
+        [A-Za-z]:\\*|[A-Za-z]:/*)
+            printf 'cygpath is required to convert Windows path: %s\n' "$value" >&2
+            return 1
+            ;;
+    esac
+    printf '%s\n' "$value"
+}}"#
     )
 }
 fn shim_path_function(zsh: bool) -> String {
@@ -47,9 +72,7 @@ fn shim_path_function(zsh: bool) -> String {
         return 0
     fi
     local shim_dir="${{{SHIM_DIR_ENV}}}"
-    if command -v cygpath > /dev/null 2>&1; then
-        shim_dir="$(cygpath -u "$shim_dir" 2> /dev/null || printf '%s' "$shim_dir")"
-    fi
+    shim_dir="$(functerm_posix_path "$shim_dir")" || return 1
     export PATH="$shim_dir:$PATH"
 }}
 functerm_prepend_shim_path"#
@@ -61,6 +84,8 @@ fn command_function(dialect: PosixDialect) -> String {
 {emulate}    local command_id="$1"
     local directory="$2"
     local working_directory="$3"
+    directory="$(functerm_posix_path "$directory")" || return 1
+    working_directory="$(functerm_posix_path "$working_directory")" || return 1
     {mkdir} "$directory" || return 1
     local stdout_file="$directory/{stdout}"
     local stderr_file="$directory/{stderr}"
@@ -97,6 +122,7 @@ fn command_function(dialect: PosixDialect) -> String {
     local exit_code=$?
     local cwd_json
     cwd_json="$(functerm_json_string "$PWD")"
+    {mkdir} "$directory" || return 1
     printf '{{"command_id":"%s","exit_code":%s,"cwd":%s,"completed_at":"%s"}}\n' \
         "$command_id" "$exit_code" "$cwd_json" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" {write_done_temp} "$done_temp_file"
     {move_done}

@@ -27,7 +27,7 @@ pub(super) fn invocation(command_id: &str, directory: &Path, cwd: &Path) -> Stri
 }
 fn initialization_script(cwd: &Path, ready_file: &Path) -> String {
     format!(
-        "export {CURRENT_SHELL_ENV}=zsh\n{}\ncd {}\n: >| {}\n",
+        "export {CURRENT_SHELL_ENV}=zsh\n{}\nfuncterm_cwd=$(functerm_posix_path {}) || exit 1\nfuncterm_ready_file=$(functerm_posix_path {}) || exit 1\ncd \"$functerm_cwd\"\n: >| \"$functerm_ready_file\"\n",
         zsh_wrapper(),
         sh_quote(&sh_path(cwd)),
         sh_quote(&sh_path(ready_file))
@@ -52,7 +52,7 @@ mod tests {
         let script =
             super::initialization_script(Path::new("F:\\dir with ' quote"), Path::new("F:\\ready"));
         assert!(script.contains("functerm_run_command()"));
-        assert!(script.contains("cd 'F:/dir with '\\'' quote'"));
-        assert!(script.contains(": >| 'F:/ready'"));
+        assert!(script.contains("functerm_posix_path 'F:\\dir with '\\'' quote'"));
+        assert!(script.contains(": >| \"$functerm_ready_file\""));
     }
 }

@@ -12,6 +12,13 @@ pub(crate) struct CommandResult {
 pub(crate) struct TabView {
     pub(crate) alive: bool,
     pub(crate) cwd: String,
+    #[cfg_attr(
+        not(windows),
+        expect(
+            dead_code,
+            reason = "last_command assertions are Windows-only CLI coverage"
+        )
+    )]
     pub(crate) last_command: String,
     pub(crate) screen: String,
 }

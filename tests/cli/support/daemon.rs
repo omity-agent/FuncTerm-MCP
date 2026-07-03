@@ -1,25 +1,69 @@
 use super::command::{CLI_COMMAND_TIMEOUT, exe};
 use super::process::ChildGuard;
+use core::cell::RefCell;
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::time::Duration;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Condvar, Mutex};
 use std::thread;
 use std::time::Instant;
-static CLI_TEST_LOCK: Mutex<()> = Mutex::new(());
-static ACTIVE_CLI_ENV: Mutex<Vec<(String, String)>> = Mutex::new(Vec::new());
+const MAX_PARALLEL_DAEMONS: usize = 2;
 static SERVICE_COUNTER: AtomicU64 = AtomicU64::new(0);
+static DAEMON_SLOTS: Mutex<SlotState> = Mutex::new(SlotState { active: 0 });
+static DAEMON_SLOT_AVAILABLE: Condvar = Condvar::new();
+thread_local! { static ACTIVE_CLI_ENV : RefCell < Vec < (String , String) >> = const { RefCell :: new (Vec :: new ()) } ; }
 pub(crate) struct TestGuard {
-    _daemon: ChildGuard,
-    _lock: MutexGuard<'static, ()>,
+    daemon: ChildGuard,
+    env: Vec<(String, String)>,
+    service_name: String,
+    _slot: DaemonSlot,
+}
+struct DaemonSlot;
+struct SlotState {
+    active: usize,
+}
+impl DaemonSlot {
+    fn acquire() -> Self {
+        let mut active = DAEMON_SLOTS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        while active.active >= MAX_PARALLEL_DAEMONS {
+            active = DAEMON_SLOT_AVAILABLE
+                .wait(active)
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+        }
+        active.active += 1;
+        Self
+    }
+}
+impl Drop for DaemonSlot {
+    fn drop(&mut self) {
+        {
+            let mut active = DAEMON_SLOTS
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            active.active -= 1;
+        }
+        DAEMON_SLOT_AVAILABLE.notify_one();
+    }
+}
+impl TestGuard {
+    pub(crate) fn env(&self) -> Vec<(String, String)> {
+        self.env.clone()
+    }
+    pub(crate) fn stop_daemon(&mut self) {
+        self.daemon.terminate();
+    }
+    pub(crate) fn restart_daemon(&mut self) {
+        self.stop_daemon();
+        thread::sleep(Duration::from_millis(100));
+        self.daemon = spawn_daemon(&self.env, &self.service_name);
+    }
 }
 impl Drop for TestGuard {
     fn drop(&mut self) {
-        ACTIVE_CLI_ENV
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clear();
+        ACTIVE_CLI_ENV.with(|env| env.borrow_mut().clear());
     }
 }
 #[cfg(windows)]
@@ -27,9 +71,7 @@ pub(crate) fn locked() -> TestGuard {
     locked_with_env(&[])
 }
 pub(crate) fn locked_with_env(extra_env: &[(&str, &str)]) -> TestGuard {
-    let guard = CLI_TEST_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let slot = DaemonSlot::acquire();
     let service_name = unique_service_name();
     let mut env = vec![(
         "SHELL_MCP_PTY_DAEMON_SERVICE_NAME".to_owned(),
@@ -40,6 +82,29 @@ pub(crate) fn locked_with_env(extra_env: &[(&str, &str)]) -> TestGuard {
         let value = pair.1.to_owned();
         (key, value)
     }));
+    set_active_env(&env);
+    let child = spawn_daemon(&env, &service_name);
+    TestGuard {
+        daemon: child,
+        env,
+        service_name,
+        _slot: slot,
+    }
+}
+pub(crate) fn apply_active_env(command: &mut Command) {
+    ACTIVE_CLI_ENV.with(|env| apply_env(command, &env.borrow()));
+}
+pub(crate) fn active_env() -> Vec<(String, String)> {
+    ACTIVE_CLI_ENV.with(|env| env.borrow().clone())
+}
+pub(crate) fn set_active_env(env: &[(String, String)]) {
+    ACTIVE_CLI_ENV.with(|active| active.replace(env.to_vec()));
+}
+fn unique_service_name() -> String {
+    let unique = SERVICE_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("shell_mcp_pty/test/{}/{}", unique, std::process::id())
+}
+fn spawn_daemon(env: &[(String, String)], service_name: &str) -> ChildGuard {
     let mut command = Command::new(exe());
     command
         .arg("daemon")
@@ -47,29 +112,10 @@ pub(crate) fn locked_with_env(extra_env: &[(&str, &str)]) -> TestGuard {
         .stdout(Stdio::null())
         .stderr(Stdio::null());
     apply_daemon_flags(&mut command);
-    apply_env(&mut command, &env);
-    {
-        let mut active = ACTIVE_CLI_ENV
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        *active = env;
-    }
+    apply_env(&mut command, env);
     let mut child = ChildGuard::new(command.spawn().unwrap());
-    wait_for_daemon(&mut child, &service_name);
-    TestGuard {
-        _daemon: child,
-        _lock: guard,
-    }
-}
-pub(crate) fn apply_active_env(command: &mut Command) {
-    let env = ACTIVE_CLI_ENV
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    apply_env(command, &env);
-}
-fn unique_service_name() -> String {
-    let unique = SERVICE_COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("shell_mcp_pty/test/{}/{}", unique, std::process::id())
+    wait_for_daemon(&mut child, service_name);
+    child
 }
 fn wait_for_daemon(child: &mut ChildGuard, service_name: &str) {
     let start = Instant::now();

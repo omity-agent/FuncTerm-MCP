@@ -16,13 +16,16 @@ impl ChildGuard {
     pub(crate) fn is_running(&mut self) -> bool {
         self.child.try_wait().unwrap().is_none()
     }
-}
-impl Drop for ChildGuard {
-    fn drop(&mut self) {
+    pub(crate) fn terminate(&mut self) {
         if self.child.try_wait().unwrap().is_none() {
             self.child.kill().unwrap();
         }
         self.child.wait().unwrap();
+    }
+}
+impl Drop for ChildGuard {
+    fn drop(&mut self) {
+        self.terminate();
     }
 }
 pub(crate) fn wait_for_status(child: &mut Child, timeout: Duration) -> ExitStatus {

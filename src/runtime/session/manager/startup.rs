@@ -79,7 +79,10 @@ impl ShellLauncher {
             0,
         )));
         start_reader(Arc::clone(&screen), Arc::clone(&writer), reader);
-        wait_for_shell_startup(&mut child, &ready_file, &screen)?;
+        let startup_timeout =
+            Duration::try_from_secs_f64(self.settings.shell_startup_timeout_seconds)
+                .context("shell_startup_timeout_seconds must be finite and non-negative")?;
+        wait_for_shell_startup(&mut child, &ready_file, &screen, startup_timeout)?;
         let active_shell_file = command_root.join("active-shell.txt");
         shims::write_active_shell(&active_shell_file, starting_shell)?;
         Ok(Arc::new(ShellSession::new(ShellSessionParts {
@@ -107,6 +110,7 @@ pub(super) fn wait_for_shell_startup(
     child: &mut Box<dyn Child + Send + Sync>,
     ready_file: &Path,
     screen: &Arc<Mutex<vt100::Parser>>,
+    timeout: Duration,
 ) -> Result<()> {
     if let Some(status) = child.try_wait().context("failed to poll shell startup")? {
         bail!(
@@ -114,7 +118,7 @@ pub(super) fn wait_for_shell_startup(
             startup_screen(screen)?
         );
     }
-    if wait_for_path(ready_file, Duration::from_secs(5))? {
+    if wait_for_path(ready_file, timeout)? {
         return Ok(());
     }
     if let Some(status) = child.try_wait().context("failed to poll shell startup")? {
@@ -125,7 +129,7 @@ pub(super) fn wait_for_shell_startup(
     }
     child.kill().context("failed to kill unready shell")?;
     bail!(
-        "shell did not report startup readiness within 5s; screen: {}",
+        "shell did not report startup readiness within {timeout:?}; screen: {}",
         startup_screen(screen)?
     );
 }

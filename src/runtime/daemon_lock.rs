@@ -51,8 +51,8 @@ fn open_lock_file(service_name: &str, name: &str) -> Result<File> {
 }
 #[expect(
     clippy::std_instead_of_core,
-    reason = "core::io is unstable; Error and ErrorKind are only available from std"
+    reason = "Error and ErrorKind are only available from std"
 )]
 fn is_lock_contended(error: &std::io::Error) -> bool {
-    error.kind() == std::io::ErrorKind::WouldBlock
+    error.kind() == std::io::ErrorKind::WouldBlock || error.raw_os_error() == Some(33)
 }

@@ -1,3 +1,5 @@
+#[path = "cli/failure.rs"]
+mod failure;
 #[path = "cli/history.rs"]
 mod history;
 #[path = "cli/shell_matrix.rs"]
@@ -17,20 +19,19 @@ mod windows_io;
 #[cfg(test)]
 mod tests {
     use super::support::{
-        create_tab, create_tab_from_directory_argument, locked, locked_with_env, manual_write,
-        parse_command_id, parse_command_result, parse_tab_view, run_cli, send_test_command,
+        create_tab, locked, manual_write, parse_command_id, parse_command_result, run_cli,
+        send_command_with_env, send_test_command,
     };
     use core::time::Duration;
     use std::thread;
     use std::time::Instant;
     #[test]
-    fn cli_rejects_missing_starting_directory() {
+    fn cli_keeps_starting_directory_shell_syntax_literal() {
         let _guard = locked();
-        let missing = std::env::temp_dir().join("definitely-missing-mcp-pty-cli-cwd");
         let output = run_cli(&[
             "new-tab",
             "--starting-directory",
-            missing.to_str().unwrap(),
+            "%FUNCTERM_TEST_STARTING_DIRECTORY%",
             "--starting-shell",
             "powershell",
         ]);
@@ -50,18 +51,6 @@ mod tests {
             "stderr: {}",
             String::from_utf8_lossy(&output.stderr)
         );
-    }
-    #[test]
-    fn cli_expands_starting_directory_environment_variables() {
-        let cwd = std::env::temp_dir();
-        let cwd_text = cwd.to_str().unwrap();
-        let _guard = locked_with_env(&[("FUNCTERM_TEST_STARTING_DIRECTORY", cwd_text)]);
-        let created =
-            create_tab_from_directory_argument("%FUNCTERM_TEST_STARTING_DIRECTORY%", "powershell");
-        let query = parse_tab_view(&run_cli(&["view", &created.tab_id]));
-        let actual = query.cwd.replace('\\', "/");
-        let expected = cwd_text.replace('\\', "/");
-        assert!(actual.contains(&expected));
     }
     #[test]
     fn cli_view_returns_command_output() {
@@ -135,13 +124,15 @@ mod tests {
     }
     #[test]
     fn cli_waiting_command_does_not_block_other_requests() {
-        let _guard = locked();
+        let guard = locked();
         let cwd = std::env::temp_dir();
         let first = create_tab(&cwd, "powershell");
         let second = create_tab(&cwd, "powershell");
+        let env = guard.env();
         let first_tab_id = first.tab_id;
         let worker = thread::spawn(move || {
-            super::support::send_command(
+            send_command_with_env(
+                &env,
                 &first_tab_id,
                 "Start-Sleep -Seconds 5; Write-Output 'MCP_PTY_WAIT_DONE'",
                 6.0,

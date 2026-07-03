@@ -32,7 +32,7 @@ pub(super) fn invocation(command_id: &str, directory: &Path, cwd: &Path) -> Stri
 }
 fn initialization_script(cwd: &Path, ready_file: &Path) -> String {
     format!(
-        "export {CURRENT_SHELL_ENV}=bash\n{}\ncd {}\n: > {}\n",
+        "export {CURRENT_SHELL_ENV}=bash\n{}\nfuncterm_cwd=$(functerm_posix_path {}) || exit 1\nfuncterm_ready_file=$(functerm_posix_path {}) || exit 1\ncd \"$functerm_cwd\"\n: > \"$functerm_ready_file\"\n",
         bash_wrapper(),
         sh_quote(&sh_path(cwd)),
         sh_quote(&sh_path(ready_file))
@@ -42,16 +42,17 @@ fn initialization_script(cwd: &Path, ready_file: &Path) -> String {
 mod tests {
     use std::path::Path;
     #[test]
-    fn initialization_converts_windows_paths_for_bash() {
+    fn initialization_converts_native_paths_in_bash() {
         let script =
             super::initialization_script(Path::new("F:\\dir\\child"), Path::new("F:\\ready"));
-        assert!(script.contains("cd 'F:/dir/child'"));
+        assert!(script.contains("functerm_posix_path 'F:\\dir\\child'"));
+        assert!(script.contains("cd \"$functerm_cwd\""));
     }
     #[test]
-    fn invocation_converts_windows_paths_for_bash() {
+    fn invocation_sends_native_paths_for_bash_wrapper_conversion() {
         let converted =
             super::invocation("command", Path::new("F:\\dir\\child"), Path::new("F:\\cwd"));
         assert!(!converted.contains("printf ok"));
-        assert!(converted.contains("'F:/dir/child'"));
+        assert!(converted.contains("'F:\\dir\\child'"));
     }
 }

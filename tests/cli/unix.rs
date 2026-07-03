@@ -1,23 +1,20 @@
 #[cfg(test)]
 mod tests {
     use crate::support::{
-        create_tab, create_tab_from_directory_argument, locked_with_env, manual_write,
-        parse_command_id, parse_command_result, parse_tab_view, run_cli, send_command,
+        create_tab, locked_with_env, manual_write, parse_command_id, parse_command_result,
+        parse_tab_view, run_cli, send_command, send_command_with_env,
     };
     use core::time::Duration;
     use std::thread;
     use std::time::Instant;
     #[test]
-    fn cli_rejects_missing_starting_directory_on_unix_shell() {
-        let Some(bash) = executable("bash") else {
-            return;
-        };
+    fn cli_keeps_starting_directory_shell_syntax_literal_on_unix_shell() {
+        let bash = required_executable("bash");
         let _guard = locked_with_env(&[("SHELL_MCP_PTY_BASH", &bash)]);
-        let missing = std::env::temp_dir().join("definitely-missing-functerm-unix-cwd");
         let output = run_cli(&[
             "new-tab",
             "--starting-directory",
-            missing.to_str().unwrap(),
+            "$FUNCTERM_TEST_STARTING_DIRECTORY",
             "--starting-shell",
             "bash",
         ]);
@@ -28,34 +25,9 @@ mod tests {
         );
     }
     #[test]
-    fn cli_expands_starting_directory_environment_variables_on_unix_shell() {
-        let Some(bash) = executable("bash") else {
-            return;
-        };
-        let cwd = std::env::temp_dir();
-        let cwd_text = cwd.to_str().unwrap();
-        let _guard = locked_with_env(&[
-            ("SHELL_MCP_PTY_BASH", &bash),
-            ("FUNCTERM_TEST_STARTING_DIRECTORY", cwd_text),
-        ]);
-        let shell = create_tab_from_directory_argument("$FUNCTERM_TEST_STARTING_DIRECTORY", "bash");
-        let query = parse_tab_view(&run_cli(&["view", &shell.tab_id]));
-        assert_eq!(query.last_command, "");
-        assert!(
-            query
-                .cwd
-                .replace('\\', "/")
-                .contains(&cwd_text.replace('\\', "/")),
-            "expanded cwd should include {cwd_text}, got {}",
-            query.cwd
-        );
-    }
-    #[test]
     fn cli_keyboard_enter_runs_commands_on_unix_ptys() {
         for case in unix_keyboard_cases() {
-            let Some(path) = executable(case.executable) else {
-                continue;
-            };
+            let path = required_executable(case.executable);
             let _guard = locked_with_env(&[(case.env_var, &path)]);
             let shell = create_tab(&std::env::temp_dir(), case.shell);
             let marker = format!("MCP_PTY_KEYBOARD_{}", case.shell);
@@ -72,9 +44,7 @@ mod tests {
     }
     #[test]
     fn cli_view_reports_unix_shell_liveness_after_keyboard_exit() {
-        let Some(bash) = executable("bash") else {
-            return;
-        };
+        let bash = required_executable("bash");
         let _guard = locked_with_env(&[("SHELL_MCP_PTY_BASH", &bash)]);
         let shell = create_tab(&std::env::temp_dir(), "bash");
         let alive = parse_tab_view(&run_cli(&["view", &shell.tab_id]));
@@ -90,15 +60,19 @@ mod tests {
     }
     #[test]
     fn cli_waiting_unix_command_does_not_block_other_requests() {
-        let Some(bash) = executable("bash") else {
-            return;
-        };
-        let _guard = locked_with_env(&[("SHELL_MCP_PTY_BASH", &bash)]);
+        let bash = required_executable("bash");
+        let guard = locked_with_env(&[("SHELL_MCP_PTY_BASH", &bash)]);
         let first = create_tab(&std::env::temp_dir(), "bash");
         let second = create_tab(&std::env::temp_dir(), "bash");
+        let env = guard.env();
         let first_tab_id = first.tab_id;
         let worker = thread::spawn(move || {
-            send_command(&first_tab_id, "sleep 2; printf 'MCP_PTY_WAIT_DONE\\n'", 5.0)
+            send_command_with_env(
+                &env,
+                &first_tab_id,
+                "sleep 2; printf 'MCP_PTY_WAIT_DONE\\n'",
+                5.0,
+            )
         });
         thread::sleep(Duration::from_millis(300));
         let start = Instant::now();
@@ -116,9 +90,7 @@ mod tests {
     }
     #[test]
     fn cli_unix_command_timeout_can_be_queried_after_completion() {
-        let Some(bash) = executable("bash") else {
-            return;
-        };
+        let bash = required_executable("bash");
         let _guard = locked_with_env(&[("SHELL_MCP_PTY_BASH", &bash)]);
         let shell = create_tab(&std::env::temp_dir(), "bash");
         let accepted = send_command(
@@ -160,10 +132,11 @@ mod tests {
             other => panic!("unsupported shell {other}"),
         }
     }
-    fn executable(name: &str) -> Option<String> {
+    fn required_executable(name: &str) -> String {
         which::which(name)
             .ok()
             .map(|path| path.to_string_lossy().into_owned())
+            .unwrap_or_else(|| panic!("CI on Unix must install required shell executable {name}"))
     }
     fn wait_for_screen_contains(tab_id: &str, expected: &str) {
         let mut last_screen = String::new();

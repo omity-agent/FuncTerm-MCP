@@ -22,6 +22,13 @@ pub(crate) fn run_cli(arguments: &[&str]) -> Output {
     daemon::apply_active_env(&mut command);
     output_to_files(command, CLI_COMMAND_TIMEOUT)
 }
+pub(crate) fn run_cli_with_env(arguments: &[&str], env: &[(String, String)]) -> Output {
+    let previous = daemon::active_env();
+    daemon::set_active_env(env);
+    let output = run_cli(arguments);
+    daemon::set_active_env(&previous);
+    output
+}
 #[cfg(windows)]
 pub(crate) fn run_cli_with_pipes(arguments: &[&str]) -> Output {
     let mut command = Command::new(exe());
@@ -54,6 +61,24 @@ pub(crate) fn send_command(tab_id: &str, command: &str, waiting: f64) -> Output 
         "--waiting",
         &waiting.to_string(),
     ])
+}
+pub(crate) fn send_command_with_env(
+    env: &[(String, String)],
+    tab_id: &str,
+    command: &str,
+    waiting: f64,
+) -> Output {
+    run_cli_with_env(
+        &[
+            "send-command",
+            tab_id,
+            "--command",
+            command,
+            "--waiting",
+            &waiting.to_string(),
+        ],
+        env,
+    )
 }
 pub(crate) fn manual_write(tab_id: &str, bytes: &[u8]) -> Output {
     let encoded = STANDARD.encode(bytes);

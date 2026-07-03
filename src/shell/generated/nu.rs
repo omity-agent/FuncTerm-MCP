@@ -70,6 +70,7 @@ const TEMPLATE: &str = r#"def @FUNCTION@ [command_id: string, directory: path, w
         print --stderr $error.msg
         { cwd: ($working_directory | path expand), exit_code: 1 }
     }
+    mkdir $directory
     {
         command_id: $command_id,
         exit_code: $state.exit_code,

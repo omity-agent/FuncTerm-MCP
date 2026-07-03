@@ -7,6 +7,7 @@ fn test_settings() -> Settings {
         daemon_service_name: "shell_mcp_pty/test".to_owned(),
         terminal_rows: 30,
         terminal_cols: 120,
+        shell_startup_timeout_seconds: 10.0,
         powershell: vec!["powershell.exe".to_owned()],
         bash: "bash.exe".to_owned(),
         nushell: "nu.exe".to_owned(),

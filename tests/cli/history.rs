@@ -12,9 +12,7 @@ mod tests {
     static HISTORY_COUNTER: AtomicU64 = AtomicU64::new(0);
     #[test]
     fn bash_history_does_not_record_internal_invocations() {
-        let Ok(bash) = which::which("bash") else {
-            return;
-        };
+        let bash = required_executable("bash");
         let history_file = history_root("bash").join("bash_history.txt");
         let bash_text = bash.to_string_lossy();
         let _guard = locked_with_env(&[
@@ -42,7 +40,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn zsh_history_does_not_record_internal_invocations() {
-        let Ok(zsh) = which::which("zsh") else { return };
+        let zsh = required_executable("zsh");
         let history_file = history_root("zsh").join("zsh_history.txt");
         let zsh_text = zsh.to_string_lossy();
         let _guard = locked_with_env(&[
@@ -105,6 +103,10 @@ mod tests {
             .join(format!("{shell}-{}-{unique}", std::process::id()));
         fs::create_dir_all(&root).unwrap();
         root
+    }
+    fn required_executable(name: &str) -> std::path::PathBuf {
+        which::which(name)
+            .unwrap_or_else(|_| panic!("CI must install required shell executable {name}"))
     }
     fn exit_shell(tab_id: &str) {
         let written = manual_write(tab_id, b"exit\n");

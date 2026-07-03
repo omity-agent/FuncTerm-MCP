@@ -5,6 +5,7 @@ use anyhow::{Context as _, Result, bail};
 use core::time::Duration;
 use ipc_channel::ipc::{self, IpcOneShotServer, IpcSender};
 use std::process::{Command, Stdio};
+use std::time::Instant;
 const IPC_TIMEOUT: Duration = Duration::from_secs(15);
 pub(crate) struct DaemonClient {
     sender: IpcSender<DaemonRequest>,
@@ -16,8 +17,7 @@ impl core::fmt::Debug for DaemonClient {
 }
 impl DaemonClient {
     pub(crate) fn connect(service_name: &str) -> Result<Self> {
-        let endpoint_name = crate::runtime::ipc_endpoint::read(service_name)?;
-        connect_to_endpoint(service_name, endpoint_name)
+        connect_to_endpoint(service_name)
     }
     pub(crate) fn call(&self, request: &Request) -> Result<Payload> {
         let (response_sender, response_receiver) =
@@ -37,7 +37,20 @@ impl DaemonClient {
         }
     }
 }
-fn connect_to_endpoint(service_name: &str, endpoint_name: String) -> Result<DaemonClient> {
+fn connect_to_endpoint(service_name: &str) -> Result<DaemonClient> {
+    let start = Instant::now();
+    loop {
+        let endpoint_name = crate::runtime::ipc_endpoint::read(service_name)?;
+        match try_connect_to_endpoint(service_name, endpoint_name) {
+            Ok(client) => return Ok(client),
+            Err(error) if is_busy_bootstrap_pipe(&error) && start.elapsed() < IPC_TIMEOUT => {
+                std::thread::yield_now();
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+fn try_connect_to_endpoint(service_name: &str, endpoint_name: String) -> Result<DaemonClient> {
     let (reply_sender, reply_receiver) =
         ipc::channel::<IpcSender<DaemonRequest>>().context("failed to create IPC reply")?;
     let bootstrap = IpcSender::<BootstrapReply>::connect(endpoint_name)
@@ -49,6 +62,15 @@ fn connect_to_endpoint(service_name: &str, endpoint_name: String) -> Result<Daem
         .try_recv_timeout(IPC_TIMEOUT)
         .context("failed to receive daemon IPC channel")?;
     Ok(DaemonClient { sender })
+}
+fn is_busy_bootstrap_pipe(error: &anyhow::Error) -> bool {
+    let text = format!("{error:#}");
+    text.contains("-2147024665")
+        || text.contains("-2147024360")
+        || text.contains("All pipe instances are busy")
+        || text.contains("waiting for a process to open the other end of the pipe")
+        || text.contains("所有的管道范例都在使用中")
+        || text.contains("等候打开管道另一端的进程")
 }
 pub(crate) fn call(service_name: &str, request: &Request) -> Result<Payload> {
     let client = DaemonClient::connect(service_name)?;
@@ -62,7 +84,11 @@ pub(crate) fn ensure_daemon(service_name: &str) -> Result<()> {
     if call(service_name, &Request::Ping).is_ok() {
         return Ok(());
     }
-    spawn_daemon()
+    match spawn_daemon() {
+        Ok(()) => Ok(()),
+        Err(error) if is_daemon_already_running(&error) => wait_for_existing_daemon(service_name),
+        Err(error) => Err(error),
+    }
 }
 fn spawn_daemon() -> Result<()> {
     let (startup_server, startup_endpoint) =
@@ -78,6 +104,24 @@ fn spawn_daemon() -> Result<()> {
     apply_detached_flags(&mut command);
     let child = command.spawn().context("failed to spawn daemon")?;
     wait_for_daemon_startup(startup_server, child)
+}
+fn wait_for_existing_daemon(service_name: &str) -> Result<()> {
+    let start = Instant::now();
+    loop {
+        match call(service_name, &Request::Ping) {
+            Ok(Payload::Pong) => return Ok(()),
+            Ok(_payload) => bail!("daemon returned an unexpected response to ping"),
+            Err(_error) if start.elapsed() < IPC_TIMEOUT => {
+                std::thread::yield_now();
+            }
+            Err(error) => {
+                return Err(error).context("daemon instance lock is held but ping failed");
+            }
+        }
+    }
+}
+fn is_daemon_already_running(error: &anyhow::Error) -> bool {
+    format!("{error:#}").contains("daemon is already running")
 }
 enum StartupEvent {
     Reply(Result<StartupReply>),

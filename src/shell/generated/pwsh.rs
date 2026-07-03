@@ -97,6 +97,7 @@ function @FUNCTION@ {
         cwd          = (Get-Location).Path
         completed_at = (Get-Date).ToUniversalTime().ToString('o')
     } | ConvertTo-Json -Compress
+    New-Item -ItemType Directory -Force -Path $Directory | Out-Null
     Set-Content -LiteralPath $doneTempFile -Value $done -Encoding utf8
     Move-Item -LiteralPath $doneTempFile -Destination $doneFile -Force
     if ($null -eq $previousCommandId) {
