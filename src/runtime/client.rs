@@ -1,12 +1,12 @@
-use crate::runtime::daemon::startup::{READY_ENDPOINT_ENV, StartupReply};
+use crate::runtime::daemon::startup::{StartupReply, READY_ENDPOINT_ENV};
 use crate::runtime::daemon::{BootstrapReply, DaemonRequest};
 use crate::runtime::protocol::{Payload, Request, Response};
-use anyhow::{Context as _, Result, bail};
+use anyhow::{bail, Context as _, Result};
 use core::time::Duration;
 use ipc_channel::ipc::{self, IpcOneShotServer, IpcSender};
 use std::process::{Command, Stdio};
 use std::time::Instant;
-const IPC_TIMEOUT: Duration = Duration::from_secs(15);
+const IPC_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 pub(crate) struct DaemonClient {
     sender: IpcSender<DaemonRequest>,
 }
@@ -29,7 +29,7 @@ impl DaemonClient {
             })
             .context("failed to send IPC request")?;
         let response = response_receiver
-            .try_recv_timeout(IPC_TIMEOUT)
+            .recv()
             .context("failed to receive IPC response")?;
         match response {
             Response::Ok { payload } => Ok(payload),
@@ -43,7 +43,9 @@ fn connect_to_endpoint(service_name: &str) -> Result<DaemonClient> {
         let endpoint_name = crate::runtime::ipc_endpoint::read(service_name)?;
         match try_connect_to_endpoint(service_name, endpoint_name) {
             Ok(client) => return Ok(client),
-            Err(error) if is_busy_bootstrap_pipe(&error) && start.elapsed() < IPC_TIMEOUT => {
+            Err(error)
+                if is_busy_bootstrap_pipe(&error) && start.elapsed() < IPC_CONNECT_TIMEOUT =>
+            {
                 std::thread::yield_now();
             }
             Err(error) => return Err(error),
@@ -59,7 +61,7 @@ fn try_connect_to_endpoint(service_name: &str, endpoint_name: String) -> Result<
         .send(reply_sender)
         .context("failed to request daemon IPC channel")?;
     let sender = reply_receiver
-        .try_recv_timeout(IPC_TIMEOUT)
+        .try_recv_timeout(IPC_CONNECT_TIMEOUT)
         .context("failed to receive daemon IPC channel")?;
     Ok(DaemonClient { sender })
 }
@@ -111,7 +113,7 @@ fn wait_for_existing_daemon(service_name: &str) -> Result<()> {
         match call(service_name, &Request::Ping) {
             Ok(Payload::Pong) => return Ok(()),
             Ok(_payload) => bail!("daemon returned an unexpected response to ping"),
-            Err(_error) if start.elapsed() < IPC_TIMEOUT => {
+            Err(_error) if start.elapsed() < IPC_CONNECT_TIMEOUT => {
                 std::thread::yield_now();
             }
             Err(error) => {
