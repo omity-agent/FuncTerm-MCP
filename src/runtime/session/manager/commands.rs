@@ -1,4 +1,4 @@
-use super::{Manager, tabs::Tab};
+use super::{Manager, session::KeyboardWriteFailure, tabs::Tab};
 use crate::runtime::protocol::{EndReason, ViewResult};
 use crate::runtime::session::records::{
     CommandRecord, create_record, read_command_result, wait_for_done,
@@ -33,11 +33,18 @@ impl Tab {
             anyhow::bail!("tab id {} was generated, but its shell is gone", self.id());
         }
         session.refresh_choice()?;
-        if let Err(error) = session.write_keyboard(bytes) {
-            self.close_session(&session)?;
-            return Err(error);
+        match session.write_keyboard_for_running_command(bytes) {
+            Ok(()) => Ok(()),
+            Err(KeyboardWriteFailure::IdlePrompt) => {
+                anyhow::bail!(
+                    "manual_write is unavailable while the prompt is idle; use send_command for prompt commands"
+                )
+            }
+            Err(KeyboardWriteFailure::Write(error)) => {
+                self.close_session(&session)?;
+                Err(error)
+            }
         }
-        Ok(())
     }
     pub(super) fn start_command(
         self: &Arc<Self>,

@@ -8,8 +8,7 @@ mod tests {
         nested_launch_command, nested_marker_command, required_executable, shell_cases,
     };
     use crate::support::{
-        create_tab, locked_with_env, manual_write, parse_command_result, parse_tab_view, run_cli,
-        send_command,
+        create_tab, locked_with_env, parse_command_result, parse_tab_view, run_cli, send_command,
     };
     #[test]
     fn cli_runs_commands_for_every_supported_shell() {
@@ -99,7 +98,7 @@ mod tests {
                 name = case.name,
                 stdout = nested.stdout
             );
-            let _closed = manual_write(&created.tab_id, b"exit\n");
+            let _closed = send_command(&created.tab_id, "exit", 0.2);
         }
     }
 }

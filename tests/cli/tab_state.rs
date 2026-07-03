@@ -1,8 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::support::{
-        create_tab, manual_write, parse_command_result, parse_tab_view, run_cli, send_command,
-    };
+    use crate::support::{create_tab, parse_command_result, parse_tab_view, run_cli, send_command};
     use core::time::Duration;
     use std::thread;
     #[test]
@@ -26,8 +24,7 @@ mod tests {
         let close_output = send_command(&created.tab_id, command, 5.0);
         let close_query = parse_command_result(&close_output);
         assert!(close_query.finished);
-        let written = manual_write(&created.tab_id, b"exit\n");
-        assert!(written.status.success());
+        let _closed = send_command(&created.tab_id, "exit", 0.2);
         wait_for_shell_exit(&created.tab_id);
         let failed = send_command(&created.tab_id, "Write-Output 'MCP_PTY_AFTER_CLOSE'", 1.0);
         assert!(!failed.status.success());
@@ -37,7 +34,7 @@ mod tests {
         );
         let tab_view = parse_tab_view(&run_cli(&["view", &created.tab_id]));
         assert!(!tab_view.alive);
-        assert_eq!(tab_view.last_command, command);
+        assert_eq!(tab_view.last_command, "exit");
         assert!(
             tab_view.screen.contains("MCP_PTY_BEFORE_CLOSE"),
             "closed tab should retain last screen: {}",

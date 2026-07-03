@@ -25,21 +25,34 @@ mod tests {
         );
     }
     #[test]
-    fn cli_keyboard_enter_runs_commands_on_unix_ptys() {
+    fn cli_manual_write_feeds_running_unix_commands() {
         for case in unix_keyboard_cases() {
             let path = required_executable(case.executable);
             let _guard = locked_with_env(&[(case.env_var, &path)]);
             let shell = create_tab(&std::env::temp_dir(), case.shell);
             let marker = format!("MCP_PTY_KEYBOARD_{}", case.shell);
-            let command = keyboard_command(case.shell, &marker);
-            let written = manual_write(&shell.tab_id, command.as_bytes());
+            let accepted = send_command(
+                &shell.tab_id,
+                "IFS= read -r line; printf '%s\\n' \"$line\"",
+                0.0,
+            );
+            let pending = parse_command_result(&accepted);
+            assert!(
+                !pending.finished,
+                "{} command should wait for input",
+                case.shell
+            );
+            let command_id = parse_command_id(&accepted);
+            let typed = format!("{marker}\n");
+            let written = manual_write(&shell.tab_id, typed.as_bytes());
             assert!(
                 written.status.success(),
                 "stdout: {}\nstderr: {}",
                 String::from_utf8_lossy(&written.stdout),
                 String::from_utf8_lossy(&written.stderr)
             );
-            wait_for_screen_contains(&shell.tab_id, &marker);
+            let completed = wait_for_command_finished(&command_id);
+            assert!(completed.stdout.contains(&marker));
         }
     }
     #[test]
@@ -49,13 +62,7 @@ mod tests {
         let shell = create_tab(&std::env::temp_dir(), "bash");
         let alive = parse_tab_view(&run_cli(&["view", &shell.tab_id]));
         assert!(alive.alive);
-        let written = manual_write(&shell.tab_id, b"exit\n");
-        assert!(
-            written.status.success(),
-            "stdout: {}\nstderr: {}",
-            String::from_utf8_lossy(&written.stdout),
-            String::from_utf8_lossy(&written.stderr)
-        );
+        let _closed = send_command(&shell.tab_id, "exit", 0.2);
         wait_for_shell_dead(&shell.tab_id);
     }
     #[test]
@@ -125,30 +132,11 @@ mod tests {
             },
         ]
     }
-    fn keyboard_command(shell: &str, marker: &str) -> String {
-        match shell {
-            "bash" => format!("printf '{marker}\\n'\n"),
-            "zsh" => format!("print -r -- '{marker}'\n"),
-            other => panic!("unsupported shell {other}"),
-        }
-    }
     fn required_executable(name: &str) -> String {
         which::which(name)
             .ok()
             .map(|path| path.to_string_lossy().into_owned())
             .unwrap_or_else(|| panic!("CI on Unix must install required shell executable {name}"))
-    }
-    fn wait_for_screen_contains(tab_id: &str, expected: &str) {
-        let mut last_screen = String::new();
-        for _attempt in 0_usize..50 {
-            let query = parse_tab_view(&run_cli(&["view", tab_id]));
-            if query.screen.contains(expected) {
-                return;
-            }
-            last_screen = query.screen;
-            thread::sleep(Duration::from_millis(100));
-        }
-        panic!("screen should contain {expected:?}; last screen:\n{last_screen}");
     }
     fn wait_for_shell_dead(tab_id: &str) {
         for _attempt in 0_usize..30 {

@@ -60,7 +60,7 @@ impl McpServer {
         .map_err(error_text)?;
         output::new_tab(payload)
     }
-    # [tool (name = "manual_write" , description = "手动写入键盘输入。该工具用于使用 TUI 程序、发送快捷键等 send_command 无法覆盖的场景。使用时需在 text 和 bytes 中选择一个传入。" , output_schema = output :: schema ::< output :: ManualWriteOutput > ())]
+    # [tool (name = "manual_write" , description = "手动写入键盘输入。该工具仅在 Shell 处于非空闲状态时可用，适用于使用 TUI 程序、点击快捷键等场景。调用时需在 text 和 bytes 中选择一个传入。" , output_schema = output :: schema ::< output :: ManualWriteOutput > ())]
     async fn manual_write(
         &self,
         Parameters(request): Parameters<ManualWriteRequest>,
@@ -71,7 +71,7 @@ impl McpServer {
                 .map_err(error_text)?;
         output::manual_write(&payload)
     }
-    # [tool (name = "send_command" , description = "执行命令。获得等待时间结束前该命令产生的所有输出。" , output_schema = output :: schema ::< output :: SendCommandOutput > ())]
+    # [tool (name = "send_command" , description = "执行命令。该工具会在等待时长结束或命令结束时输出。" , output_schema = output :: schema ::< output :: SendCommandOutput > ())]
     async fn send_command(
         &self,
         Parameters(request): Parameters<SendCommandRequest>,
@@ -85,7 +85,7 @@ impl McpServer {
         .map_err(error_text)?;
         output::send_command(payload)
     }
-    # [tool (name = "view" , description = "工具会在等待结束或命令结束时输出。" , output_schema = output :: schema ::< output :: ViewOutput > ())]
+    # [tool (name = "view" , description = "查看状态。该工具会在等待时长结束或命令结束时输出。" , output_schema = output :: schema ::< output :: ViewOutput > ())]
     async fn view(
         &self,
         Parameters(request): Parameters<ViewRequest>,

@@ -22,6 +22,11 @@ pub(super) struct ShellSession {
     child: Mutex<Box<dyn Child + Send + Sync>>,
     _slave: Mutex<Box<dyn SlavePty + Send>>,
 }
+#[derive(Debug)]
+pub(super) enum KeyboardWriteFailure {
+    IdlePrompt,
+    Write(anyhow::Error),
+}
 pub(super) struct ShellSessionParts {
     pub(super) choice: ShellChoice,
     pub(super) cwd: PathBuf,
@@ -86,7 +91,19 @@ impl ShellSession {
             .context("failed to poll shell child")?;
         Ok(status.is_none())
     }
-    pub(super) fn write_keyboard(&self, bytes: &[u8]) -> Result<()> {
+    pub(super) fn write_keyboard_for_running_command(
+        &self,
+        bytes: &[u8],
+    ) -> Result<(), KeyboardWriteFailure> {
+        let busy = lock_mutex(&self.busy, "busy").map_err(KeyboardWriteFailure::Write)?;
+        if busy.is_none() {
+            return Err(KeyboardWriteFailure::IdlePrompt);
+        }
+        let write_result = self.write_keyboard(bytes);
+        drop(busy);
+        write_result.map_err(KeyboardWriteFailure::Write)
+    }
+    fn write_keyboard(&self, bytes: &[u8]) -> Result<()> {
         let choice = self.current_choice()?;
         let keyboard_bytes = choice.keyboard_bytes(bytes);
         let mut writer = lock_mutex(&self.writer, "writer")?;

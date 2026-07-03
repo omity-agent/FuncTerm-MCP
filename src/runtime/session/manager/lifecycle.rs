@@ -9,7 +9,9 @@ pub(super) fn release_shell(shell: &ShellSession, command_id: &str) -> Result<()
 #[cfg(test)]
 mod tests {
     use super::{release_shell, reserve_shell};
-    use crate::runtime::session::manager::session::{ShellSession, ShellSessionParts};
+    use crate::runtime::session::manager::session::{
+        KeyboardWriteFailure, ShellSession, ShellSessionParts,
+    };
     use crate::shell::ShellChoice;
     use alloc::sync::Arc;
     use anyhow::Error;
@@ -73,6 +75,19 @@ mod tests {
             shell.busy_command_id().unwrap().as_deref(),
             Some(reserved_id.as_str())
         );
+    }
+    #[test]
+    fn manual_write_rejects_idle_prompt() {
+        let shell = test_shell(None);
+        let error = shell
+            .write_keyboard_for_running_command(b"typed")
+            .unwrap_err();
+        assert!(matches!(error, KeyboardWriteFailure::IdlePrompt));
+    }
+    #[test]
+    fn manual_write_allows_running_command() {
+        let shell = test_shell(Some("command-current"));
+        shell.write_keyboard_for_running_command(b"typed").unwrap();
     }
     fn test_shell(busy: Option<&str>) -> ShellSession {
         let writer: Box<dyn Write + Send> = Box::<Vec<u8>>::default();

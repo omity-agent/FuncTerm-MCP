@@ -1,8 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::support::{
-        create_tab, locked_with_env, manual_write, parse_command_result, parse_tab_view, run_cli,
-        send_command,
+        create_tab, locked_with_env, parse_command_result, parse_tab_view, run_cli, send_command,
     };
     use core::sync::atomic::{AtomicU64, Ordering};
     use core::time::Duration;
@@ -109,13 +108,7 @@ mod tests {
             .unwrap_or_else(|_| panic!("CI must install required shell executable {name}"))
     }
     fn exit_shell(tab_id: &str) {
-        let written = manual_write(tab_id, b"exit\n");
-        assert!(
-            written.status.success(),
-            "stdout: {}\nstderr: {}",
-            String::from_utf8_lossy(&written.stdout),
-            String::from_utf8_lossy(&written.stderr)
-        );
+        let _closed = send_command(tab_id, "exit", 0.2);
         for _attempt in 0_usize..30 {
             let query = parse_tab_view(&run_cli(&["view", tab_id]));
             if !query.alive {

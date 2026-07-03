@@ -69,40 +69,45 @@ mod tests {
         assert_eq!(query.exit_code, Some(0_i32), "exit code should be zero");
     }
     #[test]
-    fn cli_keyboard_input_is_reflected_on_pty_screen() {
+    fn cli_manual_write_rejects_idle_prompt() {
         let _guard = locked();
         let cwd = std::env::temp_dir();
         let created = create_tab(&cwd, "powershell");
         let marker = "MCP_PTY_TYPED_INPUT";
         let written = manual_write(&created.tab_id, marker.as_bytes());
+        assert!(!written.status.success());
         assert!(
-            written.status.success(),
-            "stdout: {}\nstderr: {}",
-            String::from_utf8_lossy(&written.stdout),
+            String::from_utf8_lossy(&written.stderr).contains("prompt is idle"),
+            "stderr: {}",
             String::from_utf8_lossy(&written.stderr)
         );
-        assert_eq!(
-            String::from_utf8(written.stdout).unwrap().trim(),
-            "<OK>\n\n</OK>"
-        );
-        let query = wait_for_screen_contains(&created.tab_id, marker);
-        assert!(query.alive, "view should report live tab");
+        let query = super::support::parse_tab_view(&run_cli(&["view", &created.tab_id]));
+        assert!(query.alive, "rejected manual_write should keep tab alive");
     }
     #[test]
-    fn cli_keyboard_enter_runs_command_through_pty() {
+    fn cli_manual_write_feeds_running_powershell_command() {
         let _guard = locked();
         let cwd = std::env::temp_dir();
         let created = create_tab(&cwd, "powershell");
         let marker = "MCP_PTY_KEYBOARD_EVENT";
-        let command = format!("Write-Output '{marker}'\r\n");
-        let written = manual_write(&created.tab_id, command.as_bytes());
+        let accepted = super::support::send_command(
+            &created.tab_id,
+            "$line = [Console]::In.ReadLine(); Write-Output \"MCP_PTY_KEYBOARD_$line\"",
+            0.0,
+        );
+        let pending = parse_command_result(&accepted);
+        assert!(!pending.finished, "command should wait for manual input");
+        let command_id = parse_command_id(&accepted);
+        let typed = format!("{marker}\r\n");
+        let written = manual_write(&created.tab_id, typed.as_bytes());
         assert!(
             written.status.success(),
             "stdout: {}\nstderr: {}",
             String::from_utf8_lossy(&written.stdout),
             String::from_utf8_lossy(&written.stderr)
         );
-        wait_for_screen_contains(&created.tab_id, marker);
+        let completed = wait_for_command_finished(&command_id);
+        assert!(completed.stdout.contains(marker));
     }
     #[test]
     fn cli_view_reports_shell_liveness() {
@@ -176,16 +181,14 @@ mod tests {
         );
         assert!(viewed.stdout.contains("MCP_PTY_VIEW_WAIT_DONE"));
     }
-    fn wait_for_screen_contains(tab_id: &str, expected: &str) -> super::support::TabView {
-        let mut last_screen = String::new();
+    fn wait_for_command_finished(command_id: &str) -> super::support::CommandResult {
         for _attempt in 0_usize..50 {
-            let query = super::support::parse_tab_view(&run_cli(&["view", tab_id]));
-            if query.screen.contains(expected) {
+            let query = parse_command_result(&run_cli(&["view", command_id]));
+            if query.finished {
                 return query;
             }
-            last_screen = query.screen;
             thread::sleep(Duration::from_millis(100));
         }
-        panic!("screen should contain {expected:?}; last screen:\n{last_screen}");
+        panic!("command {command_id} should finish");
     }
 }
