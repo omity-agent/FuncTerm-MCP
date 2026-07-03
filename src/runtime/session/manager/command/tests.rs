@@ -94,7 +94,7 @@ fn test_shell(busy: Option<&str>) -> ShellSession {
             .join("functerm-test-commands")
             .join("active-shell.txt"),
         command_start_timeout: core::time::Duration::from_secs(1),
-        process_tree: crate::runtime::session::manager::process_tree::ProcessTree::new().unwrap(),
+        process_tree: crate::runtime::session::manager::process_tree::ProcessTree::new(),
         child,
         slave,
     })

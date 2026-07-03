@@ -89,7 +89,8 @@ encoding_rs = ">=0.8.35"
 fs2 = ">=0.4.3"
 hex = ">=0.4.3"
 ipc-channel = ">=0.22.0"
-libc = "*"
+kill_tree = ">=0.2.4"
+libc = ">=0.2.186"
 mimalloc = { version = ">=0.1.48", features = ["v3"] }
 nanoid = ">=0.5.0"
 notify = ">=8.2.0"
@@ -111,5 +112,4 @@ windows-sys = { version = ">=0.61.2", features = [
     "Win32_Foundation",
     "Win32_Security",
     "Win32_Storage_FileSystem",
-    "Win32_System_JobObjects",
 ] }

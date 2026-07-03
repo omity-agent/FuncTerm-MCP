@@ -90,11 +90,12 @@ mod tests {
     fn encoded_command_round_trips_as_utf16() {
         let encoded = super::encode_command("Write-Output '中文'");
         let bytes = base64_turbo::STANDARD.decode(encoded).unwrap();
-        let chunks = bytes.chunks_exact(2);
-        assert!(chunks.remainder().is_empty());
+        let (chunks, remainder) = bytes.as_chunks::<2>();
+        assert!(remainder.is_empty());
         let words = chunks
+            .iter()
             .map(|chunk| {
-                let [low, high]: [u8; 2] = chunk.try_into().unwrap();
+                let [low, high] = *chunk;
                 u16::from(low) | (u16::from(high) << 8_u32)
             })
             .collect::<Vec<_>>();

@@ -75,10 +75,6 @@ pub(super) fn read_and_clear_command_result(
     }
     Ok(result)
 }
-#[expect(
-    clippy::std_instead_of_core,
-    reason = "ErrorKind is only available from std"
-)]
 pub(super) fn remove_record_directory(record: &CommandRecord) -> Result<()> {
     match fs::remove_dir_all(&record.directory) {
         Ok(()) => Ok(()),

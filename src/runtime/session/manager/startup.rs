@@ -70,8 +70,7 @@ impl ShellLauncher {
         let ready_file = startup.ready_file.clone();
         apply_startup(&mut command, startup);
         command.cwd(starting_directory);
-        let process_tree =
-            process_tree::ProcessTree::new().context("failed to create shell cleanup guard")?;
+        let process_tree = process_tree::ProcessTree::new();
         let mut child = pair
             .slave
             .spawn_command(command)

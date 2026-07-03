@@ -82,10 +82,6 @@ fn open_lock_file(service_name: &str, name: &str) -> Result<File> {
         .open(&path)
         .with_context(|| format!("failed to open daemon lock {}", path.display()))
 }
-#[expect(
-    clippy::std_instead_of_core,
-    reason = "Error and ErrorKind are only available from std"
-)]
 fn is_lock_contended(error: &std::io::Error) -> bool {
     error.kind() == std::io::ErrorKind::WouldBlock || error.raw_os_error() == Some(33)
 }

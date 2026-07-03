@@ -37,10 +37,6 @@ fn create_root(name: &str) -> Result<PathBuf> {
     secure_root(&root)?;
     Ok(root)
 }
-#[expect(
-    clippy::std_instead_of_core,
-    reason = "ErrorKind is only available from std"
-)]
 fn remove_directory_if_present(path: &std::path::Path) -> Result<()> {
     match std::fs::remove_dir_all(path) {
         Ok(()) => Ok(()),
