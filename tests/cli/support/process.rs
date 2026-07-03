@@ -13,9 +13,6 @@ impl ChildGuard {
     pub(crate) const fn new(child: Child) -> Self {
         Self { child }
     }
-    pub(crate) fn is_running(&mut self) -> bool {
-        self.child.try_wait().unwrap().is_none()
-    }
     pub(crate) fn terminate(&mut self) {
         if self.child.try_wait().unwrap().is_none() {
             self.child.kill().unwrap();

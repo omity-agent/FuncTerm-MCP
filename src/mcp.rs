@@ -40,7 +40,7 @@ impl McpServer {
         let mut daemon = self.daemon.lock().map_err(|error| anyhow!("{error}"))?;
         if daemon.is_none() {
             client::ensure_daemon(&self.daemon_service_name)?;
-            *daemon = Some(client::DaemonClient::connect(&self.daemon_service_name)?);
+            *daemon = Some(client::DaemonClient::connect(&self.daemon_service_name));
         }
         daemon
             .as_ref()

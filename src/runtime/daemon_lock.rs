@@ -1,6 +1,5 @@
 use anyhow::{Context as _, Result};
-use fs2::FileExt as _;
-use std::fs::{File, OpenOptions};
+use named_lock::{NamedLock, NamedLockGuard};
 #[derive(Debug)]
 pub(crate) struct DaemonAlreadyRunning {
     service_name: String,
@@ -28,22 +27,17 @@ impl core::fmt::Display for DaemonAlreadyRunning {
 }
 impl core::error::Error for DaemonAlreadyRunning {}
 pub(crate) struct DaemonLock {
-    file: File,
-}
-impl Drop for DaemonLock {
-    fn drop(&mut self) {
-        if let Err(error) = self.file.unlock() {
-            eprintln!("failed to unlock daemon lock: {error}");
-        }
-    }
+    _lock: NamedLock,
+    _guard: NamedLockGuard,
 }
 pub(crate) fn acquire_instance(service_name: &str) -> Result<DaemonLock> {
-    let file = open_lock_file(service_name, "instance.lock")?;
-    match file.try_lock_exclusive() {
-        Ok(()) => Ok(DaemonLock { file }),
-        Err(error) if is_lock_contended(&error) => {
-            Err(DaemonAlreadyRunning::new(service_name).into())
-        }
+    let lock = create_lock(service_name, "instance")?;
+    match lock.try_lock() {
+        Ok(guard) => Ok(DaemonLock {
+            _lock: lock,
+            _guard: guard,
+        }),
+        Err(named_lock::Error::WouldBlock) => Err(DaemonAlreadyRunning::new(service_name).into()),
         Err(error) => Err(error).context("failed to acquire daemon instance lock"),
     }
 }
@@ -55,33 +49,16 @@ pub(crate) fn already_running_service_name(error: &anyhow::Error) -> Option<&str
     })
 }
 pub(crate) fn acquire_startup(service_name: &str) -> Result<DaemonLock> {
-    let file = open_lock_file(service_name, "startup.lock")?;
-    file.lock_exclusive()
+    let lock = create_lock(service_name, "startup")?;
+    let guard = lock
+        .lock()
         .context("failed to acquire daemon startup lock")?;
-    Ok(DaemonLock { file })
+    Ok(DaemonLock {
+        _lock: lock,
+        _guard: guard,
+    })
 }
-fn open_lock_file(service_name: &str, name: &str) -> Result<File> {
-    let path = crate::runtime::temp::daemon_root()?
-        .join("locks")
-        .join(hex::encode(service_name))
-        .join(name);
-    let parent = path
-        .parent()
-        .with_context(|| format!("lock path has no parent: {}", path.display()))?;
-    std::fs::create_dir_all(parent).with_context(|| {
-        format!(
-            "failed to create daemon lock directory {}",
-            parent.display()
-        )
-    })?;
-    OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(&path)
-        .with_context(|| format!("failed to open daemon lock {}", path.display()))
-}
-fn is_lock_contended(error: &std::io::Error) -> bool {
-    error.kind() == std::io::ErrorKind::WouldBlock || error.raw_os_error() == Some(33)
+fn create_lock(service_name: &str, kind: &str) -> Result<NamedLock> {
+    let name = crate::runtime::transport::lock_name(service_name, kind);
+    NamedLock::create(&name).with_context(|| format!("failed to create daemon {kind} lock"))
 }

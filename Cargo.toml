@@ -84,14 +84,15 @@ edition = "2024"
 [dependencies]
 anyhow = ">=1.0.103"
 base64-turbo = ">=0.2.0"
+blake3 = ">=1.8.5"
 clap = { version = ">=4.6.1", features = ["derive"] }
 encoding_rs = ">=0.8.35"
-fs2 = ">=0.4.3"
 hex = ">=0.4.3"
-ipc-channel = ">=0.22.0"
+interprocess = ">=2.4.2"
 kill_tree = ">=0.2.4"
 libc = ">=0.2.186"
 mimalloc = { version = ">=0.1.48", features = ["v3"] }
+named-lock = ">=0.4.1"
 nanoid = ">=0.5.0"
 notify = ">=8.2.0"
 portable-pty = ">=0.9.0"

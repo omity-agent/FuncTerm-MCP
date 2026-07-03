@@ -1,7 +1,7 @@
 use anyhow::{Context as _, Result};
-use ipc_channel::ipc::IpcSender;
 use serde::{Deserialize, Serialize};
-pub(crate) const READY_ENDPOINT_ENV: &str = "FUNCTERM_DAEMON_READY_ENDPOINT";
+use std::io::Write as _;
+pub(crate) const READY_STDOUT_ENV: &str = "FUNCTERM_DAEMON_READY_STDOUT";
 #[derive(Deserialize, Serialize)]
 pub(crate) enum StartupReply {
     Ready,
@@ -9,23 +9,16 @@ pub(crate) enum StartupReply {
     Failed { message: String },
 }
 pub(super) struct StartupReporter {
-    endpoint_name: Option<String>,
+    enabled: bool,
 }
 impl StartupReporter {
-    pub(super) fn from_env() -> Result<Self> {
-        let endpoint_name = match std::env::var_os(READY_ENDPOINT_ENV) {
-            Some(env_value) => Some(env_value.into_string().map_err(|invalid_value| {
-                anyhow::anyhow!(
-                    "{READY_ENDPOINT_ENV} is not valid Unicode: {}",
-                    invalid_value.to_string_lossy()
-                )
-            })?),
-            None => None,
-        };
-        Ok(Self { endpoint_name })
+    pub(super) fn from_env() -> Self {
+        Self {
+            enabled: std::env::var_os(READY_STDOUT_ENV).is_some(),
+        }
     }
     pub(super) fn ready(&mut self) -> Result<()> {
-        self.send(StartupReply::Ready)
+        self.send(&StartupReply::Ready)
     }
     pub(super) fn failed(&mut self, error: &anyhow::Error) {
         let reply = crate::runtime::daemon_lock::already_running_service_name(error).map_or_else(
@@ -36,17 +29,23 @@ impl StartupReporter {
                 service_name: service_name.to_owned(),
             },
         );
-        if let Err(send_error) = self.send(reply) {
+        if let Err(send_error) = self.send(&reply) {
             eprintln!("failed to send daemon startup error: {send_error:#}");
         }
     }
-    fn send(&mut self, reply: StartupReply) -> Result<()> {
-        let Some(endpoint_name) = self.endpoint_name.take() else {
+    fn send(&mut self, reply: &StartupReply) -> Result<()> {
+        if !self.enabled {
             return Ok(());
-        };
-        IpcSender::<StartupReply>::connect(endpoint_name)
-            .context("failed to connect daemon startup reporter")?
-            .send(reply)
-            .context("failed to send daemon startup status")
+        }
+        self.enabled = false;
+        let mut text =
+            sonic_rs::to_string(&reply).context("failed to serialize daemon startup status")?;
+        text.push('\n');
+        std::io::stdout()
+            .write_all(text.as_bytes())
+            .context("failed to write daemon startup status")?;
+        std::io::stdout()
+            .flush()
+            .context("failed to flush daemon startup status")
     }
 }

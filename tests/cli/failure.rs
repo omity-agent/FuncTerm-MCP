@@ -27,7 +27,7 @@ mod tests {
         }
     }
     #[test]
-    fn daemon_republishes_endpoint_after_restart() {
+    fn daemon_accepts_clients_after_restart() {
         let mut guard = system_shell_daemon();
         guard.restart_daemon();
         let tab = create_tab(&std::env::temp_dir(), system_shell_name());

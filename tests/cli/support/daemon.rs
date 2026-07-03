@@ -3,11 +3,10 @@ use super::process::ChildGuard;
 use core::cell::RefCell;
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::time::Duration;
-use std::path::PathBuf;
+use std::io::BufRead as _;
 use std::process::{Command, Stdio};
 use std::sync::{Condvar, Mutex};
 use std::thread;
-use std::time::Instant;
 const MAX_PARALLEL_DAEMONS: usize = 2;
 static SERVICE_COUNTER: AtomicU64 = AtomicU64::new(0);
 static DAEMON_SLOTS: Mutex<SlotState> = Mutex::new(SlotState { active: 0 });
@@ -109,40 +108,38 @@ fn spawn_daemon(env: &[(String, String)], service_name: &str) -> ChildGuard {
     command
         .arg("daemon")
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::null());
     apply_daemon_flags(&mut command);
     apply_env(&mut command, env);
-    let mut child = ChildGuard::new(command.spawn().unwrap());
+    command.env("FUNCTERM_DAEMON_READY_STDOUT", "1");
+    let mut child = command.spawn().unwrap();
     wait_for_daemon(&mut child, service_name);
-    child
+    ChildGuard::new(child)
 }
-fn wait_for_daemon(child: &mut ChildGuard, service_name: &str) {
-    let start = Instant::now();
-    loop {
-        assert!(
-            child.is_running(),
-            "daemon exited before accepting connections"
-        );
-        if has_daemon_endpoint(service_name) {
-            return;
-        }
-        assert!(
-            start.elapsed() < CLI_COMMAND_TIMEOUT,
-            "daemon did not become ready within {CLI_COMMAND_TIMEOUT:?}"
-        );
-        thread::sleep(Duration::from_millis(50));
-    }
-}
-fn has_daemon_endpoint(service_name: &str) -> bool {
-    endpoint_file(service_name).is_file()
-}
-fn endpoint_file(service_name: &str) -> PathBuf {
-    std::env::temp_dir()
-        .join("functerm")
-        .join("ipc-channel")
-        .join(hex::encode(service_name))
-        .join("endpoint.txt")
+fn wait_for_daemon(child: &mut std::process::Child, service_name: &str) {
+    let stdout = child.stdout.take().unwrap();
+    let (sender, receiver) = std::sync::mpsc::channel();
+    thread::spawn(move || {
+        let mut line = String::new();
+        let result = std::io::BufReader::new(stdout)
+            .read_line(&mut line)
+            .map(|bytes| (bytes, line));
+        sender.send(result).unwrap();
+    });
+    let (bytes, line) = receiver
+        .recv_timeout(CLI_COMMAND_TIMEOUT)
+        .unwrap_or_else(|_| panic!("daemon did not become ready within {CLI_COMMAND_TIMEOUT:?}"))
+        .unwrap();
+    assert!(
+        child.try_wait().unwrap().is_none(),
+        "daemon exited before accepting connections"
+    );
+    assert!(bytes > 0, "daemon closed startup pipe for {service_name}");
+    assert!(
+        line.contains("Ready"),
+        "daemon did not report readiness for {service_name}: {line}"
+    );
 }
 fn apply_env(command: &mut Command, env: &[(String, String)]) {
     for pair in env {
