@@ -40,7 +40,7 @@ async def run_client(config_index: int, config: BenchConfig) -> ClientResult:
     profile_name = None if profile is None else profile.name
     profile_variables = {} if profile is None else profile.variables
     steps = config.scenario if profile is None or not profile.scenario else profile.scenario
-    variables = {
+    base_variables = {
         **profile_variables,
         "client.index": str(config_index),
         "client.number": str(config_index + 1),
@@ -50,10 +50,18 @@ async def run_client(config_index: int, config: BenchConfig) -> ClientResult:
         async with open_mcp_session(
             config.server, list_tools_on_connect=config.clients.list_tools_on_connect
         ) as session:
-            for step in steps:
-                event, captures = await run_step(config_index, step, session, variables)
-                variables.update(captures)
-                events.append(event)
+            for loop_index in range(config.clients.loop_count):
+                variables = {
+                    **base_variables,
+                    "loop.index": str(loop_index),
+                    "loop.number": str(loop_index + 1),
+                }
+                for step in steps:
+                    event, captures = await run_step(
+                        config_index, loop_index, step, session, variables
+                    )
+                    variables.update(captures)
+                    events.append(event)
         return ClientResult(config_index, profile_name, time.perf_counter() - started, events, None)
     except Exception as error:
         return ClientResult(
@@ -62,7 +70,11 @@ async def run_client(config_index: int, config: BenchConfig) -> ClientResult:
 
 
 async def run_step(
-    client_index: int, step: StepConfig, session: ToolSession, variables: dict[str, str]
+    client_index: int,
+    loop_index: int,
+    step: StepConfig,
+    session: ToolSession,
+    variables: dict[str, str],
 ) -> tuple[StepEvent, dict[str, str]]:
     arguments = render_value(step.arguments, variables)
     if not isinstance(arguments, dict):
@@ -74,6 +86,7 @@ async def run_step(
     captures = {name: extract_tag(text, tag) for name, tag in step.capture.items()}
     event = StepEvent(
         client_index=client_index,
+        loop_index=loop_index,
         name=step.name,
         tool=step.tool,
         elapsed_seconds=elapsed,

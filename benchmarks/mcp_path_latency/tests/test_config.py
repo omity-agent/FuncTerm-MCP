@@ -35,4 +35,5 @@ def test_client_profiles_define_unique_paths_without_global_scenario() -> None:
         }
     )
     assert config.clients.resolved_count() == 2
+    assert config.clients.loop_count == 1
     assert config.clients.profile_for(0) is not None

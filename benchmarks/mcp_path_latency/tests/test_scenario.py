@@ -32,7 +32,8 @@ async def test_run_step_renders_arguments_and_captures_output() -> None:
         arguments={"starting_shell": "${shell}"},
         capture={"tab_id": "TAB_ID"},
     )
-    event, captures = await run_step(0, step, session, {"shell": "powershell"})
+    event, captures = await run_step(0, 3, step, session, {"shell": "powershell"})
     assert session.arguments == {"starting_shell": "powershell"}
     assert captures == {"tab_id": "tab_1"}
+    assert event.loop_index == 3
     assert event.captured == captures

@@ -1,6 +1,8 @@
 # 每个 profile 对应一个并发 MCP 客户端；count 必须与 profiles 数量一致，避免多个客户端走同一条路径。
 clients:
   count: 4
+  # 每个客户端重复执行自身完整 scenario 的次数；用于拉长总耗时并观察长期真实路径表现。
+  loop_count: 5
   list_tools_on_connect: true
   profiles:
     - name: inventory_reader

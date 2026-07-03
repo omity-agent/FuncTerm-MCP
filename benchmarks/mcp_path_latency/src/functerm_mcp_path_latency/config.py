@@ -37,6 +37,7 @@ class ClientProfileConfig(BaseModel):
 
 class ClientConfig(BaseModel):
     count: PositiveInt | None = None
+    loop_count: PositiveInt = 1
     list_tools_on_connect: bool
     profiles: list[ClientProfileConfig] = Field(default_factory=list)
 

@@ -9,6 +9,7 @@ from typing import Any
 @dataclass(frozen=True)
 class StepEvent:
     client_index: int
+    loop_index: int
     name: str
     tool: str
     elapsed_seconds: float
@@ -18,6 +19,7 @@ class StepEvent:
     def to_json(self) -> dict[str, Any]:
         return {
             "client_index": self.client_index,
+            "loop_index": self.loop_index,
             "name": self.name,
             "tool": self.tool,
             "elapsed_seconds": self.elapsed_seconds,
