@@ -11,11 +11,11 @@ pub(crate) fn run_if_requested() -> Result<Option<i32>> {
     let Some(choice) = requested_shell() else {
         return Ok(None);
     };
-    if std::env::var_os(shims::SHIM_DIR_ENV).is_none() {
+    if !is_shim_invocation()? {
         return Ok(None);
     }
     let arguments = std::env::args_os().skip(1).collect::<Vec<_>>();
-    if arguments.is_empty() {
+    if arguments.is_empty() || interactive_arguments(choice, &arguments) {
         return run_interactive(choice).map(Some);
     }
     run_passthrough(choice, arguments).map(Some)
@@ -26,6 +26,58 @@ fn requested_shell() -> Option<ShellChoice> {
         .file_name()
         .and_then(|name| name.to_str())?;
     ShellChoice::parse(name).ok()
+}
+fn is_shim_invocation() -> Result<bool> {
+    let Some(shim_dir) = std::env::var_os(shims::SHIM_DIR_ENV) else {
+        return Ok(false);
+    };
+    let executable = std::env::current_exe().context("failed to resolve shim executable")?;
+    let executable_dir = executable
+        .parent()
+        .context("shim executable path has no parent")?;
+    Ok(executable_dir.canonicalize().with_context(|| {
+        format!(
+            "failed to resolve shim executable directory {}",
+            executable_dir.display()
+        )
+    })? == PathBuf::from(shim_dir)
+        .canonicalize()
+        .context("failed to resolve shim directory")?)
+}
+fn interactive_arguments(choice: ShellChoice, arguments: &[std::ffi::OsString]) -> bool {
+    let Some(values) = arguments
+        .iter()
+        .map(|argument| argument.to_str().map(str::to_ascii_lowercase))
+        .collect::<Option<Vec<_>>>()
+    else {
+        return false;
+    };
+    match choice {
+        ShellChoice::PowerShell => powershell_interactive_arguments(&values),
+        ShellChoice::Bash | ShellChoice::Zsh => values
+            .iter()
+            .all(|value| matches!(value.as_str(), "-i" | "-l" | "--login")),
+        ShellChoice::NuShell => values.iter().all(|value| {
+            matches!(
+                value.as_str(),
+                "--login" | "--no-config-file" | "--no-history"
+            )
+        }),
+    }
+}
+fn powershell_interactive_arguments(values: &[String]) -> bool {
+    let mut index = 0_usize;
+    while index < values.len() {
+        let Some(value) = values.get(index) else {
+            return false;
+        };
+        match value.as_str() {
+            "-nologo" | "-noexit" | "-noprofile" => index += 1,
+            "-executionpolicy" if index + 1 < values.len() => index += 2,
+            _ => return false,
+        }
+    }
+    true
 }
 fn run_passthrough(choice: ShellChoice, arguments: Vec<std::ffi::OsString>) -> Result<i32> {
     let status = Command::new(real_executable(choice)?)
@@ -39,17 +91,16 @@ fn run_interactive(choice: ShellChoice) -> Result<i32> {
     let active_shell_file = active_shell_file()?;
     let session_root = nested_session_root(choice)?;
     fs::create_dir_all(&session_root).context("failed to create nested shell root")?;
-    shims::write_active_shell(&active_shell_file, choice)?;
     let cwd = std::env::current_dir().context("failed to read current directory")?;
     let startup = choice.startup(&cwd, &session_root)?;
     let ready_file = startup.ready_file.clone();
     let child = spawn_shell(choice, startup)?;
-    complete_active_command(&cwd)?;
+    let mut active_shell = ActiveShellGuard::new(active_shell_file, parent_shell);
     let status = startup::run_shell_until_exit(child, &ready_file, || {
-        shims::write_active_shell(&active_shell_file, choice)?;
+        active_shell.activate(choice)?;
+        complete_active_command(&cwd)?;
         Ok(())
     })?;
-    shims::write_active_shell(&active_shell_file, parent_shell)?;
     Ok(exit_code(status))
 }
 fn spawn_shell(choice: ShellChoice, startup: ShellStartup) -> Result<std::process::Child> {
@@ -126,4 +177,32 @@ struct EarlyDone {
     command_id: String,
     exit_code: i32,
     cwd: String,
+}
+struct ActiveShellGuard {
+    path: PathBuf,
+    parent_shell: ShellChoice,
+    active: bool,
+}
+impl ActiveShellGuard {
+    const fn new(path: PathBuf, parent_shell: ShellChoice) -> Self {
+        Self {
+            path,
+            parent_shell,
+            active: false,
+        }
+    }
+    fn activate(&mut self, shell: ShellChoice) -> Result<()> {
+        shims::write_active_shell(&self.path, shell)?;
+        self.active = true;
+        Ok(())
+    }
+}
+impl Drop for ActiveShellGuard {
+    fn drop(&mut self) {
+        if self.active
+            && let Err(error) = shims::write_active_shell(&self.path, self.parent_shell)
+        {
+            eprintln!("failed to restore active shell state: {error:#}");
+        }
+    }
 }

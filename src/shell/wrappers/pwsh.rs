@@ -36,7 +36,6 @@ const TEMPLATE : & str = "function Set-FuncTermShimPath {
     $env:PATH = (@($env:FUNCTERM_SHIM_DIR) + @($remaining)) -join $separator
 }
 Set-FuncTermShimPath
-
 if (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue) {
     Set-PSReadLineOption -HistorySaveStyle SaveNothing
     $setPsReadLineOption = Get-Command Set-PSReadLineOption
@@ -48,13 +47,13 @@ if (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue) {
     }
 }
 Clear-History
-
 function @FUNCTION@ {
     param(
         [Parameter(Mandatory = $true)][string]$CommandId,
         [Parameter(Mandatory = $true)][string]$Directory,
         [Parameter(Mandatory = $true)][string]$WorkingDirectory
     )
+    Set-FuncTermShimPath
     New-Item -ItemType Directory -Force -Path $Directory | Out-Null
     $stdoutFile = Join-Path $Directory '@STDOUT@'
     $stderrFile = Join-Path $Directory '@STDERR@'
@@ -91,15 +90,17 @@ function @FUNCTION@ {
         [Console]::Error.WriteLine($_)
         $exitCode = 1
     }
-    $done = @{
-        command_id   = $CommandId
-        exit_code    = $exitCode
-        cwd          = (Get-Location).Path
-        completed_at = (Get-Date).ToUniversalTime().ToString('o')
-    } | ConvertTo-Json -Compress
-    New-Item -ItemType Directory -Force -Path $Directory | Out-Null
-    Set-Content -LiteralPath $doneTempFile -Value $done -Encoding utf8
-    Move-Item -LiteralPath $doneTempFile -Destination $doneFile -Force
+    if (-not (Test-Path -LiteralPath $doneFile)) {
+        $done = @{
+            command_id   = $CommandId
+            exit_code    = $exitCode
+            cwd          = (Get-Location).Path
+            completed_at = (Get-Date).ToUniversalTime().ToString('o')
+        } | ConvertTo-Json -Compress
+        New-Item -ItemType Directory -Force -Path $Directory | Out-Null
+        Set-Content -LiteralPath $doneTempFile -Value $done -Encoding utf8
+        Move-Item -LiteralPath $doneTempFile -Destination $doneFile -Force
+    }
     if ($null -eq $previousCommandId) {
         Remove-Item Env:@COMMAND_ID_ENV@ -ErrorAction SilentlyContinue
     }

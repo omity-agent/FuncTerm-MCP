@@ -11,11 +11,8 @@ unset HISTFILE
 export HISTSIZE=0
 export HISTFILESIZE=0
 history -c
-
 {path}
-
 {shim_path}
-
 {command}
 ",
         path = path_function(false),
@@ -33,11 +30,8 @@ setopt no_share_history
 setopt no_inc_append_history
 fc -p /dev/null 0 0 2> /dev/null || true
 unset HISTFILE
-
 {path}
-
 {shim_path}
-
 {command}
 ",
         path = path_function(true),
@@ -46,7 +40,11 @@ unset HISTFILE
     )
 }
 fn path_function(zsh: bool) -> String {
-    let local_options = if zsh { "\n    emulate -L zsh" } else { "" };
+    let local_options = if zsh {
+        "\n    emulate -L zsh\n    setopt sh_word_split"
+    } else {
+        ""
+    };
     format!(
         r#"functerm_posix_path() {{{local_options}
     local value="$1"
@@ -65,7 +63,11 @@ fn path_function(zsh: bool) -> String {
     )
 }
 fn shim_path_function(zsh: bool) -> String {
-    let local_options = if zsh { "\n    emulate -L zsh" } else { "" };
+    let local_options = if zsh {
+        "\n    emulate -L zsh\n    setopt sh_word_split"
+    } else {
+        ""
+    };
     format!(
         r#"functerm_prepend_shim_path() {{{local_options}
     if [ -z "${{{SHIM_DIR_ENV}-}}" ]; then
@@ -73,7 +75,17 @@ fn shim_path_function(zsh: bool) -> String {
     fi
     local shim_dir="${{{SHIM_DIR_ENV}}}"
     shim_dir="$(functerm_posix_path "$shim_dir")" || return 1
-    export PATH="$shim_dir:$PATH"
+    local new_path="$shim_dir"
+    local old_ifs="$IFS"
+    local entry
+    IFS=:
+    for entry in $PATH; do
+        if [ "$entry" != "$shim_dir" ]; then
+            new_path="$new_path:$entry"
+        fi
+    done
+    IFS="$old_ifs"
+    export PATH="$new_path"
 }}
 functerm_prepend_shim_path"#
     )
@@ -97,15 +109,14 @@ fn command_function(dialect: PosixDialect) -> String {
 {previous_flags}
     export {command_id_env}="$command_id"
     export {command_dir_env}="$directory"
+    functerm_prepend_shim_path || return 1
     {truncate} "$stdout_file"
     {truncate} "$stderr_file"
     local script
     if ! script="$(functerm_decode_payload_file "$payload_file" "$stderr_file")"; then
         local cwd_json
         cwd_json="$(functerm_json_string "$PWD")"
-        printf '{{"command_id":"%s","exit_code":1,"cwd":%s,"completed_at":"%s"}}\n' \
-            "$command_id" "$cwd_json" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" {write_done_temp} "$done_temp_file"
-        {move_done}
+        functerm_publish_done "$command_id" 1 "$cwd_json" "$done_file" "$done_temp_file"
         cat "$stderr_file" >&2
         functerm_restore_command_environment \
             "$had_previous_command_id" "$previous_command_id" \
@@ -115,28 +126,25 @@ fn command_function(dialect: PosixDialect) -> String {
     if ! {cd} "$working_directory"; then
         local cwd_json
         cwd_json="$(functerm_json_string "$PWD")"
-        printf '{{"command_id":"%s","exit_code":1,"cwd":%s,"completed_at":"%s"}}\n' \
-            "$command_id" "$cwd_json" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" {write_done_temp} "$done_temp_file"
-        {move_done}
+        functerm_publish_done "$command_id" 1 "$cwd_json" "$done_file" "$done_temp_file"
         functerm_restore_command_environment \
             "$had_previous_command_id" "$previous_command_id" \
             "$had_previous_command_directory" "$previous_command_directory"
         return 1
     fi
-    {{ eval "$script"; }} > >(tee "$stdout_file") 2> >(tee "$stderr_file" >&2)
+    {{ eval "$script"; }} > "$stdout_file" 2> "$stderr_file"
     local exit_code=$?
+    cat "$stdout_file"
+    cat "$stderr_file" >&2
     local cwd_json
     cwd_json="$(functerm_json_string "$PWD")"
     {mkdir} "$directory" || return 1
-    printf '{{"command_id":"%s","exit_code":%s,"cwd":%s,"completed_at":"%s"}}\n' \
-        "$command_id" "$exit_code" "$cwd_json" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" {write_done_temp} "$done_temp_file"
-    {move_done}
+    functerm_publish_done "$command_id" "$exit_code" "$cwd_json" "$done_file" "$done_temp_file"
     functerm_restore_command_environment \
         "$had_previous_command_id" "$previous_command_id" \
         "$had_previous_command_directory" "$previous_command_directory"
     return "$exit_code"
 }}
-
 functerm_restore_command_environment() {{
 {emulate}    if {test_one}; then
         export {command_id_env}="$2"
@@ -149,16 +157,17 @@ functerm_restore_command_environment() {{
         unset {command_dir_env}
     fi
 }}
-
 functerm_json_string() {{
 {emulate}    local value="$1"
     value="${{value//\\/\\\\}}"
     value="${{value//\"/\\\"}}"
+    value="${{value//$'\b'/\\b}}"
+    value="${{value//$'\t'/\\t}}"
     value="${{value//$'\n'/\\n}}"
+    value="${{value//$'\f'/\\f}}"
     value="${{value//$'\r'/\\r}}"
     printf '"%s"' "$value"
 }}
-
 functerm_decode_payload_file() {{
 {emulate}    local payload_file="$1"
     local stderr_file="$2"
@@ -166,6 +175,19 @@ functerm_decode_payload_file() {{
         return 0
     fi
     base64 -D < "$payload_file" 2> "$stderr_file"
+}}
+functerm_publish_done() {{
+{emulate}    local command_id="$1"
+    local exit_code="$2"
+    local cwd_json="$3"
+    local done_file="$4"
+    local done_temp_file="$5"
+    if [ -e "$done_file" ]; then
+        return 0
+    fi
+    printf '{{"command_id":"%s","exit_code":%s,"cwd":%s,"completed_at":"%s"}}\n' \
+        "$command_id" "$exit_code" "$cwd_json" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" {write_done_temp} "$done_temp_file"
+    {move_done}
 }}"#,
         name = POSIX_COMMAND_FUNCTION,
         emulate = dialect.emulate(),

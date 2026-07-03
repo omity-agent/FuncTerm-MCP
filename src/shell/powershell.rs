@@ -1,6 +1,6 @@
-use super::generated::powershell_wrapper;
 use super::quote;
 use super::shims::CURRENT_SHELL_ENV;
+use super::wrappers::powershell_wrapper;
 use crate::contract::POWERSHELL_COMMAND_FUNCTION;
 use alloc::borrow::Cow;
 use anyhow::Result;

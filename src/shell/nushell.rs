@@ -1,6 +1,6 @@
-use super::generated::nushell_wrapper;
 use super::quote;
 use super::shims::CURRENT_SHELL_ENV;
+use super::wrappers::nushell_wrapper;
 use crate::contract::POSIX_COMMAND_FUNCTION;
 use anyhow::Result;
 use std::path::Path;

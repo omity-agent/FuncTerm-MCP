@@ -1,7 +1,7 @@
 use super::{
-    generated::zsh_wrapper,
     posix::{sh_path, sh_quote},
     shims::CURRENT_SHELL_ENV,
+    wrappers::zsh_wrapper,
 };
 use crate::contract::POSIX_COMMAND_FUNCTION;
 use anyhow::{Context as _, Result};
@@ -37,7 +37,7 @@ fn initialization_script(cwd: &Path, ready_file: &Path) -> Result<String> {
 mod tests {
     use std::path::Path;
     #[test]
-    fn startup_uses_zdotdir_to_load_generated_zshrc() {
+    fn startup_uses_zdotdir_to_load_wrapper_zshrc() {
         let root = std::env::temp_dir()
             .join("functerm-zsh-startup-test")
             .join(std::process::id().to_string());

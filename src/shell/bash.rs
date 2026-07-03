@@ -1,7 +1,7 @@
 use super::{
-    generated::bash_wrapper,
     posix::{sh_path, sh_quote},
     shims::CURRENT_SHELL_ENV,
+    wrappers::bash_wrapper,
 };
 use crate::contract::POSIX_COMMAND_FUNCTION;
 use anyhow::{Context as _, Result};

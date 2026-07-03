@@ -71,13 +71,15 @@ const TEMPLATE: &str = r#"def @FUNCTION@ [command_id: string, directory: path, w
         { cwd: ($working_directory | path expand), exit_code: 1 }
     }
     mkdir $directory
-    {
-        command_id: $command_id,
-        exit_code: $state.exit_code,
-        cwd: $state.cwd,
-        completed_at: (date now | date to-timezone UTC | format date '%+')
-    } | to json --raw | save --force $done_temp_file
-    mv --force $done_temp_file $done_file
+    if not ($done_file | path exists) {
+        {
+            command_id: $command_id,
+            exit_code: $state.exit_code,
+            cwd: $state.cwd,
+            completed_at: (date now | date to-timezone UTC | format date '%+')
+        } | to json --raw | save --force $done_temp_file
+        mv --force $done_temp_file $done_file
+    }
     if ($previous_command_id | is-empty) {
         hide-env @COMMAND_ID_ENV@
     } else {

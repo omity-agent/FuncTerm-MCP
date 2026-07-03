@@ -101,10 +101,10 @@ pub(super) fn case_command(shell: &str, next: &Path) -> String {
 }
 pub(super) fn nested_launch_command(shell: &str) -> &'static str {
     match shell {
-        "powershell" => "pwsh",
-        "bash" => "bash",
-        "nu" => "nu",
-        "zsh" => "zsh",
+        "powershell" => "pwsh -NoLogo",
+        "bash" => "bash -i",
+        "nu" => "nu --no-history",
+        "zsh" => "zsh -i",
         other => panic!("unsupported shell case {other}"),
     }
 }
@@ -113,6 +113,12 @@ pub(super) fn nested_marker_command(shell: &str, marker: &str) -> String {
         "powershell" => format!("Write-Output {}", quote::powershell_string(marker)),
         "bash" | "zsh" => format!("printf '%s\\n' {}", quote::posix_string(marker)),
         "nu" => format!("print {}", quote::nushell_string(marker)),
+        other => panic!("unsupported shell case {other}"),
+    }
+}
+pub(super) fn exit_command(shell: &str) -> &'static str {
+    match shell {
+        "powershell" | "bash" | "nu" | "zsh" => "exit 42",
         other => panic!("unsupported shell case {other}"),
     }
 }

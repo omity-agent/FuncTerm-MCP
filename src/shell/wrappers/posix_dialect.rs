@@ -8,7 +8,7 @@ impl PosixDialect {
     pub(super) const fn emulate(self) -> &'static str {
         match self {
             Self::Bash => "",
-            Self::Zsh => "    emulate -L zsh\n",
+            Self::Zsh => "    emulate -L zsh\n    setopt sh_word_split\n",
         }
     }
     pub(super) const fn mkdir(self) -> &'static str {

@@ -1,14 +1,14 @@
 use crate::runtime::config::Settings;
 mod bash;
-mod generated;
 mod nushell;
 mod posix;
 mod powershell;
 pub mod quote;
 pub(crate) mod shims;
+mod wrappers;
 mod zsh;
 use alloc::borrow::Cow;
-use anyhow::{Result, bail};
+use anyhow::{Context as _, Result, bail};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
@@ -123,7 +123,37 @@ fn select_available_executable(candidates: &[String]) -> Result<PathBuf> {
     )
 }
 fn resolve_executable(candidate: &str) -> Result<PathBuf> {
-    which::which(candidate).map_err(Into::into)
+    let paths = which::which_all(candidate)?;
+    for path in paths {
+        if !is_inherited_shim(&path)? {
+            return Ok(path);
+        }
+    }
+    bail!("all executable candidates for `{candidate}` point to FuncTerm shims")
+}
+fn is_inherited_shim(path: &Path) -> Result<bool> {
+    if same_file(
+        path,
+        &std::env::current_exe().context("failed to resolve current executable")?,
+    ) {
+        return Ok(true);
+    }
+    let Some(shim_dir) = std::env::var_os(shims::SHIM_DIR_ENV) else {
+        return Ok(false);
+    };
+    let Some(parent) = path.parent() else {
+        return Ok(false);
+    };
+    Ok(same_file(parent, &PathBuf::from(shim_dir)))
+}
+fn same_file(left: &Path, right: &Path) -> bool {
+    let Ok(left_path) = left.canonicalize() else {
+        return false;
+    };
+    let Ok(right_path) = right.canonicalize() else {
+        return false;
+    };
+    left_path == right_path
 }
 #[cfg(test)]
 mod tests {

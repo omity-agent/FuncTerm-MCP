@@ -2,7 +2,7 @@ use super::ShellChoice;
 use crate::runtime::config::Settings;
 use anyhow::{Context as _, Result};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 const SHIM_DIR: &str = "shell-shims";
 pub(crate) const ACTIVE_SHELL_FILE_ENV: &str = "FUNCTERM_ACTIVE_SHELL_FILE";
 pub(crate) const CURRENT_SHELL_ENV: &str = "FUNCTERM_CURRENT_SHELL";
@@ -69,8 +69,11 @@ pub(crate) fn environment(
     Ok(env)
 }
 pub(crate) fn write_active_shell(path: &Path, shell: ShellChoice) -> Result<()> {
-    fs::write(path, shell.canonical_name())
-        .with_context(|| format!("failed to write active shell state {}", path.display()))
+    let temp_path = active_shell_temp_path(path);
+    fs::write(&temp_path, shell.canonical_name())
+        .with_context(|| format!("failed to write active shell state {}", temp_path.display()))?;
+    replace_file(&temp_path, path)
+        .with_context(|| format!("failed to publish active shell state {}", path.display()))
 }
 pub(crate) fn read_active_shell(path: &Path) -> Result<Option<ShellChoice>> {
     if !path.exists() {
@@ -87,4 +90,30 @@ fn prepend_path(shim_dir: &Path) -> Result<String> {
     }
     let joined = std::env::join_paths(parts).context("failed to join PATH entries")?;
     crate::text::os_text(joined, "PATH")
+}
+fn active_shell_temp_path(path: &Path) -> PathBuf {
+    path.with_extension(format!("{}.tmp", std::process::id()))
+}
+#[cfg(unix)]
+fn replace_file(source: &Path, destination: &Path) -> Result<()> {
+    fs::rename(source, destination).map_err(Into::into)
+}
+#[cfg(windows)]
+fn replace_file(source: &Path, destination: &Path) -> Result<()> {
+    use windows_sys::Win32::Storage::FileSystem::{
+        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+    };
+    let source_wide = wide_path(source);
+    let destination_wide = wide_path(destination);
+    let flags = MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH;
+    let moved = unsafe { MoveFileExW(source_wide.as_ptr(), destination_wide.as_ptr(), flags) };
+    if moved == 0_i32 {
+        return Err(std::io::Error::last_os_error()).context("MoveFileExW failed");
+    }
+    Ok(())
+}
+#[cfg(windows)]
+fn wide_path(path: &Path) -> Vec<u16> {
+    use std::os::windows::ffi::OsStrExt as _;
+    path.as_os_str().encode_wide().chain([0]).collect()
 }
