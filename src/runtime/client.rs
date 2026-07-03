@@ -44,7 +44,8 @@ fn connect_to_endpoint(service_name: &str) -> Result<DaemonClient> {
         match try_connect_to_endpoint(service_name, endpoint_name) {
             Ok(client) => return Ok(client),
             Err(error)
-                if is_retryable_bootstrap_error(&error) && start.elapsed() < IPC_SETUP_TIMEOUT =>
+                if crate::runtime::ipc_failure::is_retryable_bootstrap_error(&error)
+                    && start.elapsed() < IPC_SETUP_TIMEOUT =>
             {
                 std::thread::yield_now();
             }
@@ -64,21 +65,6 @@ fn try_connect_to_endpoint(service_name: &str, endpoint_name: String) -> Result<
         .try_recv_timeout(IPC_SETUP_TIMEOUT)
         .context("failed to receive daemon IPC channel")?;
     Ok(DaemonClient { sender })
-}
-fn is_retryable_bootstrap_error(error: &anyhow::Error) -> bool {
-    let text = format!("{error:#}");
-    is_busy_bootstrap_pipe(&text) || is_disconnected_bootstrap_reply(&text)
-}
-fn is_busy_bootstrap_pipe(text: &str) -> bool {
-    text.contains("-2147024665")
-        || text.contains("-2147024360")
-        || text.contains("All pipe instances are busy")
-        || text.contains("waiting for a process to open the other end of the pipe")
-        || text.contains("所有的管道范例都在使用中")
-        || text.contains("等候打开管道另一端的进程")
-}
-fn is_disconnected_bootstrap_reply(text: &str) -> bool {
-    text.contains("failed to receive daemon IPC channel") && text.contains("Ipc Disconnected")
 }
 pub(crate) fn call(service_name: &str, request: &Request) -> Result<Payload> {
     let client = DaemonClient::connect(service_name)?;
@@ -129,7 +115,7 @@ fn wait_for_existing_daemon(service_name: &str) -> Result<()> {
     }
 }
 fn is_daemon_already_running(error: &anyhow::Error) -> bool {
-    format!("{error:#}").contains("daemon is already running")
+    crate::runtime::daemon_lock::already_running_service_name(error).is_some()
 }
 fn wait_for_daemon_startup(
     startup_server: IpcOneShotServer<StartupReply>,
@@ -145,6 +131,9 @@ fn wait_for_daemon_startup(
     });
     match reply_receiver.recv_timeout(IPC_SETUP_TIMEOUT) {
         Ok(Ok(StartupReply::Ready)) => Ok(()),
+        Ok(Ok(StartupReply::AlreadyRunning { service_name })) => {
+            Err(crate::runtime::daemon_lock::DaemonAlreadyRunning::new(service_name).into())
+        }
         Ok(Ok(StartupReply::Failed { message })) => bail!(message),
         Ok(Err(error)) => Err(error),
         Err(std::sync::mpsc::RecvTimeoutError::Timeout) => fail_daemon_startup_timeout(&mut child),

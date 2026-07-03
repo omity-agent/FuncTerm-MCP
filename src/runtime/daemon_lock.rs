@@ -1,6 +1,32 @@
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result};
 use fs2::FileExt as _;
 use std::fs::{File, OpenOptions};
+#[derive(Debug)]
+pub(crate) struct DaemonAlreadyRunning {
+    service_name: String,
+}
+impl DaemonAlreadyRunning {
+    #[inline]
+    pub(crate) fn new(service_name: impl Into<String>) -> Self {
+        Self {
+            service_name: service_name.into(),
+        }
+    }
+    #[inline]
+    pub(crate) fn service_name(&self) -> &str {
+        &self.service_name
+    }
+}
+impl core::fmt::Display for DaemonAlreadyRunning {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "daemon is already running for IPC service {}",
+            self.service_name
+        )
+    }
+}
+impl core::error::Error for DaemonAlreadyRunning {}
 pub(crate) struct DaemonLock {
     file: File,
 }
@@ -16,10 +42,17 @@ pub(crate) fn acquire_instance(service_name: &str) -> Result<DaemonLock> {
     match file.try_lock_exclusive() {
         Ok(()) => Ok(DaemonLock { file }),
         Err(error) if is_lock_contended(&error) => {
-            bail!("daemon is already running for IPC service {service_name}")
+            Err(DaemonAlreadyRunning::new(service_name).into())
         }
         Err(error) => Err(error).context("failed to acquire daemon instance lock"),
     }
+}
+pub(crate) fn already_running_service_name(error: &anyhow::Error) -> Option<&str> {
+    error.chain().find_map(|source| {
+        source
+            .downcast_ref::<DaemonAlreadyRunning>()
+            .map(DaemonAlreadyRunning::service_name)
+    })
 }
 pub(crate) fn acquire_startup(service_name: &str) -> Result<DaemonLock> {
     let file = open_lock_file(service_name, "startup.lock")?;

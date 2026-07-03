@@ -5,6 +5,7 @@ pub(crate) const READY_ENDPOINT_ENV: &str = "FUNCTERM_DAEMON_READY_ENDPOINT";
 #[derive(Deserialize, Serialize)]
 pub(crate) enum StartupReply {
     Ready,
+    AlreadyRunning { service_name: String },
     Failed { message: String },
 }
 pub(super) struct StartupReporter {
@@ -27,9 +28,15 @@ impl StartupReporter {
         self.send(StartupReply::Ready)
     }
     pub(super) fn failed(&mut self, error: &anyhow::Error) {
-        if let Err(send_error) = self.send(StartupReply::Failed {
-            message: format!("{error:#}"),
-        }) {
+        let reply = crate::runtime::daemon_lock::already_running_service_name(error).map_or_else(
+            || StartupReply::Failed {
+                message: format!("{error:#}"),
+            },
+            |service_name| StartupReply::AlreadyRunning {
+                service_name: service_name.to_owned(),
+            },
+        );
+        if let Err(send_error) = self.send(reply) {
             eprintln!("failed to send daemon startup error: {send_error:#}");
         }
     }

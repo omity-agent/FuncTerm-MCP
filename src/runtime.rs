@@ -3,6 +3,7 @@ pub(crate) mod config;
 pub(crate) mod daemon;
 mod daemon_lock;
 mod ipc_endpoint;
+mod ipc_failure;
 pub(crate) mod protocol;
 pub(crate) mod session;
 pub(crate) mod temp;
