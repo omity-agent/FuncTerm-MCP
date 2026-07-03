@@ -28,7 +28,7 @@ async def open_mcp_session(
 
 
 def tool_result_text(result: object) -> str:
-    if bool(getattr(result, "isError", False)):
+    if bool(getattr(result, "is_error", False)):
         raise RuntimeError(str(result))
     content = getattr(result, "content", None)
     if not isinstance(content, list):

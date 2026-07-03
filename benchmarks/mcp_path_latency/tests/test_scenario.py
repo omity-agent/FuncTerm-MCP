@@ -3,6 +3,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from functerm_mcp_path_latency.config import StepConfig
+from functerm_mcp_path_latency.mcp_session import tool_result_text
 from functerm_mcp_path_latency.scenario import run_step
 
 
@@ -12,6 +13,7 @@ class Content(BaseModel):
 
 class Result(BaseModel):
     content: list[Content]
+    is_error: bool = False
 
 
 class FakeSession:
@@ -38,3 +40,12 @@ async def test_run_step_renders_arguments_and_captures_output() -> None:
     assert event.loop_index == 3
     assert event.profile_name == "profile_a"
     assert event.captured == captures
+
+
+def test_tool_result_text_uses_python_sdk_error_field() -> None:
+    result = Result(content=[Content(text="failed")], is_error=True)
+    try:
+        tool_result_text(result)
+    except RuntimeError:
+        return
+    raise AssertionError("tool result error should be raised")
