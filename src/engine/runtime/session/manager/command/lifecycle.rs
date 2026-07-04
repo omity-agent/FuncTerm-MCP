@@ -69,17 +69,18 @@ impl ManagedCommand {
         clippy::significant_drop_tightening,
         reason = "the state lock serializes the single read-and-delete of command files"
     )]
-    pub(super) fn mark_finished(&self) -> Result<CommandSnapshot> {
+    pub(super) fn mark_finished(&self) -> Result<()> {
         let mut state = self.lock_state()?;
         if !matches!(*state, CommandState::Running) {
-            return self
-                .cached_view()?
-                .context("finished command is missing cached view");
+            self.lock_cached_view()?
+                .as_ref()
+                .context("finished command is missing cached view")?;
+            return Ok(());
         }
         let view = read_and_clear_command_result(&self.record, self.time_consumption())?;
-        *self.lock_cached_view()? = Some(view.clone());
+        *self.lock_cached_view()? = Some(view);
         *state = CommandState::Finished;
-        Ok(view)
+        Ok(())
     }
     pub(in crate::engine::runtime::session::manager) fn mark_failed(
         &self,

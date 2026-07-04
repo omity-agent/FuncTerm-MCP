@@ -1,4 +1,6 @@
+mod snapshot;
 mod tab_view;
+use self::snapshot::TabSnapshot;
 use super::command::ManagedCommand;
 use super::shell_session::ShellSession;
 use crate::runtime::protocol::{ShellView, ViewResult};
@@ -7,11 +9,6 @@ use alloc::sync::Arc;
 use anyhow::{Result, bail};
 use std::collections::HashMap;
 use std::sync::Mutex;
-const ID_LENGTH: usize = 12;
-const ID_ALPHABET: [char; 36] = [
-    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i',
-    'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
-];
 #[derive(Default)]
 pub(super) struct TabDirectory {
     tabs: Mutex<HashMap<String, Arc<Tab>>>,
@@ -23,14 +20,11 @@ pub(super) struct Tab {
     snapshot: Mutex<TabSnapshot>,
     commands: Mutex<HashMap<String, Arc<ManagedCommand>>>,
 }
-#[derive(Clone)]
-pub(super) struct TabSnapshot {
-    cwd: String,
-    title: String,
-    shell_type: crate::shell::ShellChoice,
-    idle: bool,
-    screen: String,
-}
+const ID_LENGTH: usize = 12;
+const ID_ALPHABET: [char; 36] = [
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i',
+    'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+];
 impl TabDirectory {
     pub(super) fn insert(&self, tab: Tab) -> Result<()> {
         lock_mutex(&self.tabs, "tab")?.insert(tab.id().to_owned(), Arc::new(tab));
@@ -150,42 +144,6 @@ impl Tab {
         Ok(lock_mutex(&self.commands, "tab command")?
             .get(command_id)
             .cloned())
-    }
-}
-impl TabSnapshot {
-    fn from_session(session: &ShellSession) -> Result<Self> {
-        let cwd = crate::text::path_text(&session.cwd()?, "cwd")?;
-        let current_screen = session.screen_contents()?;
-        let screen = if current_screen.is_empty() {
-            cwd.clone()
-        } else {
-            current_screen
-        };
-        let shell_type = session.current_choice()?;
-        Ok(Self {
-            cwd,
-            title: session.screen_title()?,
-            shell_type,
-            idle: session.busy_command_id()?.is_none(),
-            screen,
-        })
-    }
-    pub(super) fn into_view(self, alive: bool) -> ViewResult {
-        let shell = self.clone().shell_view(alive);
-        ViewResult::Tab {
-            shell,
-            screen: self.screen,
-            note: String::new(),
-        }
-    }
-    pub(super) fn shell_view(self, alive: bool) -> ShellView {
-        ShellView {
-            alive,
-            title: self.title,
-            shell_type: self.shell_type,
-            cwd: self.cwd,
-            idle: self.idle,
-        }
     }
 }
 fn random_id_suffix() -> String {

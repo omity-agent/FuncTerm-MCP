@@ -59,9 +59,9 @@ where
 }
 pub(super) fn new_tab(payload: Payload) -> Result<CallToolResult, String> {
     match payload {
-        Payload::TabCreated { tab_id } => result(
+        Payload::TabCreated { tab_id } => tool_result(
             tab_created_plain_text(&tab_id),
-            NewTabOutput { tab_id: &tab_id },
+            &NewTabOutput { tab_id: &tab_id },
         ),
         Payload::Pong
         | Payload::KeyboardWritten { .. }
@@ -78,9 +78,9 @@ pub(super) fn manual_write(payload: Payload) -> Result<CallToolResult, String> {
                     screen,
                     note,
                 },
-        } => result(
+        } => tool_result(
             tab_plain_text(&shell, &screen, &note, false),
-            ManualWriteOutput {
+            &ManualWriteOutput {
                 shell: ShellData::from_shell(&shell, false),
                 screen: &screen,
                 note: &note,
@@ -106,9 +106,9 @@ pub(super) fn send_command(payload: Payload) -> Result<CallToolResult, String> {
                     note,
                 },
             ..
-        } => result(
+        } => tool_result(
             command_plain_text(&shell, &command, &note, false, Some(&command_id)),
-            SendCommandOutput {
+            &SendCommandOutput {
                 shell: ShellData::from_shell(&shell, false),
                 command: CommandData::from_command(&command, Some(&command_id)),
                 note: &note,
@@ -130,9 +130,9 @@ pub(super) fn view(payload: Payload) -> Result<CallToolResult, String> {
             shell,
             screen,
             note,
-        }) => result(
+        }) => tool_result(
             tab_plain_text(&shell, &screen, &note, true),
-            ViewOutput {
+            &ViewOutput {
                 shell: ShellData::from_shell(&shell, true),
                 screen: Some(&screen),
                 command: None,
@@ -143,9 +143,9 @@ pub(super) fn view(payload: Payload) -> Result<CallToolResult, String> {
             shell,
             command,
             note,
-        }) => result(
+        }) => tool_result(
             command_plain_text(&shell, &command, &note, true, None),
-            ViewOutput {
+            &ViewOutput {
                 shell: ShellData::from_shell(&shell, true),
                 screen: None,
                 command: Some(CommandData::from_command(&command, None)),
@@ -158,9 +158,9 @@ pub(super) fn view(payload: Payload) -> Result<CallToolResult, String> {
         | Payload::CommandAccepted { .. } => Err(unexpected_response()),
     }
 }
-fn result<T>(content: String, structured_content: T) -> Result<CallToolResult, String>
+fn tool_result<T>(content: String, structured_content: &T) -> Result<CallToolResult, String>
 where
-    T: Serialize,
+    T: Serialize + ?Sized,
 {
     let value = rmcp::serde_json::to_value(structured_content)
         .map_err(|error| format!("failed to serialize structured content: {error}"))?;
