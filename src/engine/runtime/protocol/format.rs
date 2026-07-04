@@ -3,7 +3,7 @@ impl Payload {
     pub(crate) fn into_plain_text(self) -> String {
         match self {
             Self::Pong => element("PONG", ""),
-            Self::TabCreated { tab_id } => element("TAB_ID", &tab_id),
+            Self::TabCreated { tab_id } => tab_created_plain_text(&tab_id),
             Self::KeyboardWritten { view } => view.tab_plain_text(false),
             Self::CommandAccepted {
                 command_id, view, ..
@@ -15,8 +15,16 @@ impl Payload {
 impl ViewResult {
     pub(crate) fn into_plain_text(self) -> String {
         match self {
-            Self::Tab { .. } => self.tab_plain_text(true),
-            Self::Command { .. } => self.command_plain_text(true, None),
+            Self::Tab {
+                shell,
+                screen,
+                note,
+            } => tab_plain_text(&shell, &screen, &note, true),
+            Self::Command {
+                shell,
+                command,
+                note,
+            } => command_plain_text(&shell, &command, &note, true, None),
         }
     }
     fn tab_plain_text(self, include_alive: bool) -> String {
@@ -25,12 +33,12 @@ impl ViewResult {
                 shell,
                 screen,
                 note,
-            } => tab_text(&shell, screen, note, include_alive),
+            } => tab_plain_text(&shell, &screen, &note, include_alive),
             Self::Command {
                 shell,
                 command,
                 note,
-            } => command_section_text(&shell, &command, note, include_alive, None),
+            } => command_plain_text(&shell, &command, &note, include_alive, None),
         }
     }
     fn command_plain_text(self, include_alive: bool, command_id: Option<&str>) -> String {
@@ -39,47 +47,53 @@ impl ViewResult {
                 shell,
                 screen,
                 note,
-            } => tab_text(&shell, screen, note, include_alive),
+            } => tab_plain_text(&shell, &screen, &note, include_alive),
             Self::Command {
                 shell,
                 command,
                 note,
-            } => command_section_text(&shell, &command, note, include_alive, command_id),
+            } => command_plain_text(&shell, &command, &note, include_alive, command_id),
         }
     }
 }
-fn tab_text(shell: &ShellView, screen: String, note: String, include_alive: bool) -> String {
-    elements([
-        ("SHELL", shell_text(shell, include_alive)),
-        ("SCREEN", screen),
-        ("NOTE", note),
-    ])
+pub(crate) fn tab_created_plain_text(tab_id: &str) -> String {
+    element("TAB_ID", tab_id)
 }
-fn command_section_text(
+pub(crate) fn tab_plain_text(
+    shell: &ShellView,
+    screen: &str,
+    note: &str,
+    include_alive: bool,
+) -> String {
+    let mut text = String::new();
+    append_element(&mut text, "SHELL", &shell_text(shell, include_alive));
+    append_element(&mut text, "SCREEN", screen);
+    append_element(&mut text, "NOTE", note);
+    text
+}
+pub(crate) fn command_plain_text(
     shell: &ShellView,
     command: &CommandView,
-    note: String,
+    note: &str,
     include_alive: bool,
     command_id: Option<&str>,
 ) -> String {
-    elements([
-        ("SHELL", shell_text(shell, include_alive)),
-        ("COMMAND", command_text(command, command_id)),
-        ("NOTE", note),
-    ])
+    let mut text = String::new();
+    append_element(&mut text, "SHELL", &shell_text(shell, include_alive));
+    append_element(&mut text, "COMMAND", &command_text(command, command_id));
+    append_element(&mut text, "NOTE", note);
+    text
 }
 fn shell_text(shell: &ShellView, include_alive: bool) -> String {
-    let mut items = Vec::new();
+    let mut text = String::new();
     if include_alive {
-        items.push(("ALIVE", shell.alive.to_string()));
+        append_element(&mut text, "ALIVE", &shell.alive.to_string());
     }
-    items.extend([
-        ("TITLE", shell.title.clone()),
-        ("TYPE", shell.shell_type.display_name().to_owned()),
-        ("CWD", shell.cwd.clone()),
-        ("IDLE", shell.idle.to_string()),
-    ]);
-    elements_vec(items)
+    append_element(&mut text, "TITLE", &shell.title);
+    append_element(&mut text, "TYPE", shell.shell_type.display_name());
+    append_element(&mut text, "CWD", &shell.cwd);
+    append_element(&mut text, "IDLE", &shell.idle.to_string());
+    text
 }
 fn command_text(command: &CommandView, command_id: Option<&str>) -> String {
     let exit_code = command
@@ -98,18 +112,17 @@ fn command_text(command: &CommandView, command_id: Option<&str>) -> String {
     ]);
     items.join("\n")
 }
-fn elements<const COUNT: usize>(items: [(&str, String); COUNT]) -> String {
-    elements_vec(Vec::from(items))
-}
-fn elements_vec(items: Vec<(&str, String)>) -> String {
-    let mut text = String::new();
-    for (index, (tag, content)) in items.into_iter().enumerate() {
-        if index > 0 {
-            text.push('\n');
-        }
-        text.push_str(&element(tag, &content));
+fn append_element(text: &mut String, tag: &str, content: &str) {
+    if !text.is_empty() {
+        text.push('\n');
     }
-    text
+    text.push('<');
+    text.push_str(tag);
+    text.push_str(">\n");
+    text.push_str(content);
+    text.push_str("\n</");
+    text.push_str(tag);
+    text.push('>');
 }
 fn element(tag: &str, content: &str) -> String {
     format!("<{tag}>\n{content}\n</{tag}>")

@@ -1,50 +1,53 @@
-use crate::runtime::protocol::{CommandView, Payload, ShellView, ViewResult};
+use crate::runtime::protocol::{
+    CommandView, Payload, ShellView, ViewResult,
+    format::{command_plain_text, tab_created_plain_text, tab_plain_text},
+};
 use alloc::sync::Arc;
 use rmcp::model::{CallToolResult, ContentBlock, JsonObject};
 use serde::Serialize;
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
-pub(super) struct NewTabOutput {
-    pub(super) tab_id: String,
+pub(super) struct NewTabOutput<'payload> {
+    pub(super) tab_id: &'payload str,
 }
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
-pub(super) struct ManualWriteOutput {
-    pub(super) shell: ShellData,
-    pub(super) screen: String,
-    pub(super) note: String,
+pub(super) struct ManualWriteOutput<'payload> {
+    pub(super) shell: ShellData<'payload>,
+    pub(super) screen: &'payload str,
+    pub(super) note: &'payload str,
 }
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
-pub(super) struct SendCommandOutput {
-    pub(super) shell: ShellData,
-    pub(super) command: CommandData,
-    pub(super) note: String,
+pub(super) struct SendCommandOutput<'payload> {
+    pub(super) shell: ShellData<'payload>,
+    pub(super) command: CommandData<'payload>,
+    pub(super) note: &'payload str,
 }
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
-pub(super) struct ViewOutput {
-    pub(super) shell: ShellData,
+pub(super) struct ViewOutput<'payload> {
+    pub(super) shell: ShellData<'payload>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) screen: Option<String>,
+    pub(super) screen: Option<&'payload str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) command: Option<CommandData>,
-    pub(super) note: String,
+    pub(super) command: Option<CommandData<'payload>>,
+    pub(super) note: &'payload str,
 }
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
-pub(super) struct ShellData {
+pub(super) struct ShellData<'payload> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) alive: Option<bool>,
-    pub(super) title: String,
+    pub(super) title: &'payload str,
     #[serde(rename = "type")]
-    pub(super) shell_type: String,
-    pub(super) cwd: String,
+    pub(super) shell_type: &'static str,
+    pub(super) cwd: &'payload str,
     pub(super) idle: bool,
 }
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
-pub(super) struct CommandData {
+pub(super) struct CommandData<'payload> {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) command_id: Option<String>,
-    pub(super) stdout: String,
-    pub(super) stderr: String,
+    pub(super) command_id: Option<&'payload str>,
+    pub(super) stdout: &'payload str,
+    pub(super) stderr: &'payload str,
     pub(super) exit_code: Option<i32>,
-    pub(super) time_consumption: String,
+    pub(super) time_consumption: &'payload str,
     pub(super) finished: bool,
 }
 pub(super) fn schema<T>() -> Arc<JsonObject>
@@ -55,66 +58,105 @@ where
         .unwrap_or_else(|error| panic!("invalid MCP output schema: {error}"))
 }
 pub(super) fn new_tab(payload: Payload) -> Result<CallToolResult, String> {
-    let text = payload.clone().into_plain_text();
-    let Payload::TabCreated { tab_id } = payload else {
-        return Err(unexpected_response());
-    };
-    result(text, NewTabOutput { tab_id })
+    match payload {
+        Payload::TabCreated { tab_id } => result(
+            tab_created_plain_text(&tab_id),
+            NewTabOutput { tab_id: &tab_id },
+        ),
+        Payload::Pong
+        | Payload::KeyboardWritten { .. }
+        | Payload::CommandAccepted { .. }
+        | Payload::View(_) => Err(unexpected_response()),
+    }
 }
-pub(super) fn manual_write(payload: &Payload) -> Result<CallToolResult, String> {
-    let owned_payload = payload.clone();
-    let text = owned_payload.clone().into_plain_text();
-    let Payload::KeyboardWritten { view } = owned_payload else {
-        return Err(unexpected_response());
-    };
-    let ViewResult::Tab {
-        shell,
-        screen,
-        note,
-    } = view
-    else {
-        return Err(unexpected_response());
-    };
-    result(
-        text,
-        ManualWriteOutput {
-            shell: ShellData::from_shell(shell, false),
-            screen,
-            note,
-        },
-    )
+pub(super) fn manual_write(payload: Payload) -> Result<CallToolResult, String> {
+    match payload {
+        Payload::KeyboardWritten {
+            view:
+                ViewResult::Tab {
+                    shell,
+                    screen,
+                    note,
+                },
+        } => result(
+            tab_plain_text(&shell, &screen, &note, false),
+            ManualWriteOutput {
+                shell: ShellData::from_shell(&shell, false),
+                screen: &screen,
+                note: &note,
+            },
+        ),
+        Payload::KeyboardWritten {
+            view: ViewResult::Command { .. },
+        }
+        | Payload::Pong
+        | Payload::TabCreated { .. }
+        | Payload::CommandAccepted { .. }
+        | Payload::View(_) => Err(unexpected_response()),
+    }
 }
 pub(super) fn send_command(payload: Payload) -> Result<CallToolResult, String> {
-    let text = payload.clone().into_plain_text();
-    let Payload::CommandAccepted {
-        command_id, view, ..
-    } = payload
-    else {
-        return Err(unexpected_response());
-    };
-    let ViewResult::Command {
-        shell,
-        command,
-        note,
-    } = view
-    else {
-        return Err(unexpected_response());
-    };
-    result(
-        text,
-        SendCommandOutput {
-            shell: ShellData::from_shell(shell, false),
-            command: CommandData::from_command(command, Some(command_id)),
-            note,
-        },
-    )
+    match payload {
+        Payload::CommandAccepted {
+            command_id,
+            view:
+                ViewResult::Command {
+                    shell,
+                    command,
+                    note,
+                },
+            ..
+        } => result(
+            command_plain_text(&shell, &command, &note, false, Some(&command_id)),
+            SendCommandOutput {
+                shell: ShellData::from_shell(&shell, false),
+                command: CommandData::from_command(&command, Some(&command_id)),
+                note: &note,
+            },
+        ),
+        Payload::CommandAccepted {
+            view: ViewResult::Tab { .. },
+            ..
+        }
+        | Payload::Pong
+        | Payload::TabCreated { .. }
+        | Payload::KeyboardWritten { .. }
+        | Payload::View(_) => Err(unexpected_response()),
+    }
 }
 pub(super) fn view(payload: Payload) -> Result<CallToolResult, String> {
-    let text = payload.clone().into_plain_text();
-    let Payload::View(view) = payload else {
-        return Err(unexpected_response());
-    };
-    result(text, ViewOutput::from(view))
+    match payload {
+        Payload::View(ViewResult::Tab {
+            shell,
+            screen,
+            note,
+        }) => result(
+            tab_plain_text(&shell, &screen, &note, true),
+            ViewOutput {
+                shell: ShellData::from_shell(&shell, true),
+                screen: Some(&screen),
+                command: None,
+                note: &note,
+            },
+        ),
+        Payload::View(ViewResult::Command {
+            shell,
+            command,
+            note,
+        }) => result(
+            command_plain_text(&shell, &command, &note, true, None),
+            ViewOutput {
+                shell: ShellData::from_shell(&shell, true),
+                screen: None,
+                command: Some(CommandData::from_command(&command, None)),
+                note: &note,
+            },
+        ),
+        Payload::Pong
+        | Payload::TabCreated { .. }
+        | Payload::KeyboardWritten { .. }
+        | Payload::CommandAccepted { .. } => Err(unexpected_response()),
+    }
 }
 fn result<T>(content: String, structured_content: T) -> Result<CallToolResult, String>
 where
@@ -129,51 +171,25 @@ where
 fn unexpected_response() -> String {
     "daemon returned an unexpected response".to_owned()
 }
-impl From<ViewResult> for ViewOutput {
-    fn from(value: ViewResult) -> Self {
-        match value {
-            ViewResult::Tab {
-                shell,
-                screen,
-                note,
-            } => Self {
-                shell: ShellData::from_shell(shell, true),
-                screen: Some(screen),
-                command: None,
-                note,
-            },
-            ViewResult::Command {
-                shell,
-                command,
-                note,
-            } => Self {
-                shell: ShellData::from_shell(shell, true),
-                screen: None,
-                command: Some(CommandData::from_command(command, None)),
-                note,
-            },
-        }
-    }
-}
-impl ShellData {
-    fn from_shell(shell: ShellView, include_alive: bool) -> Self {
+impl<'payload> ShellData<'payload> {
+    fn from_shell(shell: &'payload ShellView, include_alive: bool) -> Self {
         Self {
             alive: include_alive.then_some(shell.alive),
-            title: shell.title,
-            shell_type: shell.shell_type.display_name().to_owned(),
-            cwd: shell.cwd,
+            title: &shell.title,
+            shell_type: shell.shell_type.display_name(),
+            cwd: &shell.cwd,
             idle: shell.idle,
         }
     }
 }
-impl CommandData {
-    fn from_command(command: CommandView, command_id: Option<String>) -> Self {
+impl<'payload> CommandData<'payload> {
+    fn from_command(command: &'payload CommandView, command_id: Option<&'payload str>) -> Self {
         Self {
             command_id,
-            stdout: command.stdout,
-            stderr: command.stderr,
+            stdout: &command.stdout,
+            stderr: &command.stderr,
             exit_code: command.exit_code,
-            time_consumption: command.time_consumption,
+            time_consumption: &command.time_consumption,
             finished: command.finished,
         }
     }

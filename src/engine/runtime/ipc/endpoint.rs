@@ -4,7 +4,7 @@ use interprocess::ConnectWaitMode;
 use interprocess::local_socket::prelude::*;
 use interprocess::local_socket::{GenericNamespaced, ListenerOptions};
 use serde::{Serialize, de::DeserializeOwned};
-use std::io::{Read as _, Write as _};
+use std::io::{self, Read as _, Write as _};
 const FRAME_LIMIT: usize = 64 * 1024 * 1024;
 pub(crate) fn listener(service_name: &str) -> Result<LocalSocketListener> {
     let socket_name = socket_name(service_name);
@@ -48,10 +48,25 @@ pub(crate) fn read_frame<T>(stream: &mut LocalSocketStream) -> Result<T>
 where
     T: DeserializeOwned,
 {
+    read_frame_or_eof(stream)?.context("IPC stream ended before a frame was received")
+}
+pub(crate) fn read_frame_or_eof<T>(stream: &mut LocalSocketStream) -> Result<Option<T>>
+where
+    T: DeserializeOwned,
+{
+    let Some(body) = read_frame_body_or_eof(stream)? else {
+        return Ok(None);
+    };
+    let text = core::str::from_utf8(&body).context("IPC frame is not valid UTF-8")?;
+    sonic_rs::from_str(text)
+        .map(Some)
+        .context("failed to parse IPC frame")
+}
+fn read_frame_body_or_eof(stream: &mut LocalSocketStream) -> Result<Option<Vec<u8>>> {
     let mut length = [0_u8; 4];
-    stream
-        .read_exact(&mut length)
-        .context("failed to read IPC frame length")?;
+    if !read_exact_or_eof(stream, &mut length, "IPC frame length")? {
+        return Ok(None);
+    }
     let body_len = usize::try_from(u32::from_be_bytes(length))
         .context("IPC frame length does not fit usize")?;
     anyhow::ensure!(
@@ -62,8 +77,27 @@ where
     stream
         .read_exact(&mut body)
         .context("failed to read IPC frame body")?;
-    let text = core::str::from_utf8(&body).context("IPC frame is not valid UTF-8")?;
-    sonic_rs::from_str(text).context("failed to parse IPC frame")
+    Ok(Some(body))
+}
+fn read_exact_or_eof(
+    stream: &mut LocalSocketStream,
+    buffer: &mut [u8],
+    label: &str,
+) -> Result<bool> {
+    let mut offset = 0_usize;
+    while offset < buffer.len() {
+        let remaining = buffer
+            .get_mut(offset..)
+            .context("IPC read offset exceeded buffer length")?;
+        match stream.read(remaining) {
+            Ok(0) if offset == 0 => return Ok(false),
+            Ok(0) => anyhow::bail!("IPC stream ended while reading {label}"),
+            Ok(read_count) => offset += read_count,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(error).with_context(|| format!("failed to read {label}")),
+        }
+    }
+    Ok(true)
 }
 pub(crate) fn lock_name(service_name: &str, kind: &str) -> String {
     format!("functerm-{kind}-{}", service_digest(service_name))

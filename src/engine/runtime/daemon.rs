@@ -94,16 +94,21 @@ fn recoverable_platform_accept_error(_error: &io::Error) -> bool {
 }
 fn spawn_request_worker(manager: Arc<Manager>, mut stream: LocalSocketStream) {
     let _worker = thread::spawn(move || {
-        let request = match crate::runtime::transport::read_frame::<Request>(&mut stream) {
-            Ok(request) => request,
-            Err(error) => {
-                eprintln!("failed to read IPC request: {error:#}");
+        loop {
+            let request = match crate::runtime::transport::read_frame_or_eof::<Request>(&mut stream)
+            {
+                Ok(Some(request)) => request,
+                Ok(None) => return,
+                Err(error) => {
+                    eprintln!("failed to read IPC request: {error:#}");
+                    return;
+                }
+            };
+            let response = handle_request(&manager, request);
+            if let Err(error) = crate::runtime::transport::write_frame(&mut stream, &response) {
+                eprintln!("failed to send IPC response: {error:#}");
                 return;
             }
-        };
-        let response = handle_request(&manager, request);
-        if let Err(error) = crate::runtime::transport::write_frame(&mut stream, &response) {
-            eprintln!("failed to send IPC response: {error:#}");
         }
     });
 }

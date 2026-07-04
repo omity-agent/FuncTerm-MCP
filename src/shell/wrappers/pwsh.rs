@@ -48,7 +48,6 @@ function @FUNCTION@ {
     $inputDir = Join-Path $Directory '@INPUT_DIR@'
     $outputDir = Join-Path $Directory '@OUTPUT_DIR@'
     $stateDir = Join-Path $Directory '@STATE_DIR@'
-    New-Item -ItemType Directory -Force -Path $inputDir, $outputDir, $stateDir | Out-Null
     $stdoutFile = Join-Path $outputDir '@STDOUT@'
     $stderrFile = Join-Path $outputDir '@STDERR@'
     $startedFile = Join-Path $stateDir '@STARTED@'
