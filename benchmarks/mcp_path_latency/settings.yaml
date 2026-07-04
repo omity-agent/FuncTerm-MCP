@@ -1,7 +1,7 @@
 # 并发客户端数量由 profiles 文件夹中的 profile 数量决定。
 clients:
   # 每个客户端重复执行“轮换后的全部 profiles”的次数。
-  loop_count: 5
+  loop_count: 2
   list_tools_on_connect: true
 
 # FuncTerm MCP 服务器启动方式；相对路径以本配置文件所在目录为基准解析。

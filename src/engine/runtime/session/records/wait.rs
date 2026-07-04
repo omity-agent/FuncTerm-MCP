@@ -18,10 +18,7 @@ pub(in crate::engine::runtime::session) fn wait_for_start_or_done(
 ) -> Result<bool> {
     wait_for_any_path(&[record.started.as_path(), record.done.as_path()], limit)
 }
-pub(in crate::engine::runtime::session) fn wait_for_path(
-    path: &Path,
-    limit: Duration,
-) -> Result<bool> {
+pub(crate) fn wait_for_path(path: &Path, limit: Duration) -> Result<bool> {
     wait_for_any_path(&[path], limit)
 }
 fn wait_for_any_path(paths: &[&Path], limit: Duration) -> Result<bool> {

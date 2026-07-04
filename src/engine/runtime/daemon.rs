@@ -5,6 +5,7 @@ use crate::runtime::session::Manager;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use interprocess::local_socket::prelude::*;
+use std::io;
 use std::sync::mpsc;
 use std::thread;
 pub(crate) mod report;
@@ -49,6 +50,9 @@ fn spawn_request_receiver(listener: LocalSocketListener, event_sender: mpsc::Sen
                         return;
                     }
                 }
+                Err(error) if recoverable_accept_error(&error) => {
+                    eprintln!("recoverable IPC accept error: {error}");
+                }
                 Err(error) => {
                     let _send_result = event_sender.send(DaemonEvent::Error(anyhow::anyhow!(
                         "failed to accept IPC request: {error}"
@@ -58,6 +62,35 @@ fn spawn_request_receiver(listener: LocalSocketListener, event_sender: mpsc::Sen
             }
         }
     });
+}
+fn recoverable_accept_error(error: &io::Error) -> bool {
+    if matches!(
+        error.kind(),
+        io::ErrorKind::Interrupted
+            | io::ErrorKind::ConnectionAborted
+            | io::ErrorKind::ConnectionReset
+            | io::ErrorKind::BrokenPipe
+    ) {
+        return true;
+    }
+    recoverable_platform_accept_error(error)
+}
+#[cfg(windows)]
+fn recoverable_platform_accept_error(error: &io::Error) -> bool {
+    use windows_sys::Win32::Foundation::{
+        ERROR_BROKEN_PIPE, ERROR_NO_DATA, ERROR_OPERATION_ABORTED, ERROR_PIPE_NOT_CONNECTED,
+    };
+    let Some(code) = error.raw_os_error() else {
+        return false;
+    };
+    matches!(
+        u32::try_from(code),
+        Ok(ERROR_BROKEN_PIPE | ERROR_NO_DATA | ERROR_OPERATION_ABORTED | ERROR_PIPE_NOT_CONNECTED)
+    )
+}
+#[cfg(not(windows))]
+fn recoverable_platform_accept_error(_error: &io::Error) -> bool {
+    false
 }
 fn spawn_request_worker(manager: Arc<Manager>, mut stream: LocalSocketStream) {
     let _worker = thread::spawn(move || {
@@ -110,5 +143,26 @@ fn dispatch(manager: &Arc<Manager>, request: Request) -> Result<Payload> {
             })
         }
         Request::View { id, waiting } => Ok(Payload::View(manager.view(&id, waiting)?)),
+    }
+}
+#[cfg(test)]
+mod tests {
+    use std::io;
+    #[test]
+    fn interrupted_accept_error_is_recoverable() {
+        let error = io::Error::from(io::ErrorKind::Interrupted);
+        assert!(super::recoverable_accept_error(&error));
+    }
+    #[test]
+    fn permission_accept_error_is_fatal() {
+        let error = io::Error::from(io::ErrorKind::PermissionDenied);
+        assert!(!super::recoverable_accept_error(&error));
+    }
+    #[cfg(windows)]
+    #[test]
+    fn abandoned_named_pipe_accept_error_is_recoverable() {
+        let code = i32::try_from(windows_sys::Win32::Foundation::ERROR_OPERATION_ABORTED).unwrap();
+        let error = io::Error::from_raw_os_error(code);
+        assert!(super::recoverable_accept_error(&error));
     }
 }

@@ -13,13 +13,22 @@ from functerm_mcp_path_latency.config import (
     StepConfig,
 )
 from functerm_mcp_path_latency.extraction import extract_tag
-from functerm_mcp_path_latency.mcp_session import open_mcp_session, tool_result_text
-from functerm_mcp_path_latency.result import BenchmarkResult, ClientResult, StepEvent
+from functerm_mcp_path_latency.mcp_session import (
+    open_mcp_session,
+    tool_result_text,
+)
+from functerm_mcp_path_latency.result import (
+    BenchmarkResult,
+    ClientResult,
+    StepEvent,
+)
 from functerm_mcp_path_latency.template import render_value
 
 
 class ToolSession(Protocol):
-    def call_tool(self, name: str, arguments: dict[str, Any]) -> Awaitable[object]: ...
+    def call_tool(
+        self, name: str, arguments: dict[str, Any]
+    ) -> Awaitable[object]: ...
 
 
 SessionFactory = Callable[[ServerConfig, bool], Any]
@@ -29,11 +38,14 @@ async def run_benchmark(config: BenchConfig) -> BenchmarkResult:
     started_at = datetime.now(UTC)
     started = time.perf_counter()
     tasks = [
-        asyncio.create_task(run_client(index, config)) for index in range(config.client_count())
+        asyncio.create_task(run_client(index, config))
+        for index in range(config.client_count())
     ]
     clients = await asyncio.gather(*tasks)
     return BenchmarkResult(
-        elapsed_seconds=time.perf_counter() - started, clients=clients, started_at=started_at
+        elapsed_seconds=time.perf_counter() - started,
+        clients=clients,
+        started_at=started_at,
     )
 
 
@@ -48,12 +60,17 @@ async def run_client(config_index: int, config: BenchConfig) -> ClientResult:
     }
     try:
         async with open_mcp_session(
-            config.server, list_tools_on_connect=config.clients.list_tools_on_connect
+            config.server,
+            list_tools_on_connect=config.clients.list_tools_on_connect,
         ) as session:
             for loop_index in range(config.clients.loop_count):
                 for profile in profile_order:
                     profile_events = await run_profile(
-                        config_index, loop_index, profile, session, base_variables
+                        config_index,
+                        loop_index,
+                        profile,
+                        session,
+                        base_variables,
                     )
                     events.extend(profile_events)
         return ClientResult(
@@ -112,7 +129,9 @@ async def run_step(
     result = await session.call_tool(step.tool, arguments)
     elapsed = time.perf_counter() - started
     text = tool_result_text(result)
-    captures = {name: extract_tag(text, tag) for name, tag in step.capture.items()}
+    captures = {
+        name: extract_tag(text, tag) for name, tag in step.capture.items()
+    }
     event = StepEvent(
         client_index=client_index,
         loop_index=loop_index,

@@ -8,7 +8,8 @@ use anyhow::{Context as _, Result, bail};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-pub(super) use wait::{wait_for_done, wait_for_path, wait_for_start_or_done};
+pub(crate) use wait::wait_for_path;
+pub(super) use wait::{wait_for_done, wait_for_start_or_done};
 #[derive(Clone)]
 pub(super) struct CommandRecord {
     pub(super) directory: PathBuf,

@@ -1,3 +1,4 @@
+#![cfg_attr(windows, feature(windows_process_extensions_raw_attribute))]
 mod app;
 mod engine;
 pub(crate) use app::{cli, commands, contract, path_text as text};
