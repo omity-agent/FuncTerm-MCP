@@ -10,8 +10,9 @@ pub(in crate::engine::runtime::session::manager) struct StartedCommand {
     command: Arc<ManagedCommand>,
     tab: Arc<Tab>,
     session: Arc<ShellSession>,
+    reservation: ShellReservation,
 }
-struct ShellReservation {
+pub(super) struct ShellReservation {
     session: Arc<ShellSession>,
     command_id: String,
     released: bool,
@@ -42,17 +43,16 @@ impl Tab {
             self.abandon_start(&managed, &session)?;
             return Err(error);
         }
-        self.start_monitor(Arc::clone(&managed), Arc::clone(&session), reservation);
         Ok(StartedCommand {
             command: managed,
             tab: Arc::clone(self),
             session,
+            reservation,
         })
     }
     fn start_monitor(
         self: &Arc<Self>,
         command: Arc<ManagedCommand>,
-        session: Arc<ShellSession>,
         mut reservation: ShellReservation,
     ) {
         let tab = Arc::clone(self);
@@ -69,7 +69,6 @@ impl Tab {
             if let Err(error) = reservation.release() {
                 eprintln!("{error:#}");
             }
-            drop(session);
         });
     }
     fn abandon_start(&self, command: &ManagedCommand, session: &ShellSession) -> Result<()> {
@@ -85,22 +84,29 @@ impl StartedCommand {
         self,
         waiting: Duration,
     ) -> Result<(String, EndReason, ViewResult)> {
-        let reason = match self.command.wait(waiting)? {
+        let Self {
+            command,
+            tab,
+            session,
+            reservation,
+        } = self;
+        let reason = match command.wait(waiting)? {
             CommandWait::Finished => {
-                self.tab.finish_done_command(&self.command)?;
+                tab.finish_done_command(&command)?;
                 EndReason::CommandEnded
             }
             CommandWait::Running => {
-                if self.tab.abort_if_shell_dead(&self.session, &self.command)? {
+                if tab.abort_if_shell_dead(&session, &command)? {
                     EndReason::CommandFailed
                 } else {
+                    tab.start_monitor(Arc::clone(&command), reservation);
                     EndReason::WaitTimeout
                 }
             }
             CommandWait::Failed => EndReason::CommandFailed,
         };
-        let result = self.tab.command_view_result(&self.command)?;
-        Ok((self.command.id().to_owned(), reason, result))
+        let result = tab.command_view_result(&command)?;
+        Ok((command.id().to_owned(), reason, result))
     }
 }
 impl ShellReservation {
