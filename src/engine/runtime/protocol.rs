@@ -111,10 +111,28 @@ mod tests {
         }
         .into_plain_text();
         assert!(text.contains("<CWD>\nF:\\workspace\\A&B\n</CWD>"));
-        assert!(text.contains("<STDOUT>left < right</STDOUT>"));
-        assert!(text.contains("<STDERR>raw </STDERR> allowed</STDERR>"));
-        assert!(!text.contains("<STDOUT>\nleft < right"));
-        assert!(!text.contains("<STDERR>\nraw </STDERR> allowed"));
+        assert!(text.contains("<STDOUT>\nleft < right\n</STDOUT>"));
+        assert!(text.contains("<STDERR>\nraw </STDERR> allowed\n</STDERR>"));
+        assert!(!text.contains("<STDOUT>left < right"));
+        assert!(!text.contains("<STDERR>raw </STDERR> allowed"));
+    }
+    #[test]
+    fn empty_command_output_does_not_insert_blank_line() {
+        let text = ViewResult::Command {
+            shell: shell(true),
+            command: CommandView {
+                stdout: String::new(),
+                stderr: String::new(),
+                exit_code: Some(0_i32),
+                time_consumption: "1s".to_owned(),
+                finished: true,
+            },
+            note: String::new(),
+        }
+        .into_plain_text();
+        assert!(text.contains("<STDOUT>\n</STDOUT>\n<STDERR>\n</STDERR>"));
+        assert!(!text.contains("<STDOUT>\n\n</STDOUT>"));
+        assert!(!text.contains("<STDERR>\n\n</STDERR>"));
     }
     #[test]
     fn tab_output_reports_shell_state() {
