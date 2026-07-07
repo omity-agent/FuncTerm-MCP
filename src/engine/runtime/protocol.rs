@@ -131,8 +131,10 @@ mod tests {
         }
         .into_plain_text();
         assert!(text.contains("<STDOUT>\n</STDOUT>\n<STDERR>\n</STDERR>"));
+        assert!(text.contains("<NOTE>\n</NOTE>"));
         assert!(!text.contains("<STDOUT>\n\n</STDOUT>"));
         assert!(!text.contains("<STDERR>\n\n</STDERR>"));
+        assert!(!text.contains("<NOTE>\n\n</NOTE>"));
     }
     #[test]
     fn tab_output_reports_shell_state() {

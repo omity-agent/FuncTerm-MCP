@@ -104,8 +104,8 @@ fn command_text(command: &CommandView, command_id: Option<&str>) -> String {
         items.push(element("COMMAND_ID", id));
     }
     items.extend([
-        command_output_element("STDOUT", &command.stdout),
-        command_output_element("STDERR", &command.stderr),
+        element("STDOUT", &command.stdout),
+        element("STDERR", &command.stderr),
         element("EXIT_CODE", &exit_code),
         element("TIME_CONSUMPTION", &command.time_consumption),
         element("FINISHED", &command.finished.to_string()),
@@ -119,18 +119,18 @@ fn append_element(text: &mut String, tag: &str, content: &str) {
     text.push('<');
     text.push_str(tag);
     text.push_str(">\n");
-    text.push_str(content);
-    text.push_str("\n</");
+    if !content.is_empty() {
+        text.push_str(content);
+        text.push('\n');
+    }
+    text.push_str("</");
     text.push_str(tag);
     text.push('>');
 }
 fn element(tag: &str, content: &str) -> String {
-    format!("<{tag}>\n{content}\n</{tag}>")
-}
-fn command_output_element(tag: &str, content: &str) -> String {
     if content.is_empty() {
         format!("<{tag}>\n</{tag}>")
     } else {
-        element(tag, content)
+        format!("<{tag}>\n{content}\n</{tag}>")
     }
 }
