@@ -58,7 +58,7 @@ pub(super) fn shell_cases() -> &'static [ShellCase] {
 pub(super) fn required_executable(case: &ShellCase) -> String {
     case.executables
         .iter()
-        .find_map(|executable| which::which(executable).ok())
+        .find_map(|executable| real_executable(executable))
         .map_or_else(
             || {
                 panic!(
@@ -69,6 +69,26 @@ pub(super) fn required_executable(case: &ShellCase) -> String {
             },
             |path| path.to_string_lossy().into_owned(),
         )
+}
+fn real_executable(executable: &str) -> Option<PathBuf> {
+    which::which_all(executable)
+        .ok()?
+        .find(|path| !in_func_term_shim_dir(path))
+}
+fn in_func_term_shim_dir(path: &Path) -> bool {
+    let Some(shim_dir_value) = std::env::var_os("FUNCTERM_SHIM_DIR") else {
+        return false;
+    };
+    let Some(path_parent) = path.parent() else {
+        return false;
+    };
+    let Ok(canonical_parent) = path_parent.canonicalize() else {
+        return false;
+    };
+    let Ok(canonical_shim_dir) = PathBuf::from(shim_dir_value).canonicalize() else {
+        return false;
+    };
+    canonical_parent == canonical_shim_dir
 }
 #[cfg(windows)]
 pub(super) fn immediately_exiting_executable() -> &'static str {

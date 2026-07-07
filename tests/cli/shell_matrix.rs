@@ -13,6 +13,8 @@ mod tests {
         run_cli, send_command,
     };
     use core::time::Duration;
+    #[cfg(windows)]
+    use std::fs;
     use std::thread;
     #[test]
     fn cli_runs_commands_for_every_supported_shell() {
@@ -76,6 +78,94 @@ mod tests {
                 stderr = String::from_utf8_lossy(&output.stderr)
             );
         }
+    }
+    #[cfg(windows)]
+    #[test]
+    fn cli_captures_nushell_implicit_structured_output() {
+        let case = shell_cases().iter().find(|case| case.name == "nu").unwrap();
+        let executable = required_executable(case);
+        let _guard = locked_with_env(&[(case.env_var, &executable)]);
+        let cwd = case_dir(case.name, "implicit output");
+        let marker = "MCP_PTY_NUSHELL_IMPLICIT.txt";
+        fs::write(cwd.join(marker), "implicit output marker").unwrap();
+        let created = create_tab(&cwd, case.name);
+        let result = parse_command_result(&send_command(
+            &created.tab_id,
+            &format!("ls | where name == {marker:?}"),
+            10.0,
+        ));
+        assert!(result.finished, "nu implicit command should finish");
+        assert_eq!(
+            result.exit_code,
+            Some(0_i32),
+            "stdout: {}\nstderr: {}",
+            result.stdout,
+            result.stderr
+        );
+        assert!(
+            result.stdout.contains(marker),
+            "nu stdout should include implicit table output: {}",
+            result.stdout
+        );
+    }
+    #[cfg(windows)]
+    #[test]
+    fn cli_keeps_nushell_shim_available_inside_implicit_capture() {
+        let case = shell_cases().iter().find(|case| case.name == "nu").unwrap();
+        let executable = required_executable(case);
+        let _guard = locked_with_env(&[(case.env_var, &executable)]);
+        let created = create_tab(&case_dir(case.name, "shim path"), case.name);
+        let result = parse_command_result(&send_command(
+            &created.tab_id,
+            "which nu | get path.0",
+            10.0,
+        ));
+        assert!(
+            result.finished,
+            "nu shim query should finish: stdout: {}\nstderr: {}",
+            result.stdout, result.stderr
+        );
+        assert_eq!(
+            result.exit_code,
+            Some(0_i32),
+            "stdout: {}\nstderr: {}",
+            result.stdout,
+            result.stderr
+        );
+        let stdout = result.stdout.replace('\\', "/").to_ascii_lowercase();
+        assert!(
+            stdout.contains("/shims/nu"),
+            "nu command lookup should prefer FuncTerm shim: {}",
+            result.stdout
+        );
+    }
+    #[cfg(windows)]
+    #[test]
+    fn cli_launches_nested_nushell_through_shim_after_implicit_capture_change() {
+        let case = shell_cases().iter().find(|case| case.name == "nu").unwrap();
+        let executable = required_executable(case);
+        let _guard = locked_with_env(&[(case.env_var, &executable)]);
+        let created = create_tab(&case_dir(case.name, "nested shim"), case.name);
+        let launch_output = send_command(&created.tab_id, nested_launch_command(case.name), 10.0);
+        let launch_id = parse_command_id(&launch_output);
+        let launch = parse_command_result(&launch_output);
+        assert!(launch.finished, "nested nu launch should finish");
+        assert_eq!(launch.exit_code, Some(0_i32));
+        let marker = "MCP_PTY_NESTED_NU_SHIM";
+        let nested = parse_command_result(&send_command(
+            &created.tab_id,
+            &nested_marker_command(case.name, marker),
+            10.0,
+        ));
+        assert!(
+            nested.stdout.contains(marker),
+            "nested nu stdout should include marker: {}",
+            nested.stdout
+        );
+        let _closed = send_command(&created.tab_id, exit_command(case.name), 0.2);
+        thread::sleep(Duration::from_millis(500));
+        let launch_after_exit = parse_command_result(&run_cli(&["view", &launch_id]));
+        assert_eq!(launch_after_exit.exit_code, Some(0_i32));
     }
     #[test]
     fn cli_keeps_nested_launch_result_stable_after_nested_shell_exits() {
