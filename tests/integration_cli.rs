@@ -98,6 +98,32 @@ mod tests {
         assert!(completed.stdout.contains(marker));
     }
     #[test]
+    fn cli_manual_write_ctrl_c_interrupts_powershell_command() {
+        let _guard = locked();
+        let cwd = temp_root();
+        let created = create_tab(&cwd, "powershell");
+        let accepted = super::support::send_command(
+            &created.tab_id,
+            "while ($true) { Start-Sleep -Milliseconds 200 }",
+            0.0,
+        );
+        let pending = parse_command_result(&accepted);
+        assert!(
+            !pending.finished,
+            "command should keep running before Ctrl+C"
+        );
+        let command_id = parse_command_id(&accepted);
+        let written = manual_write(&created.tab_id, &[3]);
+        assert!(
+            written.status.success(),
+            "stdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&written.stdout),
+            String::from_utf8_lossy(&written.stderr)
+        );
+        let completed = wait_for_command_finished(&command_id);
+        assert!(completed.finished, "Ctrl+C should finish the command");
+    }
+    #[test]
     fn cli_waiting_command_does_not_block_other_requests() {
         let guard = locked();
         let cwd = temp_root();

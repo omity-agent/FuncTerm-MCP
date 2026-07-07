@@ -4,6 +4,7 @@ use super::super::{
 };
 use super::{CommandWait, ManagedCommand};
 use crate::runtime::protocol::{CommandSnapshot, ViewResult};
+use crate::runtime::session::keyboard;
 use anyhow::{Context as _, Result};
 use core::time::Duration;
 impl Tab {
@@ -17,8 +18,18 @@ impl Tab {
             anyhow::bail!("tab id {} was generated, but its shell is gone", self.id());
         }
         session.refresh_choice()?;
+        let interrupted_command_id = if keyboard::requests_interrupt(bytes) {
+            session.busy_command_id()?
+        } else {
+            None
+        };
         match session.write_keyboard_for_running_command(bytes) {
-            Ok(()) => Ok(self.remember(&session)?.into_view(true)),
+            Ok(()) => {
+                if let Some(command_id) = interrupted_command_id {
+                    self.mark_interrupted_command(&session, &command_id)?;
+                }
+                Ok(self.remember(&session)?.into_view(true))
+            }
             Err(KeyboardWriteFailure::IdlePrompt) => {
                 anyhow::bail!(
                     "manual_write is unavailable while the prompt is idle; use send_command for prompt commands"
@@ -29,6 +40,12 @@ impl Tab {
                 Err(error)
             }
         }
+    }
+    fn mark_interrupted_command(&self, session: &ShellSession, command_id: &str) -> Result<()> {
+        if let Some(command) = self.find_command(command_id)? {
+            command.mark_failed("command interrupted by Ctrl+C")?;
+        }
+        session.release(command_id)
     }
     pub(in crate::engine::runtime::session::manager) fn command_view(
         &self,

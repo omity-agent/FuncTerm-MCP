@@ -55,6 +55,13 @@ function @FUNCTION@ {
     $doneFile = Join-Path $stateDir '@DONE@'
     $previousCommandId = $env:@COMMAND_ID_ENV@
     $previousCommandDirectory = $env:@COMMAND_DIR_ENV@
+    $exitCode = 1
+    trap {
+        [IO.File]::AppendAllText($stderrFile, [string]$_ + [Environment]::NewLine, [Text.Encoding]::UTF8)
+        [Console]::Error.WriteLine($_)
+        $exitCode = 130
+        continue
+    }
     $env:@COMMAND_ID_ENV@ = $CommandId
     $env:@COMMAND_DIR_ENV@ = $Directory
     try {
@@ -84,30 +91,45 @@ function @FUNCTION@ {
         [Console]::Error.WriteLine($_)
         $exitCode = 1
     }
-    if (-not (Test-Path -LiteralPath $doneFile)) {
-        New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
-        if ([string]::IsNullOrEmpty($env:@HELPER_ENV@)) {
-            [Console]::Error.WriteLine('@HELPER_ENV@ is not set')
-            $exitCode = 1
-        }
-        else {
-            & $env:@HELPER_ENV@ internal-write-done --command-id $CommandId --exit-code $exitCode --cwd (Get-Location).Path --directory $Directory
-            if ($LASTEXITCODE -ne 0) {
-                $exitCode = $LASTEXITCODE
+    finally {
+        if (-not [IO.File]::Exists($doneFile)) {
+            $null = [IO.Directory]::CreateDirectory($stateDir)
+            if ([string]::IsNullOrEmpty($env:@HELPER_ENV@)) {
+                [Console]::Error.WriteLine('@HELPER_ENV@ is not set')
+                $exitCode = 1
+            }
+            else {
+                $currentDirectory = $ExecutionContext.SessionState.Path.CurrentFileSystemLocation.ProviderPath
+                $helperStart = [Diagnostics.ProcessStartInfo]::new($env:@HELPER_ENV@)
+                $helperStart.UseShellExecute = $false
+                $helperStart.ArgumentList.Add('internal-write-done')
+                $helperStart.ArgumentList.Add('--command-id')
+                $helperStart.ArgumentList.Add($CommandId)
+                $helperStart.ArgumentList.Add('--exit-code')
+                $helperStart.ArgumentList.Add([string]$exitCode)
+                $helperStart.ArgumentList.Add('--cwd')
+                $helperStart.ArgumentList.Add($currentDirectory)
+                $helperStart.ArgumentList.Add('--directory')
+                $helperStart.ArgumentList.Add($Directory)
+                $helperProcess = [Diagnostics.Process]::Start($helperStart)
+                $helperProcess.WaitForExit()
+                if ($helperProcess.ExitCode -ne 0) {
+                    $exitCode = $helperProcess.ExitCode
+                }
             }
         }
-    }
-    if ($null -eq $previousCommandId) {
-        Remove-Item Env:@COMMAND_ID_ENV@ -ErrorAction SilentlyContinue
-    }
-    else {
-        $env:@COMMAND_ID_ENV@ = $previousCommandId
-    }
-    if ($null -eq $previousCommandDirectory) {
-        Remove-Item Env:@COMMAND_DIR_ENV@ -ErrorAction SilentlyContinue
-    }
-    else {
-        $env:@COMMAND_DIR_ENV@ = $previousCommandDirectory
+        if ($null -eq $previousCommandId) {
+            Remove-Item Env:@COMMAND_ID_ENV@ -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:@COMMAND_ID_ENV@ = $previousCommandId
+        }
+        if ($null -eq $previousCommandDirectory) {
+            Remove-Item Env:@COMMAND_DIR_ENV@ -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:@COMMAND_DIR_ENV@ = $previousCommandDirectory
+        }
     }
 }
 " ;

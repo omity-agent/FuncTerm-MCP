@@ -1,3 +1,4 @@
+mod keyboard;
 mod manager;
 pub(crate) mod records;
 pub(crate) mod temp;

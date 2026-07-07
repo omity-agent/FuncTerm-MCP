@@ -1,4 +1,5 @@
 use super::process_tree;
+use crate::runtime::session::keyboard;
 use crate::runtime::session::records::{CommandRecord, read_done};
 use crate::runtime::session::terminal::{TerminalParser, lock_mutex, screen_title};
 use crate::shell::{ShellChoice, shims};
@@ -104,9 +105,10 @@ impl ShellSession {
     fn write_keyboard(&self, bytes: &[u8]) -> Result<()> {
         let choice = self.current_choice()?;
         let keyboard_bytes = choice.keyboard_bytes(bytes);
+        let physical_bytes = keyboard::physical_bytes(keyboard_bytes.as_ref());
         let mut writer = lock_mutex(&self.writer, "writer")?;
         writer
-            .write_all(&keyboard_bytes)
+            .write_all(physical_bytes.as_ref())
             .context("failed to write to pty")?;
         writer.flush().context("failed to flush pty writer")
     }
