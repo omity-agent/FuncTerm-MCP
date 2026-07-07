@@ -80,8 +80,8 @@ pub(super) fn immediately_exiting_executable() -> &'static str {
 }
 pub(super) fn case_dir(shell: &str, leaf: &str) -> PathBuf {
     let unique = CASE_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let path = std::env::temp_dir()
-        .join("functerm-cli")
+    let path = crate::support::temp_root()
+        .join("cli")
         .join(format!("{shell}-{}-{unique}", std::process::id()))
         .join("quote ' segment")
         .join(leaf);

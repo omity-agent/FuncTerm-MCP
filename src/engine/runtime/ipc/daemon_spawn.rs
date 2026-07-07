@@ -122,10 +122,7 @@ mod tests {
     use std::thread;
     #[test]
     fn startup_wait_uses_daemon_report_after_launcher_exits() {
-        let path = std::env::temp_dir()
-            .join("functerm-startup-wait-test")
-            .join(nanoid::nanoid!())
-            .join("ready.json");
+        let path = crate::test_fs::temp_case("startup-wait").join("ready.json");
         let mut launcher = std::process::Command::new(std::env::current_exe().unwrap())
             .arg("--help")
             .stdin(Stdio::null())
@@ -143,6 +140,6 @@ mod tests {
         });
         super::wait_for_startup_file(&path, &mut launcher, Duration::from_secs(2)).unwrap();
         report_worker.join().unwrap();
-        std::fs::remove_dir_all(path.parent().unwrap().parent().unwrap()).unwrap();
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
     }
 }

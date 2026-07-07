@@ -1,12 +1,14 @@
 #[cfg(test)]
 mod tests {
-    use crate::support::{create_tab, parse_command_result, parse_tab_view, run_cli, send_command};
+    use crate::support::{
+        create_tab, parse_command_result, parse_tab_view, run_cli, send_command, temp_root,
+    };
     use core::time::Duration;
     use std::thread;
     #[test]
     fn cli_view_keeps_closed_tab_snapshot_after_operation_detects_exit() {
         let _guard = crate::support::locked();
-        let cwd = std::env::temp_dir();
+        let cwd = temp_root();
         let created = create_tab(&cwd, "powershell");
         let command = "Write-Output 'MCP_PTY_BEFORE_CLOSE'";
         let close_output = send_command(&created.tab_id, command, 5.0);

@@ -85,7 +85,7 @@ fn test_shell(busy: Option<&str>) -> ShellSession {
     let slave: Box<dyn SlavePty + Send> = Box::new(TestSlave);
     ShellSession::new(ShellSessionParts {
         choice: ShellChoice::PowerShell,
-        cwd: std::env::temp_dir(),
+        cwd: crate::test_fs::temp_root(),
         writer: Arc::new(Mutex::new(writer)),
         screen: Arc::new(Mutex::new(TerminalParser::new_with_callbacks(
             30,
@@ -94,9 +94,8 @@ fn test_shell(busy: Option<&str>) -> ShellSession {
             TerminalCallbacks::default(),
         ))),
         busy: busy.map(str::to_owned),
-        command_root: std::env::temp_dir().join("functerm-test-commands"),
-        active_shell_file: std::env::temp_dir()
-            .join("functerm-test-commands")
+        command_root: crate::test_fs::temp_case("command-manager"),
+        active_shell_file: crate::test_fs::temp_case("command-manager-active")
             .join("active-shell.txt"),
         command_start_timeout: core::time::Duration::from_secs(1),
         process_tree: crate::runtime::session::manager::process_tree::ProcessTree::new(),

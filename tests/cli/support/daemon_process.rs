@@ -1,5 +1,6 @@
 use super::command::{CLI_COMMAND_TIMEOUT, exe};
 use super::process::ChildGuard;
+use super::temp;
 use core::cell::RefCell;
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::time::Duration;
@@ -81,6 +82,7 @@ pub(crate) fn locked_with_env(extra_env: &[(&str, &str)]) -> TestGuard {
         let value = pair.1.to_owned();
         (key, value)
     }));
+    env.extend(temp::temp_env());
     set_active_env(&env);
     let child = spawn_daemon(&env, &service_name);
     TestGuard {

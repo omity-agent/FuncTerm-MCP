@@ -2,6 +2,7 @@
 mod tests {
     use crate::support::{
         create_tab, locked_with_env, parse_command_result, parse_tab_view, run_cli, send_command,
+        temp_dir, temp_root,
     };
     use core::sync::atomic::{AtomicU64, Ordering};
     use core::time::Duration;
@@ -18,7 +19,7 @@ mod tests {
             ("HISTFILE", history_file.to_str().unwrap()),
             ("FUNCTERM_BASH", &bash_text),
         ]);
-        let shell = create_tab(&std::env::temp_dir(), "bash");
+        let shell = create_tab(&temp_root(), "bash");
         let options = parse_command_result(&send_command(
             &shell.tab_id,
             "set -o | grep '^history'; printf 'HISTFILE=%s\\n' \"${HISTFILE-unset}\"",
@@ -46,7 +47,7 @@ mod tests {
             ("HISTFILE", history_file.to_str().unwrap()),
             ("FUNCTERM_ZSH", &zsh_text),
         ]);
-        let shell = create_tab(&std::env::temp_dir(), "zsh");
+        let shell = create_tab(&temp_root(), "zsh");
         let options = parse_command_result(&send_command(
             &shell.tab_id,
             "print -r -- \"HISTFILE=${HISTFILE-unset}\"; print -r -- \"HISTSIZE=$HISTSIZE\"; print -r -- \"SAVEHIST=$SAVEHIST\"",
@@ -70,7 +71,7 @@ mod tests {
         let app_data = history_root("powershell").join("appdata");
         fs::create_dir_all(&app_data).unwrap();
         let _guard = locked_with_env(&[("APPDATA", app_data.to_str().unwrap())]);
-        let shell = create_tab(&std::env::temp_dir(), "powershell");
+        let shell = create_tab(&temp_root(), "powershell");
         let options = parse_command_result(&send_command(
             &shell.tab_id,
             "if (Get-Command Get-PSReadLineOption -ErrorAction SilentlyContinue) { (Get-PSReadLineOption).HistorySaveStyle } else { 'Unavailable' }",
@@ -97,9 +98,7 @@ mod tests {
     }
     fn history_root(shell: &str) -> PathBuf {
         let unique = HISTORY_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let root = std::env::temp_dir()
-            .join("functerm-history-tests")
-            .join(format!("{shell}-{}-{unique}", std::process::id()));
+        let root = temp_dir("history").join(format!("{shell}-{unique}"));
         fs::create_dir_all(&root).unwrap();
         root
     }

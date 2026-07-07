@@ -77,7 +77,10 @@ mod tests {
         settings.powershell = vec![immediately_exiting_executable().to_owned()];
         let manager = Manager::new(settings).unwrap();
         let error = manager
-            .new_tab(std::env::temp_dir().as_path(), ShellChoice::PowerShell)
+            .new_tab(
+                crate::test_fs::temp_root().as_path(),
+                ShellChoice::PowerShell,
+            )
             .unwrap_err();
         assert!(error.to_string().contains("startup"));
     }

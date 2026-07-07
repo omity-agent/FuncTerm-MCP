@@ -55,7 +55,7 @@ mod tests {
         for case in shell_cases() {
             let output = {
                 let _guard = locked_with_env(&[(case.env_var, immediately_exiting_executable())]);
-                let cwd = std::env::temp_dir();
+                let cwd = crate::support::temp_root();
                 run_cli(&[
                     "new-tab",
                     "--starting-directory",

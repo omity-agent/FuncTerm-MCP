@@ -6,6 +6,8 @@ mod daemon;
 mod parse;
 #[path = "support/process.rs"]
 mod process;
+#[path = "support/temp.rs"]
+mod temp;
 pub(crate) use command::run_cli_with_env;
 #[cfg(windows)]
 pub(crate) use command::run_cli_with_pipes;
@@ -15,3 +17,4 @@ pub(crate) use daemon::locked;
 pub(crate) use daemon::{TestGuard, locked_with_env};
 pub(crate) use parse::CommandResult;
 pub(crate) use parse::{TabView, parse_command_id, parse_command_result, parse_tab_view};
+pub(crate) use temp::{temp_dir, temp_root};

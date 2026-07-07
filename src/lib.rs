@@ -4,6 +4,8 @@ mod engine;
 pub(crate) use app::{cli, commands, contract, path_text as text};
 pub(crate) use engine::{mcp, runtime, shim};
 pub mod shell;
+#[cfg(test)]
+pub(crate) mod test_fs;
 extern crate alloc;
 use anyhow::{Context as _, Result};
 #[inline]

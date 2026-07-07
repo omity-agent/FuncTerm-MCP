@@ -5,13 +5,13 @@ mod tests {
     #[cfg(not(windows))]
     use crate::support::locked_with_env;
     use crate::support::{
-        create_tab, parse_command_result, parse_tab_view, run_cli_with_env, send_command,
+        create_tab, parse_command_result, parse_tab_view, run_cli_with_env, send_command, temp_root,
     };
     use std::thread;
     #[test]
     fn daemon_serves_parallel_clients_without_test_serialisation() {
         let guard = system_shell_daemon();
-        let tab = create_tab(&std::env::temp_dir(), system_shell_name());
+        let tab = create_tab(&temp_root(), system_shell_name());
         let env = guard.env();
         let mut workers = Vec::new();
         for _index in 0_usize..4 {
@@ -30,14 +30,14 @@ mod tests {
     fn daemon_accepts_clients_after_restart() {
         let mut guard = system_shell_daemon();
         guard.restart_daemon();
-        let tab = create_tab(&std::env::temp_dir(), system_shell_name());
+        let tab = create_tab(&temp_root(), system_shell_name());
         let view = parse_tab_view(&run_cli_with_env(&["view", &tab.tab_id], &guard.env()));
         assert!(view.alive, "restarted daemon should accept clients");
     }
     #[test]
     fn command_finishes_when_wrapper_command_directory_is_removed() {
         let _guard = system_shell_daemon();
-        let tab = create_tab(&std::env::temp_dir(), system_shell_name());
+        let tab = create_tab(&temp_root(), system_shell_name());
         let command = delete_command_directory();
         let output = send_command(&tab.tab_id, command, 5.0);
         let result = parse_command_result(&output);

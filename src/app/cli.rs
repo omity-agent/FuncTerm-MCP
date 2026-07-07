@@ -175,9 +175,7 @@ mod tests {
     }
     #[test]
     fn internal_done_writer_serializes_json_strings() {
-        let directory = std::env::temp_dir()
-            .join("functerm-internal-done-writer-test")
-            .join(nanoid::nanoid!());
+        let directory = crate::test_fs::temp_case("internal-done-writer");
         super::write_done("command\"id", 7, "cwd\nwith\\chars", &directory).unwrap();
         let text = std::fs::read_to_string(
             directory

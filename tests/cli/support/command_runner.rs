@@ -3,6 +3,7 @@ use super::parse::{TabCreated, parse_tab_created};
 #[cfg(windows)]
 use super::process::read_pipe;
 use super::process::{output_from_parts, wait_for_status};
+use super::temp;
 use base64_turbo::STANDARD;
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::time::Duration;
@@ -114,7 +115,7 @@ fn output_from_pipes(mut command: Command, timeout: Duration) -> Output {
     )
 }
 fn output_paths() -> (PathBuf, PathBuf) {
-    let output_dir = std::env::temp_dir().join("functerm-test-output");
+    let output_dir = temp::temp_root().join("cli-output");
     fs::create_dir_all(&output_dir).unwrap();
     let unique = OUTPUT_COUNTER.fetch_add(1, Ordering::Relaxed);
     let prefix = format!("{}-{unique}", std::process::id());

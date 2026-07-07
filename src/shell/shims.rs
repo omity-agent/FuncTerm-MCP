@@ -167,7 +167,7 @@ mod tests {
     }
     #[test]
     fn environment_does_not_create_shim_directory() {
-        let root = std::env::temp_dir().join(nanoid::nanoid!());
+        let root = crate::test_fs::temp_case("shim-environment");
         let session_root = root.join("session");
         let shim_dir = root.join("shims");
         let env = environment(
@@ -182,7 +182,7 @@ mod tests {
     }
     #[test]
     fn ensure_directory_creates_shell_aliases() {
-        let shim_dir = std::env::temp_dir().join(nanoid::nanoid!());
+        let shim_dir = crate::test_fs::temp_case("shim-aliases");
         ensure_directory(&shim_dir).unwrap();
         for shell in ShellChoice::all() {
             for alias in shell.shim_executable_names() {

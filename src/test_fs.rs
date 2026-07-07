@@ -1,0 +1,17 @@
+use std::path::PathBuf;
+const FUNCTERM_DIRECTORY: &str = "functerm";
+const TEST_DIRECTORY: &str = "tests";
+pub(crate) fn temp_root() -> PathBuf {
+    let root = std::env::temp_dir()
+        .join(FUNCTERM_DIRECTORY)
+        .join(TEST_DIRECTORY);
+    std::fs::create_dir_all(&root).unwrap();
+    root
+}
+pub(crate) fn temp_case(name: &str) -> PathBuf {
+    let root = temp_root()
+        .join(name)
+        .join(format!("{}-{}", std::process::id(), nanoid::nanoid!()));
+    std::fs::create_dir_all(&root).unwrap();
+    root
+}

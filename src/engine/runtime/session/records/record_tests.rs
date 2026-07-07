@@ -11,9 +11,7 @@ fn zero_wait_does_not_block_for_missing_done_file() {
 }
 #[test]
 fn command_record_separates_input_output_and_state_files() {
-    let root = std::env::temp_dir()
-        .join("functerm-record-payload-test")
-        .join(std::process::id().to_string());
+    let root = crate::test_fs::temp_case("record-payload");
     let _cleanup = std::fs::remove_dir_all(&root);
     let record = create_record(&root, "command-test", Path::new("F:\\cwd")).unwrap();
     assert_eq!(
@@ -32,9 +30,7 @@ fn command_record_separates_input_output_and_state_files() {
 }
 #[test]
 fn failed_result_closes_command_lifecycle() {
-    let root = std::env::temp_dir()
-        .join("functerm-record-failed-result-test")
-        .join(std::process::id().to_string());
+    let root = crate::test_fs::temp_case("record-failed-result");
     let _final_cleanup = std::fs::remove_dir_all(&root);
     let record = create_record(&root, "command-failed", Path::new("F:\\cwd")).unwrap();
     write_failed_result("command-failed", &record, "shell exited").unwrap();
@@ -51,9 +47,7 @@ fn failed_result_closes_command_lifecycle() {
 }
 #[test]
 fn read_and_clear_keeps_result_while_removing_record_files() {
-    let root = std::env::temp_dir()
-        .join("functerm-record-clear-test")
-        .join(std::process::id().to_string());
+    let root = crate::test_fs::temp_case("record-clear");
     let _ignored = std::fs::remove_dir_all(&root);
     let record = create_record(&root, "command-clear", Path::new("F:\\cwd")).unwrap();
     std::fs::write(&record.stdout, "kept stdout").unwrap();

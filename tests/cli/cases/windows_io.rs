@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod tests {
-    use crate::support::{locked, run_cli_with_pipes};
+    use crate::support::{locked, run_cli_with_pipes, temp_root};
     #[test]
     fn cli_pipe_capture_returns_without_hanging() {
         let _guard = locked();
-        let cwd = std::env::temp_dir();
+        let cwd = temp_root();
         let output = run_cli_with_pipes(&[
             "new-tab",
             "--starting-directory",

@@ -2,7 +2,7 @@
 mod tests {
     use crate::support::{
         create_tab, locked_with_env, manual_write, parse_command_id, parse_command_result,
-        parse_tab_view, run_cli, send_command, send_command_with_env,
+        parse_tab_view, run_cli, send_command, send_command_with_env, temp_root,
     };
     use core::time::Duration;
     use std::thread;
@@ -29,7 +29,7 @@ mod tests {
         for case in unix_keyboard_cases() {
             let path = required_executable(case.executable);
             let _guard = locked_with_env(&[(case.env_var, &path)]);
-            let shell = create_tab(&std::env::temp_dir(), case.shell);
+            let shell = create_tab(&temp_root(), case.shell);
             let marker = format!("MCP_PTY_KEYBOARD_{}", case.shell);
             let accepted = send_command(
                 &shell.tab_id,
@@ -63,7 +63,7 @@ mod tests {
     fn cli_view_reports_unix_shell_liveness_after_keyboard_exit() {
         let bash = required_executable("bash");
         let _guard = locked_with_env(&[("FUNCTERM_BASH", &bash)]);
-        let shell = create_tab(&std::env::temp_dir(), "bash");
+        let shell = create_tab(&temp_root(), "bash");
         let alive = parse_tab_view(&run_cli(&["view", &shell.tab_id]));
         assert!(alive.alive);
         let _closed = send_command(&shell.tab_id, "exit", 0.2);
@@ -73,8 +73,8 @@ mod tests {
     fn cli_waiting_unix_command_does_not_block_other_requests() {
         let bash = required_executable("bash");
         let guard = locked_with_env(&[("FUNCTERM_BASH", &bash)]);
-        let first = create_tab(&std::env::temp_dir(), "bash");
-        let second = create_tab(&std::env::temp_dir(), "bash");
+        let first = create_tab(&temp_root(), "bash");
+        let second = create_tab(&temp_root(), "bash");
         let env = guard.env();
         let first_tab_id = first.tab_id;
         let worker = thread::spawn(move || {
@@ -103,7 +103,7 @@ mod tests {
     fn cli_unix_command_timeout_can_be_queried_after_completion() {
         let bash = required_executable("bash");
         let _guard = locked_with_env(&[("FUNCTERM_BASH", &bash)]);
-        let shell = create_tab(&std::env::temp_dir(), "bash");
+        let shell = create_tab(&temp_root(), "bash");
         let accepted = send_command(
             &shell.tab_id,
             "sleep 1; printf 'MCP_PTY_TIMEOUT_DONE\\n'",

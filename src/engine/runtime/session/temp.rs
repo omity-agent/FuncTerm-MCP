@@ -69,7 +69,7 @@ fn service_slug(service_name: &str) -> String {
 #[cfg(unix)]
 fn daemon_root_name() -> String {
     let uid = unsafe { libc::geteuid() };
-    format!("{DAEMON_ROOT}-{uid}")
+    format!("{DAEMON_ROOT}/{DAEMON_ROOT}-{uid}")
 }
 #[cfg(not(unix))]
 fn daemon_root_name() -> String {

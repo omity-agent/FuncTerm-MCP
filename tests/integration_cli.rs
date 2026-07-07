@@ -20,7 +20,7 @@ mod windows_io;
 mod tests {
     use super::support::{
         create_tab, locked, manual_write, parse_command_id, parse_command_result, run_cli,
-        send_command_with_env,
+        send_command_with_env, temp_root,
     };
     use core::time::Duration;
     use std::thread;
@@ -55,7 +55,7 @@ mod tests {
     #[test]
     fn cli_manual_write_rejects_idle_prompt() {
         let _guard = locked();
-        let cwd = std::env::temp_dir();
+        let cwd = temp_root();
         let created = create_tab(&cwd, "powershell");
         let marker = "MCP_PTY_TYPED_INPUT";
         let written = manual_write(&created.tab_id, marker.as_bytes());
@@ -71,7 +71,7 @@ mod tests {
     #[test]
     fn cli_manual_write_feeds_running_powershell_command() {
         let _guard = locked();
-        let cwd = std::env::temp_dir();
+        let cwd = temp_root();
         let created = create_tab(&cwd, "powershell");
         let marker = "MCP_PTY_KEYBOARD_EVENT";
         let accepted = super::support::send_command(
@@ -100,7 +100,7 @@ mod tests {
     #[test]
     fn cli_waiting_command_does_not_block_other_requests() {
         let guard = locked();
-        let cwd = std::env::temp_dir();
+        let cwd = temp_root();
         let first = create_tab(&cwd, "powershell");
         let second = create_tab(&cwd, "powershell");
         let env = guard.env();
@@ -133,7 +133,7 @@ mod tests {
     #[test]
     fn cli_view_waits_until_command_finishes() {
         let _guard = locked();
-        let cwd = std::env::temp_dir();
+        let cwd = temp_root();
         let created = create_tab(&cwd, "powershell");
         let accepted = super::support::send_command(
             &created.tab_id,
