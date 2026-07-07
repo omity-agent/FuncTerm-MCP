@@ -1,13 +1,14 @@
 use crate::runtime::config::Settings;
 mod choice;
 mod drivers;
+mod executable;
 pub mod quote;
 pub(crate) mod shims;
 mod wrappers;
 use alloc::borrow::Cow;
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result};
 pub(crate) use choice::ShellChoice;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 pub(crate) struct ShellStartup {
     pub(crate) args: Vec<String>,
     pub(crate) env: Vec<(String, String)>,
@@ -17,8 +18,11 @@ impl ShellChoice {
     pub(crate) fn executable(self, settings: &Settings) -> Result<String> {
         crate::text::path_text(&self.executable_path(settings)?, "executable path")
     }
-    pub(crate) fn executable_path(self, settings: &Settings) -> Result<PathBuf> {
-        select_available_executable(&self.driver().executable_candidates(settings)?)
+    pub(crate) fn executable_path(self, settings: &Settings) -> Result<std::path::PathBuf> {
+        executable::select_available_executable(
+            self,
+            &self.driver().executable_candidates(settings)?,
+        )
     }
     pub(crate) fn startup(self, cwd: &Path, session_root: &Path) -> Result<ShellStartup> {
         let state_directory = session_root.join("state");
@@ -108,50 +112,6 @@ impl ShellChoice {
     fn driver(self) -> &'static dyn drivers::ShellDriver {
         drivers::driver(self)
     }
-}
-fn select_available_executable(candidates: &[String]) -> Result<PathBuf> {
-    for candidate in candidates {
-        if let Ok(path) = resolve_executable(candidate) {
-            return Ok(path);
-        }
-    }
-    bail!(
-        "none of the configured shell executables are available: {}",
-        candidates.join(", ")
-    )
-}
-fn resolve_executable(candidate: &str) -> Result<PathBuf> {
-    let paths = which::which_all(candidate)?;
-    for path in paths {
-        if !is_inherited_shim(&path)? {
-            return Ok(path);
-        }
-    }
-    bail!("all executable candidates for `{candidate}` point to FuncTerm shims")
-}
-fn is_inherited_shim(path: &Path) -> Result<bool> {
-    if same_file(
-        path,
-        &std::env::current_exe().context("failed to resolve current executable")?,
-    ) {
-        return Ok(true);
-    }
-    let Some(shim_dir) = std::env::var_os(shims::SHIM_DIR_ENV) else {
-        return Ok(false);
-    };
-    let Some(parent) = path.parent() else {
-        return Ok(false);
-    };
-    Ok(same_file(parent, &PathBuf::from(shim_dir)))
-}
-fn same_file(left: &Path, right: &Path) -> bool {
-    let Ok(left_path) = left.canonicalize() else {
-        return false;
-    };
-    let Ok(right_path) = right.canonicalize() else {
-        return false;
-    };
-    left_path == right_path
 }
 #[cfg(test)]
 mod tests {
