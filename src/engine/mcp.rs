@@ -55,7 +55,7 @@ impl McpServer {
         let payload = crate::commands::new_tab_payload(
             |command| self.call(command),
             request.starting_directory_path(),
-            &request.starting_shell,
+            request.starting_shell,
         )
         .map_err(error_text)?;
         output::new_tab(payload)

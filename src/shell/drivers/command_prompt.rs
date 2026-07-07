@@ -13,7 +13,7 @@ impl ShellDriver for CmdDriver {
     fn id(&self) -> &'static str {
         "cmd"
     }
-    fn aliases(&self) -> &'static [&'static str] {
+    fn shim_executable_names(&self) -> &'static [&'static str] {
         &["cmd", "cmd.exe"]
     }
     fn shim_env_name(&self) -> &'static str {

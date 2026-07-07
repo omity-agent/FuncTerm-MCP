@@ -7,20 +7,19 @@ type DaemonCall<'callback> = dyn Fn(&Request) -> Result<Payload> + 'callback;
 pub(crate) fn new_tab(
     call: impl Fn(&Request) -> Result<Payload>,
     starting_directory: Option<&Path>,
-    starting_shell: &str,
+    starting_shell: ShellChoice,
 ) -> Result<String> {
     Ok(new_tab_payload(call, starting_directory, starting_shell)?.into_plain_text())
 }
 pub(crate) fn new_tab_payload(
     call: impl Fn(&Request) -> Result<Payload>,
     starting_directory: Option<&Path>,
-    starting_shell: &str,
+    starting_shell: ShellChoice,
 ) -> Result<Payload> {
-    let shell_choice = ShellChoice::parse(starting_shell)?;
     let resolved_directory = working_dir::resolve(starting_directory)?;
     let request = Request::NewTab {
         starting_directory: resolved_directory,
-        starting_shell: shell_choice,
+        starting_shell,
     };
     call_payload(call, &request)
 }

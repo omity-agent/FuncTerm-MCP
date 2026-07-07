@@ -1,3 +1,4 @@
+use crate::shell::ShellChoice;
 use anyhow::{Result, bail};
 use serde::Deserialize;
 use std::path::Path;
@@ -5,7 +6,7 @@ use std::path::Path;
 pub(super) struct NewTabRequest {
     pub(super) starting_directory: Option<String>,
     #[schemars(description = "启动时使用的 Shell")]
-    pub(super) starting_shell: String,
+    pub(super) starting_shell: ShellChoice,
 }
 impl NewTabRequest {
     pub(super) fn starting_directory_path(&self) -> Option<&Path> {
@@ -59,7 +60,7 @@ pub(super) struct ViewRequest {
 #[cfg(test)]
 mod tests {
     use super::ManualWriteRequest;
-    fn parse_request(json: &str) -> ManualWriteRequest {
+    fn parse_manual_write_request(json: &str) -> ManualWriteRequest {
         match sonic_rs::from_str(json) {
             Ok(request) => request,
             Err(error) => panic!("request should be valid json: {error}"),
@@ -79,27 +80,27 @@ mod tests {
     }
     #[test]
     fn manual_write_accepts_text() {
-        let request = parse_request(r#"{"tab_id":"tab","text":"echo 你好\n"}"#);
+        let request = parse_manual_write_request(r#"{"tab_id":"tab","text":"echo 你好\n"}"#);
         let (tab_id, bytes) = accepted_parts(request);
         assert_eq!(tab_id, "tab");
         assert_eq!(bytes, "echo 你好\n".as_bytes());
     }
     #[test]
     fn manual_write_accepts_bytes() {
-        let request = parse_request(r#"{"tab_id":"tab","bytes":[3,10]}"#);
+        let request = parse_manual_write_request(r#"{"tab_id":"tab","bytes":[3,10]}"#);
         let (tab_id, bytes) = accepted_parts(request);
         assert_eq!(tab_id, "tab");
         assert_eq!(bytes, [3, 10]);
     }
     #[test]
     fn manual_write_rejects_text_and_bytes_together() {
-        let request = parse_request(r#"{"tab_id":"tab","text":"x","bytes":[120]}"#);
+        let request = parse_manual_write_request(r#"{"tab_id":"tab","text":"x","bytes":[120]}"#);
         let error = rejected_error(request);
         assert_eq!(error, "text and bytes cannot be provided together");
     }
     #[test]
     fn manual_write_rejects_missing_input() {
-        let request = parse_request(r#"{"tab_id":"tab"}"#);
+        let request = parse_manual_write_request(r#"{"tab_id":"tab"}"#);
         let error = rejected_error(request);
         assert_eq!(error, "either text or bytes must be provided");
     }

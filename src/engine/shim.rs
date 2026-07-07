@@ -25,7 +25,7 @@ fn requested_shell() -> Option<ShellChoice> {
     let name = Path::new(&argument)
         .file_name()
         .and_then(|name| name.to_str())?;
-    ShellChoice::parse(name).ok()
+    ShellChoice::from_shim_name(name)
 }
 fn is_shim_invocation() -> Result<bool> {
     let Some(shim_dir) = std::env::var_os(shims::SHIM_DIR_ENV) else {
@@ -120,7 +120,7 @@ fn complete_active_command(cwd: &Path) -> Result<()> {
 }
 fn current_shell() -> Option<ShellChoice> {
     let value = std::env::var(shims::CURRENT_SHELL_ENV).ok()?;
-    ShellChoice::parse(&value).ok()
+    ShellChoice::from_canonical_name(&value).ok()
 }
 fn active_shell_file() -> Result<PathBuf> {
     std::env::var_os(shims::ACTIVE_SHELL_FILE_ENV)

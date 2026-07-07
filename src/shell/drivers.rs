@@ -26,7 +26,7 @@ pub(crate) struct DriverStartup {
 pub(crate) trait ShellDriver {
     fn choice(&self) -> ShellChoice;
     fn id(&self) -> &'static str;
-    fn aliases(&self) -> &'static [&'static str];
+    fn shim_executable_names(&self) -> &'static [&'static str];
     fn shim_env_name(&self) -> &'static str;
     fn executable_candidates(&self, settings: &Settings) -> Result<Vec<String>>;
     fn startup(&self, context: StartupContext<'_>) -> Result<DriverStartup>;
@@ -50,15 +50,22 @@ pub(crate) fn driver(choice: ShellChoice) -> &'static dyn ShellDriver {
         ShellChoice::Cmd => &CMD,
     }
 }
-pub(crate) fn parse(value: &str) -> Result<ShellChoice> {
-    let normalized = value.to_ascii_lowercase();
+pub(crate) fn from_canonical_name(value: &str) -> Result<ShellChoice> {
     for choice in ShellChoice::all() {
         let shell = driver(choice);
-        if shell.id() == normalized || shell.aliases().contains(&normalized.as_str()) {
+        if shell.id() == value {
             return Ok(shell.choice());
         }
     }
     bail!("unknown shell")
+}
+pub(crate) fn from_shim_name(value: &str) -> Option<ShellChoice> {
+    let normalized = value.to_ascii_lowercase();
+    ShellChoice::all().into_iter().find(|choice| {
+        driver(*choice)
+            .shim_executable_names()
+            .contains(&normalized.as_str())
+    })
 }
 pub(crate) fn supported_shells() -> String {
     ShellChoice::all()

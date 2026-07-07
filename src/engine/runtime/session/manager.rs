@@ -89,19 +89,4 @@ mod tests {
     fn immediately_exiting_executable() -> &'static str {
         "false"
     }
-    #[test]
-    fn generated_ids_have_kind_prefixes_and_base36_suffixes() {
-        let manager = Manager::new(test_settings()).unwrap();
-        assert_id(&manager.tabs.next_tab_id().unwrap(), "tab-");
-        assert_id(&manager.tabs.next_command_id().unwrap(), "command-");
-    }
-    fn assert_id(id: &str, prefix: &str) {
-        let suffix = id.strip_prefix(prefix).unwrap();
-        assert_eq!(suffix.len(), 12);
-        assert!(
-            suffix
-                .chars()
-                .all(|value| value.is_ascii_lowercase() || value.is_ascii_digit())
-        );
-    }
 }

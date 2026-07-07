@@ -14,7 +14,7 @@ impl ShellDriver for NuShellDriver {
     fn id(&self) -> &'static str {
         "nu"
     }
-    fn aliases(&self) -> &'static [&'static str] {
+    fn shim_executable_names(&self) -> &'static [&'static str] {
         &["nu", "nu.exe", "nushell", "nushell.exe"]
     }
     fn shim_env_name(&self) -> &'static str {

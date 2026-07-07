@@ -1,4 +1,5 @@
 use crate::runtime::config;
+use crate::shell::ShellChoice;
 use anyhow::{Context as _, Result};
 use base64_turbo::STANDARD;
 use clap::{Parser, Subcommand};
@@ -18,8 +19,8 @@ enum CliCommand {
     NewTab {
         #[arg(long)]
         starting_directory: Option<PathBuf>,
-        #[arg(long, default_value = "powershell")]
-        starting_shell: String,
+        # [arg (long , default_value = "powershell" , value_parser = ShellChoice :: from_canonical_name)]
+        starting_shell: ShellChoice,
     },
     ManualWrite {
         tab_id: String,
@@ -80,7 +81,7 @@ pub(crate) async fn run() -> Result<()> {
             print_result(crate::commands::with_daemon(
                 &settings.daemon_service_name,
                 |call| {
-                    crate::commands::new_tab(call, starting_directory.as_deref(), &starting_shell)
+                    crate::commands::new_tab(call, starting_directory.as_deref(), starting_shell)
                 },
             ))
         }

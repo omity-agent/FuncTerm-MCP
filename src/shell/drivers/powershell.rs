@@ -16,7 +16,7 @@ impl ShellDriver for PowerShellDriver {
     fn id(&self) -> &'static str {
         "powershell"
     }
-    fn aliases(&self) -> &'static [&'static str] {
+    fn shim_executable_names(&self) -> &'static [&'static str] {
         &[
             "pwsh",
             "pwsh.exe",

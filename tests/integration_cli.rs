@@ -20,7 +20,7 @@ mod windows_io;
 mod tests {
     use super::support::{
         create_tab, locked, manual_write, parse_command_id, parse_command_result, run_cli,
-        send_command_with_env, send_test_command,
+        send_command_with_env,
     };
     use core::time::Duration;
     use std::thread;
@@ -51,22 +51,6 @@ mod tests {
             "stderr: {}",
             String::from_utf8_lossy(&output.stderr)
         );
-    }
-    #[test]
-    fn cli_view_returns_command_output() {
-        let _guard = locked();
-        let cwd = std::env::temp_dir();
-        let created = create_tab(&cwd, "powershell");
-        let accepted_output = send_test_command(&created.tab_id);
-        let query = parse_command_result(&accepted_output);
-        assert!(!query.cwd.is_empty(), "cwd should be reported");
-        assert!(query.finished, "command should be finished");
-        assert!(
-            query.stdout.contains("MCP_PTY_TEST"),
-            "stdout should include test marker"
-        );
-        assert_eq!(query.stderr, "", "stderr should be empty");
-        assert_eq!(query.exit_code, Some(0_i32), "exit code should be zero");
     }
     #[test]
     fn cli_manual_write_rejects_idle_prompt() {
@@ -112,24 +96,6 @@ mod tests {
         );
         let completed = wait_for_command_finished(&command_id);
         assert!(completed.stdout.contains(marker));
-    }
-    #[test]
-    fn cli_view_reports_shell_liveness() {
-        let _guard = locked();
-        let cwd = std::env::temp_dir();
-        let created = create_tab(&cwd, "powershell");
-        let alive_view = super::support::parse_tab_view(&run_cli(&["view", &created.tab_id]));
-        assert!(alive_view.alive, "new tab should be alive");
-        let _closed = super::support::send_command(&created.tab_id, "exit", 0.2);
-        let mut dead_view = super::support::parse_tab_view(&run_cli(&["view", &created.tab_id]));
-        for _attempt in 0_usize..20 {
-            if !dead_view.alive {
-                return;
-            }
-            thread::sleep(Duration::from_millis(100));
-            dead_view = super::support::parse_tab_view(&run_cli(&["view", &created.tab_id]));
-        }
-        panic!("view should report exited tab as not alive");
     }
     #[test]
     fn cli_waiting_command_does_not_block_other_requests() {

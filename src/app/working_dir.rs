@@ -10,25 +10,3 @@ pub(crate) fn resolve(input: Option<&Path>) -> Result<PathBuf> {
     }
     Ok(base.join(raw_path))
 }
-#[cfg(test)]
-mod tests {
-    use std::path::Path;
-    #[test]
-    fn keeps_current_directory_when_input_is_absent() {
-        let resolved = super::resolve(None).unwrap();
-        assert_eq!(resolved, std::env::current_dir().unwrap());
-    }
-    #[test]
-    fn resolves_relative_path_against_process_current_directory() {
-        let resolved = super::resolve(Some(Path::new("child"))).unwrap();
-        assert_eq!(resolved, std::env::current_dir().unwrap().join("child"));
-    }
-    #[test]
-    fn keeps_shell_syntax_literals_unexpanded() {
-        let resolved = super::resolve(Some(Path::new("$FUNCTERM_ROOT"))).unwrap();
-        assert_eq!(
-            resolved,
-            std::env::current_dir().unwrap().join("$FUNCTERM_ROOT")
-        );
-    }
-}

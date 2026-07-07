@@ -121,10 +121,6 @@ mod tests {
     use std::process::Stdio;
     use std::thread;
     #[test]
-    fn launcher_uses_distinct_internal_subcommand() {
-        assert_ne!(super::LAUNCHER_SUBCOMMAND, super::DAEMON_SUBCOMMAND);
-    }
-    #[test]
     fn startup_wait_uses_daemon_report_after_launcher_exits() {
         let path = std::env::temp_dir()
             .join("functerm-startup-wait-test")

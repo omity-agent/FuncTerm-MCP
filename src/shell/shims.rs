@@ -70,7 +70,7 @@ pub(crate) fn ensure_directory(shim_dir: &Path) -> Result<()> {
     fs::create_dir_all(shim_dir).context("failed to create shell shim directory")?;
     let current_exe = std::env::current_exe().context("failed to resolve current executable")?;
     for shell in ShellChoice::all() {
-        for alias in shell.executable_aliases() {
+        for alias in shell.shim_executable_names() {
             create_shim_alias(&current_exe, &shim_dir.join(alias), alias)?;
         }
     }
@@ -111,7 +111,7 @@ pub(crate) fn read_active_shell(path: &Path) -> Result<Option<ShellChoice>> {
     }
     let text = fs::read_to_string(path)
         .with_context(|| format!("failed to read active shell state {}", path.display()))?;
-    Ok(Some(ShellChoice::parse(text.trim())?))
+    Ok(Some(ShellChoice::from_canonical_name(text.trim())?))
 }
 fn prepend_path(shim_dir: &Path) -> Result<String> {
     let mut parts = vec![shim_dir.as_os_str().to_owned()];
@@ -185,7 +185,7 @@ mod tests {
         let shim_dir = std::env::temp_dir().join(nanoid::nanoid!());
         ensure_directory(&shim_dir).unwrap();
         for shell in ShellChoice::all() {
-            for alias in shell.executable_aliases() {
+            for alias in shell.shim_executable_names() {
                 assert!(shim_dir.join(alias).exists());
             }
         }
