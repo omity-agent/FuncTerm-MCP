@@ -1,5 +1,5 @@
 use crate::contract::{
-    COMMAND_INPUT_DIRECTORY, COMMAND_OUTPUT_DIRECTORY, COMMAND_PAYLOAD_FILE, COMMAND_SCRIPT_FILE,
+    COMMAND_FILE, COMMAND_INPUT_DIRECTORY, COMMAND_OUTPUT_DIRECTORY, COMMAND_SCRIPT_FILE,
     COMMAND_STATE_DIRECTORY, DONE_FILE, STARTED_FILE, STDERR_FILE, STDOUT_FILE,
 };
 use crate::runtime::protocol::{CommandSnapshot, CommandView};
@@ -16,7 +16,7 @@ pub(super) struct CommandRecord {
     pub(super) initial_cwd: PathBuf,
     pub(super) stdout: PathBuf,
     pub(super) stderr: PathBuf,
-    pub(super) payload: PathBuf,
+    pub(super) command: PathBuf,
     pub(super) script: PathBuf,
     pub(super) started: PathBuf,
     pub(super) done: PathBuf,
@@ -51,7 +51,7 @@ pub(super) fn create_record(
         initial_cwd: initial_cwd.to_path_buf(),
         stdout: output_dir.join(STDOUT_FILE),
         stderr: output_dir.join(STDERR_FILE),
-        payload: input_dir.join(COMMAND_PAYLOAD_FILE),
+        command: input_dir.join(COMMAND_FILE),
         script: input_dir.join(COMMAND_SCRIPT_FILE),
         started: state_dir.join(STARTED_FILE),
         done: state_dir.join(DONE_FILE),

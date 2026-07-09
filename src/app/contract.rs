@@ -1,7 +1,7 @@
 pub(crate) const COMMAND_DIRECTORY_ENV: &str = "FUNCTERM_COMMAND_DIRECTORY";
 pub(crate) const COMMAND_ID_ENV: &str = "FUNCTERM_COMMAND_ID";
 pub(crate) const COMMAND_INPUT_DIRECTORY: &str = "input";
-pub(crate) const COMMAND_PAYLOAD_FILE: &str = "command.b64";
+pub(crate) const COMMAND_FILE: &str = "command.txt";
 pub(crate) const COMMAND_SCRIPT_FILE: &str = "command.cmd";
 pub(crate) const COMMAND_OUTPUT_DIRECTORY: &str = "output";
 pub(crate) const COMMAND_STATE_DIRECTORY: &str = "state";

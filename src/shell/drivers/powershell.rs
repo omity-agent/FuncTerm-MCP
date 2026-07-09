@@ -127,7 +127,7 @@ mod tests {
         assert!(script.contains("Set-Content -LiteralPath ([Text.Encoding]::UTF8.GetString"));
     }
     #[test]
-    fn invocation_references_payload_file_by_directory() {
+    fn invocation_passes_command_directory() {
         let line = crate::shell::drivers::ShellDriver::invocation(
             &PowerShellDriver,
             crate::shell::drivers::InvocationContext {

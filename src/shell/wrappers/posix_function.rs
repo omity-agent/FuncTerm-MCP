@@ -1,8 +1,8 @@
 use super::posix_dialect::PosixDialect;
 use super::posix_startup::{path_function, shim_path_function};
 use crate::contract::{
-    COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV, COMMAND_INPUT_DIRECTORY, COMMAND_OUTPUT_DIRECTORY,
-    COMMAND_PAYLOAD_FILE, COMMAND_STATE_DIRECTORY, DONE_FILE, HELPER_EXECUTABLE_ENV,
+    COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, COMMAND_INPUT_DIRECTORY,
+    COMMAND_OUTPUT_DIRECTORY, COMMAND_STATE_DIRECTORY, DONE_FILE, HELPER_EXECUTABLE_ENV,
     POSIX_COMMAND_FUNCTION, STARTED_FILE, STDERR_FILE, STDOUT_FILE,
 };
 pub(in crate::shell) fn bash_wrapper() -> String {
@@ -56,7 +56,7 @@ fn command_function(dialect: PosixDialect) -> String {
     local stdout_file="$output_dir/{stdout}"
     local stderr_file="$output_dir/{stderr}"
     local started_file="$state_dir/{started}"
-    local payload_file="$input_dir/{payload}"
+    local command_file="$input_dir/{command_file}"
     local done_file="$state_dir/{done}"
     local previous_command_id="${{{command_id_env}-}}"
     local previous_command_directory="${{{command_dir_env}-}}"
@@ -76,7 +76,7 @@ fn command_function(dialect: PosixDialect) -> String {
     fi
     functerm_prepend_shim_path || return 1
     local script
-    if ! script="$(functerm_decode_payload_file "$payload_file" "$stderr_file")"; then
+    if ! script="$(cat "$command_file" 2> "$stderr_file")"; then
         local publish_result=0
         functerm_publish_done "$command_id" 1 "0ns" "$PWD" "$native_directory" || publish_result=$?
         cat "$stderr_file" >&2
@@ -88,7 +88,7 @@ fn command_function(dialect: PosixDialect) -> String {
         fi
         return 1
     fi
-    rm -f -- "$payload_file" || return 1
+    rm -f -- "$command_file" || return 1
     if ! {cd} "$working_directory"; then
         local publish_result=0
         functerm_publish_done "$command_id" 1 "0ns" "$PWD" "$native_directory" || publish_result=$?
@@ -131,14 +131,6 @@ functerm_restore_command_environment() {{
     else
         unset {command_dir_env}
     fi
-}}
-functerm_decode_payload_file() {{
-{emulate}    local payload_file="$1"
-    local stderr_file="$2"
-    if base64 --decode < "$payload_file" 2> "$stderr_file"; then
-        return 0
-    fi
-    base64 -D < "$payload_file" 2> "$stderr_file"
 }}
 functerm_publish_done() {{
 {emulate}    local command_id="$1"
@@ -185,7 +177,7 @@ functerm_ensure_shims() {{
         stdout = STDOUT_FILE,
         stderr = STDERR_FILE,
         started = STARTED_FILE,
-        payload = COMMAND_PAYLOAD_FILE,
+        command_file = COMMAND_FILE,
         done = DONE_FILE,
         helper_env = HELPER_EXECUTABLE_ENV,
         command_id_env = COMMAND_ID_ENV,

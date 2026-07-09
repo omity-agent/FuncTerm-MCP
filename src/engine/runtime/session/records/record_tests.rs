@@ -15,8 +15,8 @@ fn command_record_separates_input_output_and_state_files() {
     let _cleanup = std::fs::remove_dir_all(&root);
     let record = create_record(&root, "command-test", Path::new("F:\\cwd")).unwrap();
     assert_eq!(
-        record.payload,
-        root.join("command-test").join("input").join("command.b64")
+        record.command,
+        root.join("command-test").join("input").join("command.txt")
     );
     assert_eq!(
         record.stdout,

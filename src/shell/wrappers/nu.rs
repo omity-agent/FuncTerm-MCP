@@ -1,7 +1,7 @@
 use super::template;
 use crate::contract::POSIX_COMMAND_FUNCTION;
 pub(in crate::shell) fn wrapper() -> String {
-    template::render_payload_function(TEMPLATE, POSIX_COMMAND_FUNCTION)
+    template::render_command_function(TEMPLATE, POSIX_COMMAND_FUNCTION)
 }
 const TEMPLATE : & str = "def @FUNCTION@ [command_id: string, directory: path, working_directory: path] {
     let input_dir = ($directory | path join '@INPUT_DIR@')
@@ -11,7 +11,7 @@ const TEMPLATE : & str = "def @FUNCTION@ [command_id: string, directory: path, w
     let stdout_file = ($output_dir | path join '@STDOUT@')
     let stderr_file = ($output_dir | path join '@STDERR@')
     let started_file = ($state_dir | path join '@STARTED@')
-    let payload_file = ($input_dir | path join '@PAYLOAD@')
+    let command_file = ($input_dir | path join '@COMMAND@')
     let done_file = ($state_dir | path join '@DONE@')
     let zero_time_consumption = '0ns'
     let cwd_file = ($state_dir | path join 'nushell-cwd.txt')
@@ -35,9 +35,8 @@ const TEMPLATE : & str = "def @FUNCTION@ [command_id: string, directory: path, w
             }
             $env.PATH = ($env.PATH | where {|entry| $entry != $shim_dir } | prepend $shim_dir)
         }
-        let payload = (open --raw $payload_file)
-        $payload | decode base64 | decode | save --force --raw $script_file
-        rm --force $payload_file
+        open --raw $command_file | save --force --raw $script_file
+        rm --force $command_file
         let previous_pwd = $env.PWD
         cd $working_directory
         $env.PWD | save --force --raw $cwd_file

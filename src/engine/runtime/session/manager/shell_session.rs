@@ -5,7 +5,6 @@ use crate::runtime::session::terminal::{TerminalParser, TerminalWriter, lock_mut
 use crate::shell::{ShellChoice, shims};
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
-use base64_turbo::STANDARD;
 use core::time::Duration;
 use rust_pty::PtyChild;
 use std::path::{Path, PathBuf};
@@ -118,8 +117,7 @@ impl ShellSession {
         command: &str,
         record: &CommandRecord,
     ) -> Result<()> {
-        let payload = STANDARD.encode(command.as_bytes());
-        std::fs::write(&record.payload, payload).context("failed to write command payload")?;
+        std::fs::write(&record.command, command).context("failed to write command")?;
         std::fs::write(&record.script, command).context("failed to write command script")?;
         let line = self.current_choice()?.invocation(
             command_id,

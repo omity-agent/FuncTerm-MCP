@@ -1,6 +1,6 @@
 use crate::contract::{
-    COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV, COMMAND_INPUT_DIRECTORY, COMMAND_OUTPUT_DIRECTORY,
-    COMMAND_PAYLOAD_FILE, COMMAND_SCRIPT_FILE, COMMAND_STATE_DIRECTORY, DONE_FILE,
+    COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, COMMAND_INPUT_DIRECTORY,
+    COMMAND_OUTPUT_DIRECTORY, COMMAND_SCRIPT_FILE, COMMAND_STATE_DIRECTORY, DONE_FILE,
     HELPER_EXECUTABLE_ENV, STARTED_FILE, STDERR_FILE, STDOUT_FILE,
 };
 const COMMON: [(&str, &str); 10] = [
@@ -15,13 +15,10 @@ const COMMON: [(&str, &str); 10] = [
     ("@STARTED@", STARTED_FILE),
     ("@STDOUT@", STDOUT_FILE),
 ];
-pub(super) fn render_payload_function(template: &str, function_name: &str) -> String {
+pub(super) fn render_command_function(template: &str, function_name: &str) -> String {
     render(
         template,
-        &[
-            ("@FUNCTION@", function_name),
-            ("@PAYLOAD@", COMMAND_PAYLOAD_FILE),
-        ],
+        &[("@FUNCTION@", function_name), ("@COMMAND@", COMMAND_FILE)],
     )
 }
 pub(super) fn render_script(template: &str) -> String {

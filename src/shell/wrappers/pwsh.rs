@@ -1,7 +1,7 @@
 use super::template;
 use crate::contract::POWERSHELL_COMMAND_FUNCTION;
 pub(in crate::shell) fn wrapper() -> String {
-    template::render_payload_function(TEMPLATE, POWERSHELL_COMMAND_FUNCTION)
+    template::render_command_function(TEMPLATE, POWERSHELL_COMMAND_FUNCTION)
 }
 const TEMPLATE : & str = "function Set-FuncTermShimPath {
     if ([string]::IsNullOrEmpty($env:FUNCTERM_SHIM_DIR)) {
@@ -51,7 +51,7 @@ function @FUNCTION@ {
     $stdoutFile = Join-Path $outputDir '@STDOUT@'
     $stderrFile = Join-Path $outputDir '@STDERR@'
     $startedFile = Join-Path $stateDir '@STARTED@'
-    $payloadFile = Join-Path $inputDir '@PAYLOAD@'
+    $commandFile = Join-Path $inputDir '@COMMAND@'
     $doneFile = Join-Path $stateDir '@DONE@'
     $previousCommandId = $env:@COMMAND_ID_ENV@
     $previousCommandDirectory = $env:@COMMAND_DIR_ENV@
@@ -70,8 +70,7 @@ function @FUNCTION@ {
         Set-FuncTermShimPath
         Set-Location -LiteralPath $WorkingDirectory
         $global:LASTEXITCODE = $null
-        $Payload = Get-Content -LiteralPath $payloadFile -Raw -Encoding utf8
-        $script = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Payload))
+        $script = Get-Content -LiteralPath $commandFile -Raw -Encoding utf8
         Set-Content -LiteralPath $startedFile -Value '' -NoNewline -Encoding utf8
         $commandTimer = [Diagnostics.Stopwatch]::StartNew()
         & ([scriptblock]::Create($script)) 2> $stderrFile | Tee-Object -FilePath $stdoutFile
