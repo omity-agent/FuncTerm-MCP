@@ -8,6 +8,7 @@ pub(crate) struct CommandResult {
     pub(crate) stdout: String,
     pub(crate) stderr: String,
     pub(crate) exit_code: Option<i32>,
+    pub(crate) time_consumption: String,
 }
 pub(crate) struct TabView {
     pub(crate) alive: bool,
@@ -20,6 +21,7 @@ pub(crate) fn parse_command_result(output: &Output) -> CommandResult {
         cwd: element(&text, "CWD"),
         finished: element(&text, "FINISHED").parse().unwrap(),
         exit_code: parse_exit_code(&element(&text, "EXIT_CODE")),
+        time_consumption: element(&text, "TIME_CONSUMPTION"),
         stdout: element(&text, "STDOUT"),
         stderr: element(&text, "STDERR").trim_end().to_owned(),
     }

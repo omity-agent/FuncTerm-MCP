@@ -13,6 +13,7 @@ const TEMPLATE : & str = "def @FUNCTION@ [command_id: string, directory: path, w
     let started_file = ($state_dir | path join '@STARTED@')
     let payload_file = ($input_dir | path join '@PAYLOAD@')
     let done_file = ($state_dir | path join '@DONE@')
+    let zero_time_consumption = '0ns'
     let cwd_file = ($state_dir | path join 'nushell-cwd.txt')
     let config_file = ($input_dir | path join 'functerm-config.nu')
     let env_config_file = ($input_dir | path join 'functerm-env.nu')
@@ -58,7 +59,9 @@ const TEMPLATE : & str = "def @FUNCTION@ [command_id: string, directory: path, w
             error make {msg: 'FUNCTERM_REAL_NUSHELL is not set'}
         }
         '' | save --force --raw $started_file
+        let command_started_at = date now
         let result = (^$nushell --no-history --config $config_file --env-config $env_config_file --interactive --execute $command | complete)
+        let time_consumption = ((date now) - $command_started_at) | into string
         $result.stdout | save --force --raw $stdout_file
         $result.stderr | save --force --raw $stderr_file
         cd $previous_pwd
@@ -77,11 +80,11 @@ const TEMPLATE : & str = "def @FUNCTION@ [command_id: string, directory: path, w
             $working_directory | path expand
         }
         rm --force $cwd_file
-        { cwd: $command_cwd, exit_code: $result.exit_code }
+        { cwd: $command_cwd, exit_code: $result.exit_code, time_consumption: $time_consumption }
     } catch {|error|
         $error.msg | save --append --raw $stderr_file
         print --stderr $error.msg
-        { cwd: ($working_directory | path expand), exit_code: 1 }
+        { cwd: ($working_directory | path expand), exit_code: 1, time_consumption: $zero_time_consumption }
     }
     mkdir $state_dir
     if not ($done_file | path exists) {
@@ -90,7 +93,7 @@ const TEMPLATE : & str = "def @FUNCTION@ [command_id: string, directory: path, w
             print --stderr '@HELPER_ENV@ is not set'
             return 1
         }
-        ^$helper internal-write-done --command-id $command_id --exit-code $state.exit_code --cwd $state.cwd --directory $directory
+        ^$helper internal-write-done --command-id $command_id --exit-code $state.exit_code --time-consumption $state.time_consumption --cwd $state.cwd --directory $directory
     }
     if ($previous_command_id | is-empty) {
         hide-env @COMMAND_ID_ENV@

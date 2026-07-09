@@ -56,6 +56,7 @@ function @FUNCTION@ {
     $previousCommandId = $env:@COMMAND_ID_ENV@
     $previousCommandDirectory = $env:@COMMAND_DIR_ENV@
     $exitCode = 1
+    $timeConsumption = '0ns'
     trap {
         [IO.File]::AppendAllText($stderrFile, [string]$_ + [Environment]::NewLine, [Text.Encoding]::UTF8)
         [Console]::Error.WriteLine($_)
@@ -72,7 +73,14 @@ function @FUNCTION@ {
         $Payload = Get-Content -LiteralPath $payloadFile -Raw -Encoding utf8
         $script = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Payload))
         Set-Content -LiteralPath $startedFile -Value '' -NoNewline -Encoding utf8
+        $commandTimer = [Diagnostics.Stopwatch]::StartNew()
         & ([scriptblock]::Create($script)) 2> $stderrFile | Tee-Object -FilePath $stdoutFile
+        $commandTimer.Stop()
+        $timeConsumption = [string]::Format(
+            [Globalization.CultureInfo]::InvariantCulture,
+            '{0}ms',
+            $commandTimer.Elapsed.TotalMilliseconds
+        )
         if ($null -ne $global:LASTEXITCODE) {
             $exitCode = [int]$global:LASTEXITCODE
         }
@@ -107,6 +115,8 @@ function @FUNCTION@ {
                 $helperStart.ArgumentList.Add($CommandId)
                 $helperStart.ArgumentList.Add('--exit-code')
                 $helperStart.ArgumentList.Add([string]$exitCode)
+                $helperStart.ArgumentList.Add('--time-consumption')
+                $helperStart.ArgumentList.Add($timeConsumption)
                 $helperStart.ArgumentList.Add('--cwd')
                 $helperStart.ArgumentList.Add($currentDirectory)
                 $helperStart.ArgumentList.Add('--directory')

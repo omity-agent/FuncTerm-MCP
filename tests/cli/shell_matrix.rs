@@ -47,6 +47,7 @@ mod tests {
                 stderr = command_result.stderr
             );
             assert_eq!(command_result.exit_code, Some(case.expected_exit_code));
+            assert_ne!(command_result.time_consumption, "0ns");
             assert_cwd(&command_result.cwd, &next, case.name);
             let shell_after = parse_tab_view(&run_cli(&["view", &created.tab_id]));
             assert_shell_query(&shell_after, &next, case.name);

@@ -3,8 +3,6 @@ use crate::shell::ShellChoice;
 use anyhow::{Context as _, Result};
 use base64_turbo::STANDARD;
 use clap::{Parser, Subcommand};
-use serde::Serialize;
-use std::fs;
 use std::path::{Path, PathBuf};
 #[derive(Parser)]
 #[command(version, about)]
@@ -48,6 +46,8 @@ enum CliCommand {
         #[arg(long)]
         exit_code: i32,
         #[arg(long)]
+        time_consumption: String,
+        #[arg(long)]
         cwd: String,
         #[arg(long)]
         directory: PathBuf,
@@ -68,9 +68,10 @@ pub(crate) async fn run() -> Result<()> {
         CliCommand::InternalWriteDone {
             command_id,
             exit_code,
+            time_consumption,
             cwd,
             directory,
-        } => write_done(&command_id, exit_code, &cwd, &directory),
+        } => write_done(&command_id, exit_code, &time_consumption, &cwd, &directory),
         CliCommand::Mcp => crate::mcp::run(config::load()?).await,
         CliCommand::Daemon => crate::runtime::daemon::run(config::load()?),
         CliCommand::NewTab {
@@ -123,46 +124,22 @@ fn print_result(result: Result<String>) -> Result<()> {
     println!("{text}");
     Ok(())
 }
-fn write_done(command_id: &str, exit_code: i32, cwd: &str, directory: &Path) -> Result<()> {
-    let state_dir = directory.join(crate::contract::COMMAND_STATE_DIRECTORY);
-    let done_path = state_dir.join(crate::contract::DONE_FILE);
-    if done_path.exists() {
-        return Ok(());
-    }
-    fs::create_dir_all(&state_dir).with_context(|| {
-        format!(
-            "failed to create command state directory {}",
-            state_dir.display()
-        )
-    })?;
-    let done = DoneOutput {
-        command_id,
-        exit_code,
-        cwd,
-    };
-    let text = sonic_rs::to_string(&done).context("failed to serialize done file")?;
-    let temp_path = state_dir.join(crate::contract::DONE_TEMP_FILE);
-    fs::write(&temp_path, text)
-        .with_context(|| format!("failed to write done file {}", temp_path.display()))?;
-    match fs::rename(&temp_path, &done_path) {
-        Ok(()) => Ok(()),
-        Err(_error) if done_path.exists() => {
-            fs::remove_file(&temp_path).with_context(|| {
-                format!(
-                    "failed to remove obsolete done file {}",
-                    temp_path.display()
-                )
-            })?;
-            Ok(())
-        }
-        Err(error) => Err(error).context("failed to publish done file"),
-    }
-}
-#[derive(Serialize)]
-struct DoneOutput<'value> {
-    command_id: &'value str,
+fn write_done(
+    command_id: &str,
     exit_code: i32,
-    cwd: &'value str,
+    time_consumption: &str,
+    cwd: &str,
+    directory: &Path,
+) -> Result<()> {
+    crate::app::done::write(
+        &crate::app::done::DoneOutput {
+            command_id,
+            exit_code,
+            time_consumption,
+            cwd,
+        },
+        directory,
+    )
 }
 #[cfg(test)]
 mod tests {
@@ -171,12 +148,20 @@ mod tests {
     struct WrittenDone {
         command_id: String,
         exit_code: i32,
+        time_consumption: String,
         cwd: String,
     }
     #[test]
     fn internal_done_writer_serializes_json_strings() {
         let directory = crate::test_fs::temp_case("internal-done-writer");
-        super::write_done("command\"id", 7, "cwd\nwith\\chars", &directory).unwrap();
+        super::write_done(
+            "command\"id",
+            7,
+            "123.456ms",
+            "cwd\nwith\\chars",
+            &directory,
+        )
+        .unwrap();
         let text = std::fs::read_to_string(
             directory
                 .join(crate::contract::COMMAND_STATE_DIRECTORY)
@@ -186,6 +171,7 @@ mod tests {
         let done = sonic_rs::from_str::<WrittenDone>(&text).unwrap();
         assert_eq!(done.command_id, "command\"id");
         assert_eq!(done.exit_code, 7_i32);
+        assert_eq!(done.time_consumption, "123.456ms");
         assert_eq!(done.cwd, "cwd\nwith\\chars");
         std::fs::remove_dir_all(directory).unwrap();
     }

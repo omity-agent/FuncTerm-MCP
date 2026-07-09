@@ -24,12 +24,14 @@ pub(super) struct CommandRecord {
 #[derive(Deserialize)]
 pub(super) struct DoneFile {
     pub(super) exit_code: i32,
+    pub(super) time_consumption: String,
     pub(super) cwd: String,
 }
 #[derive(Serialize)]
 struct FailedDoneFile<'value> {
     command_id: &'value str,
     exit_code: i32,
+    time_consumption: &'value str,
     cwd: String,
 }
 pub(super) fn create_record(
@@ -57,20 +59,23 @@ pub(super) fn create_record(
 }
 pub(super) fn read_command_result(
     record: &CommandRecord,
-    time_consumption: String,
+    observed_time_consumption: String,
 ) -> Result<CommandSnapshot> {
     let stdout = read_optional(&record.stdout)?;
     let stderr = read_optional(&record.stderr)?;
     let done = read_done(&record.done)?;
     let exit_code = done.as_ref().map(|file| file.exit_code);
+    let finished = done.is_some();
+    let measured_time_consumption =
+        done.map_or(observed_time_consumption, |file| file.time_consumption);
     let note = command_note(&stdout, &stderr, "");
     Ok(CommandSnapshot {
         command: CommandView {
             stdout,
             stderr,
             exit_code,
-            time_consumption,
-            finished: done.is_some(),
+            time_consumption: measured_time_consumption,
+            finished,
         },
         note,
     })
@@ -112,6 +117,7 @@ pub(super) fn write_failed_result(
     let done = FailedDoneFile {
         command_id,
         exit_code: 1_i32,
+        time_consumption: "0ns",
         cwd: crate::text::path_text(&record.initial_cwd, "cwd")?,
     };
     let text = sonic_rs::to_string(&done).context("failed to serialize failed done file")?;

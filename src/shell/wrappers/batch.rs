@@ -18,6 +18,7 @@ set "stderr_file=%output_dir%\@STDERR@"
 set "started_file=%state_dir%\@STARTED@"
 set "script_file=%input_dir%\@SCRIPT@"
 set "done_file=%state_dir%\@DONE@"
+set "time_consumption=0ns"
 set "had_previous_command_id="
 set "had_previous_command_directory="
 if defined @COMMAND_ID_ENV@ set "had_previous_command_id=1"
@@ -48,8 +49,14 @@ if errorlevel 1 (
     exit /b 1
 )
 type nul > "%started_file%"
+call :command_time_millis
+set "command_started_at=%ERRORLEVEL%"
 call "%script_file%" > "%stdout_file%" 2> "%stderr_file%"
 set "exit_code=%ERRORLEVEL%"
+call :command_time_millis
+set /a command_elapsed=%ERRORLEVEL% - command_started_at
+if %command_elapsed% LSS 0 set /a command_elapsed+=86400000
+set "time_consumption=%command_elapsed%ms"
 if exist "%stdout_file%" type "%stdout_file%"
 if exist "%stderr_file%" type "%stderr_file%" 1>&2
 if not exist "%state_dir%" mkdir "%state_dir%" || exit /b 1
@@ -70,8 +77,13 @@ if "%@HELPER_ENV@%"=="" (
     echo @HELPER_ENV@ is not set 1>&2
     exit /b 1
 )
-"%@HELPER_ENV@%" internal-write-done --command-id "%command_id%" --exit-code "%~1" --cwd "%CD%" --directory "%directory%"
+"%@HELPER_ENV@%" internal-write-done --command-id "%command_id%" --exit-code "%~1" --time-consumption "%time_consumption%" --cwd "%CD%" --directory "%directory%"
 exit /b %ERRORLEVEL%
+:command_time_millis
+for /f "tokens=1-4 delims=:. ," %%a in ("%TIME%") do (
+    set /a "functerm_time_millis=(((1%%a %% 100) * 60 + 1%%b %% 100) * 60 + 1%%c %% 100) * 1000 + 1%%d0 %% 1000"
+)
+exit /b %functerm_time_millis%
 :restore_command_environment
 if defined had_previous_command_id (
     set "@COMMAND_ID_ENV@=%previous_command_id%"

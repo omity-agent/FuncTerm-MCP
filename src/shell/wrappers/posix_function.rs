@@ -65,7 +65,7 @@ fn command_function(dialect: PosixDialect) -> String {
     export {command_dir_env}="$directory"
     if ! functerm_ensure_shims; then
         local publish_result=0
-        functerm_publish_done "$command_id" 1 "$PWD" "$native_directory" || publish_result=$?
+        functerm_publish_done "$command_id" 1 "0ns" "$PWD" "$native_directory" || publish_result=$?
         functerm_restore_command_environment \
             "$had_previous_command_id" "$previous_command_id" \
             "$had_previous_command_directory" "$previous_command_directory"
@@ -78,7 +78,7 @@ fn command_function(dialect: PosixDialect) -> String {
     local script
     if ! script="$(functerm_decode_payload_file "$payload_file" "$stderr_file")"; then
         local publish_result=0
-        functerm_publish_done "$command_id" 1 "$PWD" "$native_directory" || publish_result=$?
+        functerm_publish_done "$command_id" 1 "0ns" "$PWD" "$native_directory" || publish_result=$?
         cat "$stderr_file" >&2
         functerm_restore_command_environment \
             "$had_previous_command_id" "$previous_command_id" \
@@ -91,7 +91,7 @@ fn command_function(dialect: PosixDialect) -> String {
     rm -f -- "$payload_file" || return 1
     if ! {cd} "$working_directory"; then
         local publish_result=0
-        functerm_publish_done "$command_id" 1 "$PWD" "$native_directory" || publish_result=$?
+        functerm_publish_done "$command_id" 1 "0ns" "$PWD" "$native_directory" || publish_result=$?
         functerm_restore_command_environment \
             "$had_previous_command_id" "$previous_command_id" \
             "$had_previous_command_directory" "$previous_command_directory"
@@ -101,12 +101,15 @@ fn command_function(dialect: PosixDialect) -> String {
         return 1
     fi
     : {write_started} "$started_file"
+    local command_started_at="$(functerm_command_time_millis)" || return 1
     {{ eval "$script"; }} > "$stdout_file" 2> "$stderr_file"
     local exit_code=$?
+    local command_finished_at="$(functerm_command_time_millis)" || return 1
+    local time_consumption="$((command_finished_at - command_started_at))ms"
     cat "$stdout_file"
     cat "$stderr_file" >&2
     {mkdir} "$state_dir" || return 1
-    if ! functerm_publish_done "$command_id" "$exit_code" "$PWD" "$native_directory"; then
+    if ! functerm_publish_done "$command_id" "$exit_code" "$time_consumption" "$PWD" "$native_directory"; then
         functerm_restore_command_environment \
             "$had_previous_command_id" "$previous_command_id" \
             "$had_previous_command_directory" "$previous_command_directory"
@@ -140,8 +143,9 @@ functerm_decode_payload_file() {{
 functerm_publish_done() {{
 {emulate}    local command_id="$1"
     local exit_code="$2"
-    local cwd="$3"
-    local native_directory="$4"
+    local time_consumption="$3"
+    local cwd="$4"
+    local native_directory="$5"
     local helper="${{{helper_env}-}}"
     if [ -e "$done_file" ]; then
         return 0
@@ -154,9 +158,11 @@ functerm_publish_done() {{
     "$helper" internal-write-done \
         --command-id "$command_id" \
         --exit-code "$exit_code" \
+        --time-consumption "$time_consumption" \
         --cwd "$cwd" \
         --directory "$native_directory"
 }}
+functerm_command_time_millis() {{ {emulate}    perl -MTime::HiRes=time -e 'printf "%.0f\n", time() * 1000'; }}
 functerm_ensure_shims() {{
 {emulate}    local shim_dir="${{FUNCTERM_SHIM_DIR-}}"
     if [ -z "$shim_dir" ]; then

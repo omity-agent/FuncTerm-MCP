@@ -3,10 +3,12 @@ mod stdio;
 use crate::contract::{COMMAND_STATE_DIRECTORY, DONE_FILE, DONE_TEMP_FILE};
 use crate::shell::{ShellChoice, ShellStartup, shims};
 use anyhow::{Context as _, Result};
+use core::time::Duration;
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
+use std::time::Instant;
 pub(crate) fn run_if_requested() -> Result<Option<i32>> {
     let Some(choice) = requested_shell() else {
         return Ok(None);
@@ -55,6 +57,7 @@ fn run_passthrough(choice: ShellChoice, arguments: Vec<std::ffi::OsString>) -> R
     Ok(exit_code(status))
 }
 fn run_interactive(choice: ShellChoice) -> Result<i32> {
+    let command_started_at = Instant::now();
     let parent_shell = current_shell().unwrap_or(choice);
     let active_shell_file = active_shell_file()?;
     let session_root = nested_session_root(choice)?;
@@ -66,7 +69,7 @@ fn run_interactive(choice: ShellChoice) -> Result<i32> {
     let mut active_shell = ActiveShellGuard::new(active_shell_file, parent_shell);
     let status = invocation::run_shell_until_exit(child, &ready_file, || {
         active_shell.activate(choice)?;
-        complete_active_command(&cwd)?;
+        complete_active_command(&cwd, command_started_at.elapsed())?;
         Ok(())
     })?;
     Ok(exit_code(status))
@@ -82,7 +85,7 @@ fn spawn_shell(choice: ShellChoice, startup: ShellStartup) -> Result<std::proces
         .spawn()
         .with_context(|| format!("failed to spawn {}", choice.canonical_name()))
 }
-fn complete_active_command(cwd: &Path) -> Result<()> {
+fn complete_active_command(cwd: &Path, time_consumption: Duration) -> Result<()> {
     let Some(directory) = std::env::var_os(shims::COMMAND_DIRECTORY_ENV) else {
         return Ok(());
     };
@@ -98,6 +101,7 @@ fn complete_active_command(cwd: &Path) -> Result<()> {
     let done = EarlyDone {
         command_id: command_id.to_string_lossy().into_owned(),
         exit_code: 0,
+        time_consumption: format!("{time_consumption:?}"),
         cwd: cwd.to_string_lossy().into_owned(),
     };
     let text = sonic_rs::to_string(&done).context("failed to serialize early done file")?;
@@ -151,6 +155,7 @@ fn exit_code(status: ExitStatus) -> i32 {
 struct EarlyDone {
     command_id: String,
     exit_code: i32,
+    time_consumption: String,
     cwd: String,
 }
 struct ActiveShellGuard {
