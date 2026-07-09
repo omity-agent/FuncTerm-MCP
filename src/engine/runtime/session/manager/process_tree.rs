@@ -1,6 +1,5 @@
 use anyhow::{Context as _, Result};
 use kill_tree::{Config, blocking::kill_tree_with_config};
-use portable_pty::Child;
 use std::sync::Mutex;
 #[derive(Default)]
 pub(super) struct ProcessTree {
@@ -10,10 +9,10 @@ impl ProcessTree {
     pub(super) fn new() -> Self {
         Self::default()
     }
-    pub(super) fn attach(&self, child: &dyn Child) -> Result<()> {
-        let process_id = child
-            .process_id()
-            .context("shell child does not expose a process id")?;
+    pub(super) fn attach(&self, process_id: u32) -> Result<()> {
+        if process_id == 0 {
+            anyhow::bail!("shell child does not expose a process id");
+        }
         *self
             .process_id
             .lock()

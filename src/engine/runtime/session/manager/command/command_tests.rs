@@ -1,12 +1,12 @@
 use crate::runtime::session::manager::shell_session::{
     KeyboardWriteFailure, ShellSession, ShellSessionParts,
 };
-use crate::runtime::session::terminal::TerminalParser;
+use crate::runtime::session::terminal::{TerminalParser, TerminalWriter};
 use crate::shell::ShellChoice;
 use alloc::sync::Arc;
-use anyhow::Error;
-use portable_pty::{Child, ChildKiller, CommandBuilder, ExitStatus, SlavePty};
-use std::io::{Result as IoResult, Write};
+use core::future::Future;
+use core::pin::Pin;
+use rust_pty::{ExitStatus, PtyChild, PtySignal};
 use std::sync::{Barrier, Mutex};
 use std::thread;
 use tastty_core::TerminalSize;
@@ -81,13 +81,18 @@ fn manual_write_allows_running_command() {
     shell.write_keyboard_for_running_command(b"typed").unwrap();
 }
 fn test_shell(busy: Option<&str>) -> ShellSession {
-    let writer: Box<dyn Write + Send> = Box::<Vec<u8>>::default();
-    let child: Box<dyn Child + Send + Sync> = Box::new(TestChild);
-    let slave: Box<dyn SlavePty + Send> = Box::new(TestSlave);
+    let runtime = Arc::new(
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap(),
+    );
+    let writer: TerminalWriter = Arc::new(tokio::sync::Mutex::new(Box::new(tokio::io::sink())));
+    let child: Box<dyn PtyChild> = Box::new(TestChild);
     ShellSession::new(ShellSessionParts {
         choice: ShellChoice::PowerShell,
         cwd: crate::test_fs::temp_root(),
-        writer: Arc::new(Mutex::new(writer)),
+        writer,
         screen: Arc::new(Mutex::new(TerminalParser::new(
             TerminalSize {
                 rows: 30,
@@ -102,40 +107,28 @@ fn test_shell(busy: Option<&str>) -> ShellSession {
         command_start_timeout: core::time::Duration::from_secs(1),
         process_tree: crate::runtime::session::manager::process_tree::ProcessTree::new(),
         child,
-        slave,
+        runtime,
     })
 }
 #[derive(Debug)]
 struct TestChild;
-impl ChildKiller for TestChild {
-    fn kill(&mut self) -> IoResult<()> {
+impl PtyChild for TestChild {
+    fn pid(&self) -> u32 {
+        1
+    }
+    fn is_running(&self) -> bool {
+        false
+    }
+    fn wait(&mut self) -> Pin<Box<dyn Future<Output = rust_pty::Result<ExitStatus>> + Send + '_>> {
+        Box::pin(async { Ok(ExitStatus::Exited(0)) })
+    }
+    fn try_wait(&mut self) -> rust_pty::Result<Option<ExitStatus>> {
+        Ok(Some(ExitStatus::Exited(0)))
+    }
+    fn signal(&self, _signal: PtySignal) -> rust_pty::Result<()> {
         Ok(())
     }
-    fn clone_killer(&self) -> Box<dyn ChildKiller + Send + Sync> {
-        Box::new(Self)
-    }
-}
-impl Child for TestChild {
-    fn try_wait(&mut self) -> IoResult<Option<ExitStatus>> {
-        Ok(Some(ExitStatus::with_exit_code(0)))
-    }
-    fn wait(&mut self) -> IoResult<ExitStatus> {
-        Ok(ExitStatus::with_exit_code(0))
-    }
-    fn process_id(&self) -> Option<u32> {
-        None
-    }
-    #[cfg(windows)]
-    fn as_raw_handle(&self) -> Option<std::os::windows::io::RawHandle> {
-        None
-    }
-}
-struct TestSlave;
-impl SlavePty for TestSlave {
-    fn spawn_command(
-        &self,
-        _command: CommandBuilder,
-    ) -> Result<Box<dyn Child + Send + Sync>, Error> {
-        anyhow::bail!("test slave cannot spawn commands")
+    fn kill(&mut self) -> rust_pty::Result<()> {
+        Ok(())
     }
 }

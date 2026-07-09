@@ -6,11 +6,11 @@ use crate::runtime::config::Settings;
 use crate::runtime::session::records::wait_for_path;
 use crate::runtime::session::terminal::{TerminalParser, lock_mutex, start_reader};
 use crate::runtime::temp;
-use crate::shell::{ShellChoice, ShellStartup, shims};
+use crate::shell::{ShellChoice, shims};
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result, bail};
 use core::time::Duration;
-use portable_pty::{Child, CommandBuilder, PtySize, native_pty_system};
+use rust_pty::{NativePtySystem, PtyChild, PtyConfig};
 use std::path::Path;
 use std::sync::Mutex;
 use tastty_core::TerminalSize;
@@ -51,40 +51,40 @@ impl ShellLauncher {
             &self.shim_dir,
             starting_shell,
         )?);
-        let pair = native_pty_system()
-            .openpty(PtySize {
-                rows: self.settings.terminal_rows,
-                cols: self.settings.terminal_cols,
-                pixel_width: 0,
-                pixel_height: 0,
-            })
-            .context("failed to open pty")?;
         let executable = starting_shell.executable(&self.settings)?;
-        let mut command = CommandBuilder::new(executable);
         let ready_file = startup.ready_file.clone();
-        apply_startup(&mut command, startup);
-        command.cwd(starting_directory);
-        let process_tree = process_tree::ProcessTree::new();
-        let mut child = pair
-            .slave
-            .spawn_command(command)
+        let mut config_builder = PtyConfig::builder()
+            .working_directory(starting_directory)
+            .window_size(self.settings.terminal_cols, self.settings.terminal_rows);
+        for (name, value) in startup.env {
+            config_builder = config_builder.env(name, value);
+        }
+        let config = config_builder.build();
+        let runtime = Arc::new(
+            tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .thread_name("functerm-pty")
+                .build()
+                .context("failed to create pty runtime")?,
+        );
+        let (master, mut child) = runtime
+            .block_on(<NativePtySystem as rust_pty::PtySystem>::spawn(
+                executable,
+                startup.args,
+                &config,
+            ))
             .context("failed to spawn shell")?;
+        let process_tree = process_tree::ProcessTree::new();
         if let Err(error) = process_tree
-            .attach(child.as_ref())
+            .attach(child.pid())
             .context("failed to guard shell process tree")
         {
-            cleanup_unregistered_child(&mut child);
+            cleanup_unregistered_child(&mut child, &runtime);
             return Err(error);
         }
-        let reader = pair
-            .master
-            .try_clone_reader()
-            .context("failed to clone pty reader")?;
-        let writer = Arc::new(Mutex::new(
-            pair.master
-                .take_writer()
-                .context("failed to take pty writer")?,
-        ));
+        let (reader, writer_half) = tokio::io::split(master);
+        let boxed_writer: Box<dyn tokio::io::AsyncWrite + Send + Unpin> = Box::new(writer_half);
+        let writer = Arc::new(tokio::sync::Mutex::new(boxed_writer));
         let screen = Arc::new(Mutex::new(TerminalParser::new(
             TerminalSize {
                 rows: self.settings.terminal_rows,
@@ -92,7 +92,7 @@ impl ShellLauncher {
             },
             0,
         )));
-        start_reader(Arc::clone(&screen), Arc::clone(&writer), reader);
+        start_reader(Arc::clone(&screen), Arc::clone(&writer), &runtime, reader);
         let startup_timeout =
             Duration::try_from_secs_f64(self.settings.shell_startup_timeout_seconds)
                 .context("shell_startup_timeout_seconds must be finite and non-negative")?;
@@ -108,22 +108,16 @@ impl ShellLauncher {
             active_shell_file,
             command_start_timeout: startup_timeout,
             process_tree,
-            child,
-            slave: pair.slave,
+            child: Box::new(child),
+            runtime,
         })))
     }
 }
 fn runtime_generation() -> String {
     format!("{}-{}", std::process::id(), nanoid::nanoid!())
 }
-pub(super) fn apply_startup(command: &mut CommandBuilder, startup: ShellStartup) {
-    for (name, value) in startup.env {
-        command.env(name, value);
-    }
-    command.args(startup.args);
-}
 pub(super) fn wait_for_shell_startup(
-    child: &mut Box<dyn Child + Send + Sync>,
+    child: &mut dyn PtyChild,
     ready_file: &Path,
     screen: &Arc<Mutex<TerminalParser>>,
     timeout: Duration,
@@ -153,11 +147,11 @@ fn startup_screen(screen: &Arc<Mutex<TerminalParser>>) -> Result<String> {
     let contents = lock_mutex(screen, "screen")?.screen().contents();
     Ok(contents.trim().to_owned())
 }
-fn cleanup_unregistered_child(child: &mut Box<dyn Child + Send + Sync>) {
+fn cleanup_unregistered_child(child: &mut dyn PtyChild, runtime: &tokio::runtime::Runtime) {
     if let Err(error) = child.kill() {
         eprintln!("failed to kill unregistered shell child: {error}");
     }
-    if let Err(error) = child.wait() {
+    if let Err(error) = runtime.block_on(child.wait()) {
         eprintln!("failed to wait unregistered shell child: {error}");
     }
 }

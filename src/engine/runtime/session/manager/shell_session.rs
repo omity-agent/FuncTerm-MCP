@@ -1,28 +1,28 @@
 use super::process_tree;
 use crate::runtime::session::keyboard;
 use crate::runtime::session::records::{CommandRecord, read_done};
-use crate::runtime::session::terminal::{TerminalParser, lock_mutex, screen_title};
+use crate::runtime::session::terminal::{TerminalParser, TerminalWriter, lock_mutex, screen_title};
 use crate::shell::{ShellChoice, shims};
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use base64_turbo::STANDARD;
 use core::time::Duration;
-use portable_pty::{Child, SlavePty};
-use std::io::Write;
+use rust_pty::PtyChild;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use tokio::io::AsyncWriteExt as _;
 pub(super) struct ShellSession {
     choice: Mutex<ShellChoice>,
     cwd: Mutex<PathBuf>,
-    writer: Arc<Mutex<Box<dyn Write + Send>>>,
+    writer: TerminalWriter,
     screen: Arc<Mutex<TerminalParser>>,
     busy: Mutex<Option<String>>,
     command_root: PathBuf,
     active_shell_file: PathBuf,
     command_start_timeout: Duration,
     process_tree: process_tree::ProcessTree,
-    child: Mutex<Box<dyn Child + Send + Sync>>,
-    _slave: Mutex<Box<dyn SlavePty + Send>>,
+    child: Mutex<Box<dyn PtyChild>>,
+    runtime: Arc<tokio::runtime::Runtime>,
 }
 #[derive(Debug)]
 pub(super) enum KeyboardWriteFailure {
@@ -32,15 +32,15 @@ pub(super) enum KeyboardWriteFailure {
 pub(super) struct ShellSessionParts {
     pub(super) choice: ShellChoice,
     pub(super) cwd: PathBuf,
-    pub(super) writer: Arc<Mutex<Box<dyn Write + Send>>>,
+    pub(super) writer: TerminalWriter,
     pub(super) screen: Arc<Mutex<TerminalParser>>,
     pub(super) busy: Option<String>,
     pub(super) command_root: PathBuf,
     pub(super) active_shell_file: PathBuf,
     pub(super) command_start_timeout: Duration,
     pub(super) process_tree: process_tree::ProcessTree,
-    pub(super) child: Box<dyn Child + Send + Sync>,
-    pub(super) slave: Box<dyn SlavePty + Send>,
+    pub(super) child: Box<dyn PtyChild>,
+    pub(super) runtime: Arc<tokio::runtime::Runtime>,
 }
 impl ShellSession {
     pub(super) fn new(parts: ShellSessionParts) -> Self {
@@ -55,7 +55,7 @@ impl ShellSession {
             command_start_timeout: parts.command_start_timeout,
             process_tree: parts.process_tree,
             child: Mutex::new(parts.child),
-            _slave: Mutex::new(parts.slave),
+            runtime: parts.runtime,
         }
     }
     pub(super) fn cwd(&self) -> Result<PathBuf> {
@@ -106,11 +106,11 @@ impl ShellSession {
         let choice = self.current_choice()?;
         let keyboard_bytes = choice.keyboard_bytes(bytes);
         let physical_bytes = keyboard::physical_bytes(keyboard_bytes.as_ref());
-        let mut writer = lock_mutex(&self.writer, "writer")?;
-        writer
-            .write_all(physical_bytes.as_ref())
-            .context("failed to write to pty")?;
-        writer.flush().context("failed to flush pty writer")
+        self.write_bytes(
+            physical_bytes.as_ref(),
+            "failed to write to pty",
+            "failed to flush pty writer",
+        )
     }
     pub(super) fn write_invocation(
         &self,
@@ -126,11 +126,28 @@ impl ShellSession {
             &record.directory,
             &record.initial_cwd,
         )?;
-        let mut writer = lock_mutex(&self.writer, "writer")?;
-        writer
-            .write_all(line.as_bytes())
-            .context("failed to write command invocation")?;
-        writer.flush().context("failed to flush command invocation")
+        self.write_bytes(
+            line.as_bytes(),
+            "failed to write command invocation",
+            "failed to flush command invocation",
+        )
+    }
+    fn write_bytes(
+        &self,
+        bytes: &[u8],
+        write_context: &'static str,
+        flush_context: &'static str,
+    ) -> Result<()> {
+        let writer = Arc::clone(&self.writer);
+        self.runtime.block_on(async move {
+            let mut locked_writer = writer.lock().await;
+            locked_writer
+                .as_mut()
+                .write_all(bytes)
+                .await
+                .context(write_context)?;
+            locked_writer.as_mut().flush().await.context(flush_context)
+        })
     }
     pub(super) fn update_cwd_from_done(&self, record: &CommandRecord) -> Result<()> {
         if let Some(done) = read_done(&record.done)? {
@@ -183,7 +200,7 @@ impl Drop for ShellSession {
                     if let Err(error) = child.kill() {
                         eprintln!("failed to kill shell child during cleanup: {error}");
                     }
-                    if let Err(error) = child.wait() {
+                    if let Err(error) = self.runtime.block_on(child.wait()) {
                         eprintln!("failed to wait shell child during cleanup: {error}");
                     }
                 }
