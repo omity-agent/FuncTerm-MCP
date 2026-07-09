@@ -4,9 +4,7 @@ use super::{
 };
 use crate::runtime::config::Settings;
 use crate::runtime::session::records::wait_for_path;
-use crate::runtime::session::terminal::{
-    TerminalCallbacks, TerminalParser, lock_mutex, start_reader,
-};
+use crate::runtime::session::terminal::{TerminalParser, lock_mutex, start_reader};
 use crate::runtime::temp;
 use crate::shell::{ShellChoice, ShellStartup, shims};
 use alloc::sync::Arc;
@@ -15,6 +13,7 @@ use core::time::Duration;
 use portable_pty::{Child, CommandBuilder, PtySize, native_pty_system};
 use std::path::Path;
 use std::sync::Mutex;
+use tastty_core::TerminalSize;
 pub(super) struct ShellLauncher {
     settings: Settings,
     generation_root: std::path::PathBuf,
@@ -86,11 +85,12 @@ impl ShellLauncher {
                 .take_writer()
                 .context("failed to take pty writer")?,
         ));
-        let screen = Arc::new(Mutex::new(TerminalParser::new_with_callbacks(
-            self.settings.terminal_rows,
-            self.settings.terminal_cols,
+        let screen = Arc::new(Mutex::new(TerminalParser::new(
+            TerminalSize {
+                rows: self.settings.terminal_rows,
+                cols: self.settings.terminal_cols,
+            },
             0,
-            TerminalCallbacks::default(),
         )));
         start_reader(Arc::clone(&screen), Arc::clone(&writer), reader);
         let startup_timeout =

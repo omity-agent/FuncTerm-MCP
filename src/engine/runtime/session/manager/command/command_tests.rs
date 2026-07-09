@@ -1,7 +1,7 @@
 use crate::runtime::session::manager::shell_session::{
     KeyboardWriteFailure, ShellSession, ShellSessionParts,
 };
-use crate::runtime::session::terminal::{TerminalCallbacks, TerminalParser};
+use crate::runtime::session::terminal::TerminalParser;
 use crate::shell::ShellChoice;
 use alloc::sync::Arc;
 use anyhow::Error;
@@ -9,6 +9,7 @@ use portable_pty::{Child, ChildKiller, CommandBuilder, ExitStatus, SlavePty};
 use std::io::{Result as IoResult, Write};
 use std::sync::{Barrier, Mutex};
 use std::thread;
+use tastty_core::TerminalSize;
 #[test]
 fn busy_state_rejects_conflicting_reservation() {
     let shell = test_shell(Some("command-current"));
@@ -87,11 +88,12 @@ fn test_shell(busy: Option<&str>) -> ShellSession {
         choice: ShellChoice::PowerShell,
         cwd: crate::test_fs::temp_root(),
         writer: Arc::new(Mutex::new(writer)),
-        screen: Arc::new(Mutex::new(TerminalParser::new_with_callbacks(
-            30,
-            120,
+        screen: Arc::new(Mutex::new(TerminalParser::new(
+            TerminalSize {
+                rows: 30,
+                cols: 120,
+            },
             0,
-            TerminalCallbacks::default(),
         ))),
         busy: busy.map(str::to_owned),
         command_root: crate::test_fs::temp_case("command-manager"),

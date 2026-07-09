@@ -73,7 +73,7 @@ impl ShellSession {
     }
     pub(super) fn screen_title(&self) -> Result<String> {
         let parser = lock_mutex(&self.screen, "screen")?;
-        screen_title(&parser)
+        Ok(screen_title(&parser))
     }
     pub(super) fn current_choice(&self) -> Result<ShellChoice> {
         Ok(*lock_mutex(&self.choice, "choice")?)

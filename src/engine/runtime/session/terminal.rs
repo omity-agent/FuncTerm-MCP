@@ -1,80 +1,63 @@
 use alloc::sync::Arc;
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use std::io::{Read, Write};
 use std::sync::{Mutex, MutexGuard};
 use std::thread;
-#[cfg(unix)]
-const CURSOR_POSITION_REPORT: &[u8] = b"\x1b[1;1R";
-#[derive(Default)]
-pub(super) struct TerminalCallbacks {
-    title: Vec<u8>,
-}
-impl vt100::Callbacks for TerminalCallbacks {
-    fn set_window_title(&mut self, _: &mut vt100::Screen, title: &[u8]) {
-        self.title = title.to_vec();
-    }
-}
-pub(super) type TerminalParser = vt100::Parser<TerminalCallbacks>;
+use tastty_core::{HostProfile, Parser, host_reply::auto_reply_bytes};
+pub(super) type TerminalParser = Parser;
 pub(super) fn start_reader(
     screen: Arc<Mutex<TerminalParser>>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     mut owned_reader: Box<dyn Read + Send>,
 ) {
-    #[cfg(unix)]
-    let response_writer = writer;
-    #[cfg(not(unix))]
-    drop(writer);
     thread::spawn(move || {
+        let host = HostProfile::default();
         let mut buffer = [0_u8; 8192];
-        #[cfg(unix)]
-        let mut responder = TerminalResponder::default();
         loop {
             match owned_reader.read(&mut buffer) {
                 Ok(0) | Err(_) => break,
                 Ok(read_len) => {
-                    if let (Ok(mut parser), Some(chunk)) = (screen.lock(), buffer.get(..read_len)) {
-                        parser.process(chunk);
-                        #[cfg(unix)]
-                        responder.answer_device_status_reports(chunk, &response_writer);
-                    } else {
+                    let Some(chunk) = buffer.get(..read_len) else {
                         break;
-                    }
+                    };
+                    let replies = match screen.lock() {
+                        Ok(mut parser) => {
+                            parser.process(chunk);
+                            parser
+                                .screen_mut()
+                                .drain_events()
+                                .into_iter()
+                                .filter_map(|event| auto_reply_bytes(&event, &host))
+                                .collect::<Vec<_>>()
+                        }
+                        Err(_) => break,
+                    };
+                    write_replies(&writer, &replies);
                 }
             }
         }
     });
 }
-pub(super) fn screen_title(parser: &TerminalParser) -> Result<String> {
-    let bytes = &parser.callbacks().title;
-    let title = core::str::from_utf8(bytes).context("terminal title is not valid UTF-8")?;
-    Ok(title.to_owned())
+pub(super) fn screen_title(parser: &TerminalParser) -> String {
+    parser.screen().title().to_owned()
 }
-#[cfg(unix)]
-#[derive(Default)]
-struct TerminalResponder {
-    tail: Vec<u8>,
-}
-#[cfg(unix)]
-impl TerminalResponder {
-    fn answer_device_status_reports(
-        &mut self,
-        chunk: &[u8],
-        writer: &Arc<Mutex<Box<dyn Write + Send>>>,
-    ) {
-        let mut bytes = self.tail.clone();
-        bytes.extend_from_slice(chunk);
-        if bytes.windows(4).any(|window| window == b"\x1b[6n")
-            && let Ok(mut locked_writer) = writer.lock()
-            && let Err(error) = locked_writer
-                .write_all(CURSOR_POSITION_REPORT)
-                .and_then(|()| locked_writer.flush())
-        {
-            eprintln!("failed to answer terminal cursor position request: {error}");
+fn write_replies(writer: &Arc<Mutex<Box<dyn Write + Send>>>, replies: &[Vec<u8>]) {
+    if replies.is_empty() {
+        return;
+    }
+    match writer.lock() {
+        Ok(mut locked_writer) => {
+            for reply in replies {
+                if let Err(error) = locked_writer.write_all(reply) {
+                    eprintln!("failed to answer terminal host query: {error}");
+                    return;
+                }
+            }
+            if let Err(error) = locked_writer.flush() {
+                eprintln!("failed to flush terminal host query replies: {error}");
+            }
         }
-        self.tail = bytes
-            .get(bytes.len().saturating_sub(3)..)
-            .unwrap_or_default()
-            .to_vec();
+        Err(error) => eprintln!("terminal writer mutex poisoned while replying: {error}"),
     }
 }
 pub(super) fn lock_mutex<'guard, T>(
