@@ -4,9 +4,7 @@ use crate::runtime::session::manager::shell_session::{
 use crate::runtime::session::terminal::{TerminalParser, TerminalWriter};
 use crate::shell::ShellChoice;
 use alloc::sync::Arc;
-use core::future::Future;
-use core::pin::Pin;
-use rust_pty::{ExitStatus, PtyChild, PtySignal};
+use rmux_pty::{ChildCommand, TerminalSize as PtyTerminalSize};
 use std::sync::{Barrier, Mutex};
 use std::thread;
 use tastty_core::TerminalSize;
@@ -81,14 +79,12 @@ fn manual_write_allows_running_command() {
     shell.write_keyboard_for_running_command(b"typed").unwrap();
 }
 fn test_shell(busy: Option<&str>) -> ShellSession {
-    let runtime = Arc::new(
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap(),
-    );
-    let writer: TerminalWriter = Arc::new(tokio::sync::Mutex::new(Box::new(tokio::io::sink())));
-    let child: Box<dyn PtyChild> = Box::new(TestChild);
+    let spawned = test_child_command()
+        .size(PtyTerminalSize::new(120, 30))
+        .spawn()
+        .unwrap();
+    let (master, child) = spawned.into_parts();
+    let writer: TerminalWriter = Arc::new(Mutex::new(master.into_io()));
     ShellSession::new(ShellSessionParts {
         choice: ShellChoice::PowerShell,
         cwd: crate::test_fs::temp_root(),
@@ -105,30 +101,15 @@ fn test_shell(busy: Option<&str>) -> ShellSession {
         active_shell_file: crate::test_fs::temp_case("command-manager-active")
             .join("active-shell.txt"),
         command_start_timeout: core::time::Duration::from_secs(1),
-        process_tree: crate::runtime::session::manager::process_tree::ProcessTree::new(),
         child,
-        runtime,
+        reader: None,
     })
 }
-#[derive(Debug)]
-struct TestChild;
-impl PtyChild for TestChild {
-    fn pid(&self) -> u32 {
-        1
-    }
-    fn is_running(&self) -> bool {
-        false
-    }
-    fn wait(&mut self) -> Pin<Box<dyn Future<Output = rust_pty::Result<ExitStatus>> + Send + '_>> {
-        Box::pin(async { Ok(ExitStatus::Exited(0)) })
-    }
-    fn try_wait(&mut self) -> rust_pty::Result<Option<ExitStatus>> {
-        Ok(Some(ExitStatus::Exited(0)))
-    }
-    fn signal(&self, _signal: PtySignal) -> rust_pty::Result<()> {
-        Ok(())
-    }
-    fn kill(&mut self) -> rust_pty::Result<()> {
-        Ok(())
-    }
+#[cfg(windows)]
+fn test_child_command() -> ChildCommand {
+    ChildCommand::new("cmd.exe").args(["/D", "/Q"])
+}
+#[cfg(not(windows))]
+fn test_child_command() -> ChildCommand {
+    ChildCommand::new("sh")
 }

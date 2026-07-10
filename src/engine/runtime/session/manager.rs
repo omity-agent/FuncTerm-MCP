@@ -1,6 +1,5 @@
 mod command;
 mod launcher;
-mod process_tree;
 mod shell_session;
 mod tab;
 use crate::runtime::config::Settings;

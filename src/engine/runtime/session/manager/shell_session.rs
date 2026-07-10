@@ -1,4 +1,3 @@
-use super::process_tree;
 use crate::runtime::session::keyboard;
 use crate::runtime::session::records::{CommandRecord, read_done};
 use crate::runtime::session::terminal::{TerminalParser, TerminalWriter, lock_mutex, screen_title};
@@ -6,10 +5,10 @@ use crate::shell::{ShellChoice, shims};
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use core::time::Duration;
-use rust_pty::PtyChild;
+use rmux_pty::PtyChild;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use tokio::io::AsyncWriteExt as _;
+use std::thread::JoinHandle;
 pub(super) struct ShellSession {
     choice: Mutex<ShellChoice>,
     cwd: Mutex<PathBuf>,
@@ -19,9 +18,8 @@ pub(super) struct ShellSession {
     command_root: PathBuf,
     active_shell_file: PathBuf,
     command_start_timeout: Duration,
-    process_tree: process_tree::ProcessTree,
-    child: Mutex<Box<dyn PtyChild>>,
-    runtime: Arc<tokio::runtime::Runtime>,
+    child: Mutex<PtyChild>,
+    reader: Option<JoinHandle<()>>,
 }
 #[derive(Debug)]
 pub(super) enum KeyboardWriteFailure {
@@ -37,9 +35,8 @@ pub(super) struct ShellSessionParts {
     pub(super) command_root: PathBuf,
     pub(super) active_shell_file: PathBuf,
     pub(super) command_start_timeout: Duration,
-    pub(super) process_tree: process_tree::ProcessTree,
-    pub(super) child: Box<dyn PtyChild>,
-    pub(super) runtime: Arc<tokio::runtime::Runtime>,
+    pub(super) child: PtyChild,
+    pub(super) reader: Option<JoinHandle<()>>,
 }
 impl ShellSession {
     pub(super) fn new(parts: ShellSessionParts) -> Self {
@@ -52,9 +49,8 @@ impl ShellSession {
             command_root: parts.command_root,
             active_shell_file: parts.active_shell_file,
             command_start_timeout: parts.command_start_timeout,
-            process_tree: parts.process_tree,
             child: Mutex::new(parts.child),
-            runtime: parts.runtime,
+            reader: parts.reader,
         }
     }
     pub(super) fn cwd(&self) -> Result<PathBuf> {
@@ -84,10 +80,14 @@ impl ShellSession {
         Ok(())
     }
     pub(super) fn is_alive(&self) -> Result<bool> {
-        let status = lock_mutex(&self.child, "child")?
-            .try_wait()
-            .context("failed to poll shell child")?;
-        Ok(status.is_none())
+        let mut child = lock_mutex(&self.child, "child")?;
+        let status = child.try_wait().context("failed to poll shell child")?;
+        if status.is_some() {
+            close_pseudoconsole(&child);
+        }
+        let alive = status.is_none();
+        drop(child);
+        Ok(alive)
     }
     pub(super) fn write_keyboard_for_running_command(
         &self,
@@ -105,11 +105,7 @@ impl ShellSession {
         let choice = self.current_choice()?;
         let keyboard_bytes = choice.keyboard_bytes(bytes);
         let physical_bytes = keyboard::physical_bytes(keyboard_bytes.as_ref());
-        self.write_bytes(
-            physical_bytes.as_ref(),
-            "failed to write to pty",
-            "failed to flush pty writer",
-        )
+        self.write_bytes(physical_bytes.as_ref(), "failed to write to pty")
     }
     pub(super) fn write_invocation(
         &self,
@@ -124,28 +120,12 @@ impl ShellSession {
             &record.directory,
             &record.initial_cwd,
         )?;
-        self.write_bytes(
-            line.as_bytes(),
-            "failed to write command invocation",
-            "failed to flush command invocation",
-        )
+        self.write_bytes(line.as_bytes(), "failed to write command invocation")
     }
-    fn write_bytes(
-        &self,
-        bytes: &[u8],
-        write_context: &'static str,
-        flush_context: &'static str,
-    ) -> Result<()> {
-        let writer = Arc::clone(&self.writer);
-        self.runtime.block_on(async move {
-            let mut locked_writer = writer.lock().await;
-            locked_writer
-                .as_mut()
-                .write_all(bytes)
-                .await
-                .context(write_context)?;
-            locked_writer.as_mut().flush().await.context(flush_context)
-        })
+    fn write_bytes(&self, bytes: &[u8], write_context: &'static str) -> Result<()> {
+        lock_mutex(&self.writer, "pty writer")?
+            .write_all(bytes)
+            .context(write_context)
     }
     pub(super) fn update_cwd_from_done(&self, record: &CommandRecord) -> Result<()> {
         if let Some(done) = read_done(&record.done)? {
@@ -188,22 +168,36 @@ impl ShellSession {
 }
 impl Drop for ShellSession {
     fn drop(&mut self) {
-        if let Err(error) = self.process_tree.terminate() {
-            eprintln!("failed to terminate shell process tree during cleanup: {error}");
-        }
-        if let Ok(mut child) = self.child.lock() {
-            match child.try_wait() {
-                Ok(Some(_)) => {}
-                Ok(None) => {
-                    if let Err(error) = child.kill() {
-                        eprintln!("failed to kill shell child during cleanup: {error}");
-                    }
-                    if let Err(error) = self.runtime.block_on(child.wait()) {
-                        eprintln!("failed to wait shell child during cleanup: {error}");
-                    }
-                }
-                Err(error) => eprintln!("failed to poll shell child during cleanup: {error}"),
+        let child = match self.child.get_mut() {
+            Ok(child) => child,
+            Err(error) => {
+                eprintln!("child mutex poisoned during shell cleanup");
+                error.into_inner()
             }
+        };
+        match child.try_wait() {
+            Ok(Some(_)) => close_pseudoconsole(child),
+            Ok(None) => {
+                if let Err(error) = child.terminate_forcefully() {
+                    eprintln!("failed to kill shell child during cleanup: {error}");
+                }
+                if let Err(error) = child.wait() {
+                    eprintln!("failed to wait shell child during cleanup: {error}");
+                }
+                close_pseudoconsole(child);
+            }
+            Err(error) => eprintln!("failed to poll shell child during cleanup: {error}"),
+        }
+        if let Some(reader) = self.reader.take()
+            && reader.join().is_err()
+        {
+            eprintln!("pty reader thread panicked during shell cleanup");
         }
     }
 }
+#[cfg(windows)]
+fn close_pseudoconsole(child: &PtyChild) {
+    child.close_pseudoconsole();
+}
+#[cfg(not(windows))]
+fn close_pseudoconsole(_child: &PtyChild) {}
