@@ -20,7 +20,6 @@ false
 partial output without escaping: <tag> & raw
 </STDOUT>
 <STDERR>
-
 </STDERR>
 <EXIT_CODE>
 pending
@@ -33,5 +32,4 @@ false
 </FINISHED>
 </COMMAND>
 <NOTE>
-
 </NOTE>

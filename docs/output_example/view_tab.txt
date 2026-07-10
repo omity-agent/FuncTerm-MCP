@@ -20,5 +20,4 @@ PowerShell 7.5.0
 PS F:\workspace\FuncTerm>
 </SCREEN>
 <NOTE>
-
 </NOTE>

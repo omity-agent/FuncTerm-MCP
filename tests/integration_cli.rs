@@ -9,6 +9,8 @@ mod support;
 #[cfg(windows)]
 #[path = "cli/cases/tab_state.rs"]
 mod tab_state;
+#[path = "cli/cases/terminal.rs"]
+mod terminal;
 #[cfg(unix)]
 #[path = "cli/cases/unix.rs"]
 mod unix;
