@@ -1,7 +1,7 @@
 use crate::runtime::session::manager::shell_session::{
     KeyboardWriteFailure, ShellSession, ShellSessionParts,
 };
-use crate::runtime::session::terminal::{TerminalParser, TerminalWriter};
+use crate::runtime::session::terminal::{TerminalParser, TerminalWriter, start_reader};
 use crate::shell::ShellChoice;
 use alloc::sync::Arc;
 use rmux_pty::{ChildCommand, TerminalSize as PtyTerminalSize};
@@ -84,25 +84,27 @@ fn test_shell(busy: Option<&str>) -> ShellSession {
         .spawn()
         .unwrap();
     let (master, child) = spawned.into_parts();
-    let writer: TerminalWriter = Arc::new(Mutex::new(master.into_io()));
+    let writer: TerminalWriter = Arc::new(Mutex::new(master.try_clone_io().unwrap()));
+    let screen = Arc::new(Mutex::new(TerminalParser::new(
+        TerminalSize {
+            rows: 30,
+            cols: 120,
+        },
+        0,
+    )));
+    let reader = start_reader(Arc::clone(&screen), Arc::clone(&writer), master.into_io()).unwrap();
     ShellSession::new(ShellSessionParts {
         choice: ShellChoice::PowerShell,
         cwd: crate::test_fs::temp_root(),
         writer,
-        screen: Arc::new(Mutex::new(TerminalParser::new(
-            TerminalSize {
-                rows: 30,
-                cols: 120,
-            },
-            0,
-        ))),
+        screen,
         busy: busy.map(str::to_owned),
         command_root: crate::test_fs::temp_case("command-manager"),
         active_shell_file: crate::test_fs::temp_case("command-manager-active")
             .join("active-shell.txt"),
         command_start_timeout: core::time::Duration::from_secs(1),
         child,
-        reader: None,
+        reader: Some(reader),
     })
 }
 #[cfg(windows)]
