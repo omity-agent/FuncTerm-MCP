@@ -122,7 +122,7 @@ mod tests {
     use std::thread;
     #[test]
     fn startup_wait_uses_daemon_report_after_launcher_exits() {
-        let path = crate::test_fs::temp_case("startup-wait").join("ready.json");
+        let path = crate::test_fs::temp_dir("startup-wait").join("ready.json");
         let mut launcher = std::process::Command::new(std::env::current_exe().unwrap())
             .arg("--help")
             .stdin(Stdio::null())

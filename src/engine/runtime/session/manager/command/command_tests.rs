@@ -99,8 +99,8 @@ fn test_shell(busy: Option<&str>) -> ShellSession {
         writer,
         screen,
         busy: busy.map(str::to_owned),
-        command_root: crate::test_fs::temp_case("command-manager"),
-        active_shell_file: crate::test_fs::temp_case("command-manager-active")
+        command_root: crate::test_fs::temp_dir("command-manager"),
+        active_shell_file: crate::test_fs::temp_dir("command-manager-active")
             .join("active-shell.txt"),
         command_start_timeout: core::time::Duration::from_secs(1),
         child,

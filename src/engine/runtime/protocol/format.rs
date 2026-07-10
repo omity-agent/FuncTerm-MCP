@@ -85,30 +85,32 @@ pub(crate) fn command_plain_text(
     text
 }
 fn shell_text(shell: &ShellView, include_alive: bool) -> String {
+    let presentation = shell.presentation(include_alive);
     let mut text = String::new();
-    if include_alive {
-        append_element(&mut text, "ALIVE", &shell.alive.to_string());
+    if let Some(alive) = presentation.alive {
+        append_element(&mut text, "ALIVE", &alive.to_string());
     }
-    append_element(&mut text, "TITLE", &shell.title);
-    append_element(&mut text, "TYPE", shell.shell_type.display_name());
-    append_element(&mut text, "CWD", &shell.cwd);
-    append_element(&mut text, "IDLE", &shell.idle.to_string());
+    append_element(&mut text, "TITLE", presentation.title);
+    append_element(&mut text, "TYPE", presentation.shell_type);
+    append_element(&mut text, "CWD", presentation.cwd);
+    append_element(&mut text, "IDLE", &presentation.idle.to_string());
     text
 }
 fn command_text(command: &CommandView, command_id: Option<&str>) -> String {
-    let exit_code = command
+    let presentation = command.presentation(command_id);
+    let exit_code = presentation
         .exit_code
         .map_or_else(|| "pending".to_owned(), |code| code.to_string());
     let mut items = Vec::new();
-    if let Some(id) = command_id {
+    if let Some(id) = presentation.command_id {
         items.push(element("COMMAND_ID", id));
     }
     items.extend([
-        element("STDOUT", &command.stdout),
-        element("STDERR", &command.stderr),
+        element("STDOUT", presentation.stdout),
+        element("STDERR", presentation.stderr),
         element("EXIT_CODE", &exit_code),
-        element("TIME_CONSUMPTION", &command.time_consumption),
-        element("FINISHED", &command.finished.to_string()),
+        element("TIME_CONSUMPTION", presentation.time_consumption),
+        element("FINISHED", &presentation.finished.to_string()),
     ]);
     items.join("\n")
 }

@@ -1,6 +1,6 @@
 mod invocation;
 mod stdio;
-use crate::contract::{COMMAND_STATE_DIRECTORY, DONE_FILE, DONE_TEMP_FILE};
+use crate::contract::{COMMAND_STATE_DIRECTORY, DONE_FILE};
 use crate::shell::{ShellChoice, ShellStartup, shims};
 use anyhow::{Context as _, Result};
 use core::time::Duration;
@@ -95,9 +95,6 @@ fn complete_active_command(cwd: &Path, time_consumption: Duration) -> Result<()>
     let directory_path = PathBuf::from(directory);
     let state_dir = directory_path.join(COMMAND_STATE_DIRECTORY);
     let done_path = state_dir.join(DONE_FILE);
-    if done_path.exists() {
-        return Ok(());
-    }
     let done = EarlyDone {
         command_id: command_id.to_string_lossy().into_owned(),
         exit_code: 0,
@@ -105,22 +102,7 @@ fn complete_active_command(cwd: &Path, time_consumption: Duration) -> Result<()>
         cwd: cwd.to_string_lossy().into_owned(),
     };
     let text = sonic_rs::to_string(&done).context("failed to serialize early done file")?;
-    fs::create_dir_all(&state_dir).with_context(|| {
-        format!(
-            "failed to create command state directory {}",
-            state_dir.display()
-        )
-    })?;
-    let temp_path = state_dir.join(DONE_TEMP_FILE);
-    fs::write(&temp_path, text).context("failed to write early done file")?;
-    match fs::rename(&temp_path, &done_path) {
-        Ok(()) => Ok(()),
-        Err(_error) if done_path.exists() => {
-            fs::remove_file(&temp_path).context("failed to remove obsolete early done file")?;
-            Ok(())
-        }
-        Err(error) => Err(error).context("failed to publish early done file"),
-    }
+    crate::file_publish::write_once(&done_path, text).context("failed to publish early done file")
 }
 fn current_shell() -> Option<ShellChoice> {
     let value = std::env::var(shims::CURRENT_SHELL_ENV).ok()?;

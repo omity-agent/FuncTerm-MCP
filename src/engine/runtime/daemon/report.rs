@@ -60,17 +60,6 @@ impl StartupReporter {
     }
 }
 fn write_startup_file(path: &std::path::Path, text: &str) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).with_context(|| {
-            format!(
-                "failed to create startup report directory {}",
-                parent.display()
-            )
-        })?;
-    }
-    let temp_path = path.with_extension(format!("{}.tmp", std::process::id()));
-    std::fs::write(&temp_path, text)
-        .with_context(|| format!("failed to write startup report {}", temp_path.display()))?;
-    std::fs::rename(&temp_path, path)
+    crate::file_publish::write_replace(path, text)
         .with_context(|| format!("failed to publish startup report {}", path.display()))
 }

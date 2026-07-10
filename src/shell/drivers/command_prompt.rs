@@ -13,6 +13,9 @@ impl ShellDriver for CmdDriver {
     fn id(&self) -> &'static str {
         "cmd"
     }
+    fn display_name(&self) -> &'static str {
+        "Windows CMD"
+    }
     fn shim_executable_names(&self) -> &'static [&'static str] {
         &["cmd", "cmd.exe"]
     }

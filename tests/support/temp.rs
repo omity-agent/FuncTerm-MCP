@@ -15,16 +15,3 @@ pub(crate) fn temp_dir(name: &str) -> PathBuf {
     std::fs::create_dir_all(&path).unwrap();
     path
 }
-pub(crate) fn temp_env() -> Vec<(String, String)> {
-    let root = temp_root();
-    let text = root.to_string_lossy().into_owned();
-    platform_temp_env(text)
-}
-#[cfg(windows)]
-fn platform_temp_env(text: String) -> Vec<(String, String)> {
-    vec![("TMP".to_owned(), text.clone()), ("TEMP".to_owned(), text)]
-}
-#[cfg(not(windows))]
-fn platform_temp_env(text: String) -> Vec<(String, String)> {
-    vec![("TMPDIR".to_owned(), text)]
-}

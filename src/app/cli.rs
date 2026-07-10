@@ -153,7 +153,7 @@ mod tests {
     }
     #[test]
     fn internal_done_writer_serializes_json_strings() {
-        let directory = crate::test_fs::temp_case("internal-done-writer");
+        let directory = crate::test_fs::temp_dir("internal-done-writer");
         super::write_done(
             "command\"id",
             7,

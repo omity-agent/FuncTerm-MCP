@@ -1,5 +1,5 @@
 use crate::runtime::protocol::{
-    CommandView, Payload, ShellView, ViewResult,
+    CommandPresentation, Payload, ShellPresentation, ViewResult,
     format::{command_plain_text, tab_created_plain_text, tab_plain_text},
 };
 use alloc::sync::Arc;
@@ -11,44 +11,24 @@ pub(super) struct NewTabOutput<'payload> {
 }
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
 pub(super) struct ManualWriteOutput<'payload> {
-    pub(super) shell: ShellData<'payload>,
+    pub(super) shell: ShellPresentation<'payload>,
     pub(super) screen: &'payload str,
     pub(super) note: &'payload str,
 }
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
 pub(super) struct SendCommandOutput<'payload> {
-    pub(super) shell: ShellData<'payload>,
-    pub(super) command: CommandData<'payload>,
+    pub(super) shell: ShellPresentation<'payload>,
+    pub(super) command: CommandPresentation<'payload>,
     pub(super) note: &'payload str,
 }
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
 pub(super) struct ViewOutput<'payload> {
-    pub(super) shell: ShellData<'payload>,
+    pub(super) shell: ShellPresentation<'payload>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) screen: Option<&'payload str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) command: Option<CommandData<'payload>>,
+    pub(super) command: Option<CommandPresentation<'payload>>,
     pub(super) note: &'payload str,
-}
-#[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
-pub(super) struct ShellData<'payload> {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) alive: Option<bool>,
-    pub(super) title: &'payload str,
-    #[serde(rename = "type")]
-    pub(super) shell_type: &'static str,
-    pub(super) cwd: &'payload str,
-    pub(super) idle: bool,
-}
-#[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
-pub(super) struct CommandData<'payload> {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) command_id: Option<&'payload str>,
-    pub(super) stdout: &'payload str,
-    pub(super) stderr: &'payload str,
-    pub(super) exit_code: Option<i32>,
-    pub(super) time_consumption: &'payload str,
-    pub(super) finished: bool,
 }
 pub(super) fn schema<T>() -> Arc<JsonObject>
 where
@@ -81,7 +61,7 @@ pub(super) fn manual_write(payload: Payload) -> Result<CallToolResult, String> {
         } => tool_result(
             tab_plain_text(&shell, &screen, &note, false),
             &ManualWriteOutput {
-                shell: ShellData::from_shell(&shell, false),
+                shell: shell.presentation(false),
                 screen: &screen,
                 note: &note,
             },
@@ -109,8 +89,8 @@ pub(super) fn send_command(payload: Payload) -> Result<CallToolResult, String> {
         } => tool_result(
             command_plain_text(&shell, &command, &note, false, Some(&command_id)),
             &SendCommandOutput {
-                shell: ShellData::from_shell(&shell, false),
-                command: CommandData::from_command(&command, Some(&command_id)),
+                shell: shell.presentation(false),
+                command: command.presentation(Some(&command_id)),
                 note: &note,
             },
         ),
@@ -133,7 +113,7 @@ pub(super) fn view(payload: Payload) -> Result<CallToolResult, String> {
         }) => tool_result(
             tab_plain_text(&shell, &screen, &note, true),
             &ViewOutput {
-                shell: ShellData::from_shell(&shell, true),
+                shell: shell.presentation(true),
                 screen: Some(&screen),
                 command: None,
                 note: &note,
@@ -146,9 +126,9 @@ pub(super) fn view(payload: Payload) -> Result<CallToolResult, String> {
         }) => tool_result(
             command_plain_text(&shell, &command, &note, true, None),
             &ViewOutput {
-                shell: ShellData::from_shell(&shell, true),
+                shell: shell.presentation(true),
                 screen: None,
-                command: Some(CommandData::from_command(&command, None)),
+                command: Some(command.presentation(None)),
                 note: &note,
             },
         ),
@@ -170,27 +150,4 @@ where
 }
 fn unexpected_response() -> String {
     "daemon returned an unexpected response".to_owned()
-}
-impl<'payload> ShellData<'payload> {
-    fn from_shell(shell: &'payload ShellView, include_alive: bool) -> Self {
-        Self {
-            alive: include_alive.then_some(shell.alive),
-            title: &shell.title,
-            shell_type: shell.shell_type.display_name(),
-            cwd: &shell.cwd,
-            idle: shell.idle,
-        }
-    }
-}
-impl<'payload> CommandData<'payload> {
-    fn from_command(command: &'payload CommandView, command_id: Option<&'payload str>) -> Self {
-        Self {
-            command_id,
-            stdout: &command.stdout,
-            stderr: &command.stderr,
-            exit_code: command.exit_code,
-            time_consumption: &command.time_consumption,
-            finished: command.finished,
-        }
-    }
 }

@@ -87,7 +87,6 @@ base64-turbo = ">=0.2.0"
 blake3 = ">=1.8.5"
 clap = { version = ">=4.6.1", features = ["derive"] }
 encoding_rs = ">=0.8.35"
-hex = ">=0.4.3"
 interprocess = ">=2.4.2"
 libc = ">=0.2.186"
 mimalloc = { version = ">=0.1.48", features = ["v3"] }

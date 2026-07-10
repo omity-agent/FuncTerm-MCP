@@ -39,6 +39,12 @@ impl ShellDriver for PosixDriver {
             PosixKind::Zsh => "zsh",
         }
     }
+    fn display_name(&self) -> &'static str {
+        match self.kind {
+            PosixKind::Bash => "Bash",
+            PosixKind::Zsh => "Zsh",
+        }
+    }
     fn shim_executable_names(&self) -> &'static [&'static str] {
         match self.kind {
             PosixKind::Bash => &["bash", "bash.exe"],

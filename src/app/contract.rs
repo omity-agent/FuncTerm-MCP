@@ -6,7 +6,6 @@ pub(crate) const COMMAND_SCRIPT_FILE: &str = "command.cmd";
 pub(crate) const COMMAND_OUTPUT_DIRECTORY: &str = "output";
 pub(crate) const COMMAND_STATE_DIRECTORY: &str = "state";
 pub(crate) const DONE_FILE: &str = "done.json";
-pub(crate) const DONE_TEMP_FILE: &str = "done.json.tmp";
 pub(crate) const HELPER_EXECUTABLE_ENV: &str = "FUNCTERM_HELPER_EXECUTABLE";
 pub(crate) const POWERSHELL_COMMAND_FUNCTION: &str = "Invoke-FuncTermCommand";
 pub(crate) const POSIX_COMMAND_FUNCTION: &str = "functerm_run_command";

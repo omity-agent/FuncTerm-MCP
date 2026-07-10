@@ -1,10 +1,12 @@
 #![cfg_attr(windows, feature(windows_process_extensions_raw_attribute))]
 mod app;
 mod engine;
+mod file_publish;
 pub(crate) use app::{cli, commands, contract, path_text as text};
 pub(crate) use engine::{mcp, runtime, shim};
 pub mod shell;
 #[cfg(test)]
+#[path = "../tests/support/temp.rs"]
 pub(crate) mod test_fs;
 extern crate alloc;
 use anyhow::{Context as _, Result};

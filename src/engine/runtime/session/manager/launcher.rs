@@ -1,3 +1,4 @@
+use super::process;
 use super::shell_session::{ShellSession, ShellSessionParts};
 use crate::runtime::config::Settings;
 use crate::runtime::session::records::wait_for_path;
@@ -68,7 +69,7 @@ impl ShellLauncher {
         let writer_io = match master.try_clone_io() {
             Ok(writer_io) => writer_io,
             Err(error) => {
-                cleanup_unregistered_child(&mut child);
+                process::cleanup(&mut child, "unregistered shell child");
                 return Err(error).context("failed to clone pty writer");
             }
         };
@@ -84,15 +85,15 @@ impl ShellLauncher {
         let reader_worker = match start_reader(Arc::clone(&screen), Arc::clone(&writer), reader) {
             Ok(worker) => worker,
             Err(error) => {
-                cleanup_unregistered_child(&mut child);
+                process::cleanup(&mut child, "unregistered shell child");
                 return Err(error).context("failed to start pty reader");
             }
         };
         if let Err(error) =
             wait_for_shell_startup(&mut child, &ready_file, &screen, startup_timeout)
         {
-            cleanup_unregistered_child(&mut child);
-            join_reader(reader_worker);
+            process::cleanup(&mut child, "unregistered shell child");
+            process::join_reader(reader_worker, "pty reader thread");
             return Err(error);
         }
         let active_shell_file = tab_state.join("active-shell.txt");
@@ -143,29 +144,3 @@ fn startup_screen(screen: &Arc<Mutex<TerminalParser>>) -> Result<String> {
     let contents = lock_mutex(screen, "screen")?.screen().contents();
     Ok(contents.trim().to_owned())
 }
-fn cleanup_unregistered_child(child: &mut PtyChild) {
-    match child.try_wait() {
-        Ok(Some(_)) => {}
-        Ok(None) => {
-            if let Err(error) = child.terminate_forcefully() {
-                eprintln!("failed to kill unregistered shell child: {error}");
-            }
-            if let Err(error) = child.wait() {
-                eprintln!("failed to wait unregistered shell child: {error}");
-            }
-        }
-        Err(error) => eprintln!("failed to poll unregistered shell child: {error}"),
-    }
-    close_pseudoconsole(child);
-}
-fn join_reader(reader: std::thread::JoinHandle<()>) {
-    if reader.join().is_err() {
-        eprintln!("pty reader thread panicked during shell cleanup");
-    }
-}
-#[cfg(windows)]
-fn close_pseudoconsole(child: &PtyChild) {
-    child.close_pseudoconsole();
-}
-#[cfg(not(windows))]
-fn close_pseudoconsole(_child: &PtyChild) {}

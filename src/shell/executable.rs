@@ -91,7 +91,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn windows_system32_bash_is_rejected_as_wsl() {
-        let system_root = crate::test_fs::temp_case("wsl-bash").join("Windows");
+        let system_root = crate::test_fs::temp_dir("wsl-bash").join("Windows");
         let system32 = system_root.join("System32");
         std::fs::create_dir_all(&system32).unwrap();
         let bash = system32.join("bash.exe");
@@ -101,7 +101,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn non_system32_bash_is_available() {
-        let root = crate::test_fs::temp_case("non-wsl-bash");
+        let root = crate::test_fs::temp_dir("non-wsl-bash");
         let directory = root.join("Git").join("bin");
         std::fs::create_dir_all(&directory).unwrap();
         let bash = directory.join("bash.exe");

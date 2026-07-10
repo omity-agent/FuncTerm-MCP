@@ -6,7 +6,7 @@ mod daemon;
 mod parse;
 #[path = "support/process.rs"]
 mod process;
-#[path = "support/temp.rs"]
+#[path = "../support/temp.rs"]
 mod temp;
 pub(crate) use command::run_cli_with_env;
 #[cfg(windows)]

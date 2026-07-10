@@ -3,7 +3,7 @@ use crate::contract::HELPER_EXECUTABLE_ENV;
 use crate::runtime::config::Settings;
 use anyhow::{Context as _, Result};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 pub(crate) const ACTIVE_SHELL_FILE_ENV: &str = "FUNCTERM_ACTIVE_SHELL_FILE";
 pub(crate) const CURRENT_SHELL_ENV: &str = "FUNCTERM_CURRENT_SHELL";
 pub(crate) const SESSION_ROOT_ENV: &str = "FUNCTERM_SESSION_ROOT";
@@ -77,32 +77,11 @@ pub(crate) fn ensure_directory(shim_dir: &Path) -> Result<()> {
     Ok(())
 }
 fn create_shim_alias(current_exe: &Path, alias_path: &Path, alias: &str) -> Result<()> {
-    if alias_path.exists() {
-        return Ok(());
-    }
-    let temp_path =
-        alias_path.with_extension(format!("{}.{}.tmp", std::process::id(), nanoid::nanoid!()));
-    fs::copy(current_exe, &temp_path)
-        .with_context(|| format!("failed to stage shell shim {alias}"))?;
-    match fs::rename(&temp_path, alias_path) {
-        Ok(()) => Ok(()),
-        Err(_error) if alias_path.exists() => {
-            fs::remove_file(&temp_path).with_context(|| {
-                format!(
-                    "failed to remove obsolete shell shim {}",
-                    temp_path.display()
-                )
-            })?;
-            Ok(())
-        }
-        Err(error) => Err(error).with_context(|| format!("failed to create shell shim {alias}")),
-    }
+    crate::file_publish::copy_once(current_exe, alias_path)
+        .with_context(|| format!("failed to create shell shim {alias}"))
 }
 pub(crate) fn write_active_shell(path: &Path, shell: ShellChoice) -> Result<()> {
-    let temp_path = active_shell_temp_path(path);
-    fs::write(&temp_path, shell.canonical_name())
-        .with_context(|| format!("failed to write active shell state {}", temp_path.display()))?;
-    replace_file(&temp_path, path)
+    crate::file_publish::write_replace(path, shell.canonical_name())
         .with_context(|| format!("failed to publish active shell state {}", path.display()))
 }
 pub(crate) fn read_active_shell(path: &Path) -> Result<Option<ShellChoice>> {
@@ -120,32 +99,6 @@ fn prepend_path(shim_dir: &Path) -> Result<String> {
     }
     let joined = std::env::join_paths(parts).context("failed to join PATH entries")?;
     crate::text::os_text(joined, "PATH")
-}
-fn active_shell_temp_path(path: &Path) -> PathBuf {
-    path.with_extension(format!("{}.tmp", std::process::id()))
-}
-#[cfg(unix)]
-fn replace_file(source: &Path, destination: &Path) -> Result<()> {
-    fs::rename(source, destination).map_err(Into::into)
-}
-#[cfg(windows)]
-fn replace_file(source: &Path, destination: &Path) -> Result<()> {
-    use windows_sys::Win32::Storage::FileSystem::{
-        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
-    };
-    let source_wide = wide_path(source);
-    let destination_wide = wide_path(destination);
-    let flags = MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH;
-    let moved = unsafe { MoveFileExW(source_wide.as_ptr(), destination_wide.as_ptr(), flags) };
-    if moved == 0_i32 {
-        return Err(std::io::Error::last_os_error()).context("MoveFileExW failed");
-    }
-    Ok(())
-}
-#[cfg(windows)]
-fn wide_path(path: &Path) -> Vec<u16> {
-    use std::os::windows::ffi::OsStrExt as _;
-    path.as_os_str().encode_wide().chain([0]).collect()
 }
 #[cfg(test)]
 mod tests {
@@ -167,7 +120,7 @@ mod tests {
     }
     #[test]
     fn environment_does_not_create_shim_directory() {
-        let root = crate::test_fs::temp_case("shim-environment");
+        let root = crate::test_fs::temp_dir("shim-environment");
         let session_root = root.join("session");
         let shim_dir = root.join("shims");
         let env = environment(
@@ -182,7 +135,7 @@ mod tests {
     }
     #[test]
     fn ensure_directory_creates_shell_aliases() {
-        let shim_dir = crate::test_fs::temp_case("shim-aliases");
+        let shim_dir = crate::test_fs::temp_dir("shim-aliases");
         ensure_directory(&shim_dir).unwrap();
         for shell in ShellChoice::all() {
             for alias in shell.shim_executable_names() {

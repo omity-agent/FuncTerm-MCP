@@ -1,3 +1,4 @@
+use super::process;
 use crate::runtime::session::keyboard;
 use crate::runtime::session::records::{CommandRecord, read_done};
 use crate::runtime::session::terminal::{TerminalParser, TerminalWriter, lock_mutex, screen_title};
@@ -81,11 +82,7 @@ impl ShellSession {
     }
     pub(super) fn is_alive(&self) -> Result<bool> {
         let mut child = lock_mutex(&self.child, "child")?;
-        let status = child.try_wait().context("failed to poll shell child")?;
-        if status.is_some() {
-            close_pseudoconsole(&child);
-        }
-        let alive = status.is_none();
+        let alive = process::is_alive(&mut child)?;
         drop(child);
         Ok(alive)
     }
@@ -175,29 +172,9 @@ impl Drop for ShellSession {
                 error.into_inner()
             }
         };
-        match child.try_wait() {
-            Ok(Some(_)) => close_pseudoconsole(child),
-            Ok(None) => {
-                if let Err(error) = child.terminate_forcefully() {
-                    eprintln!("failed to kill shell child during cleanup: {error}");
-                }
-                if let Err(error) = child.wait() {
-                    eprintln!("failed to wait shell child during cleanup: {error}");
-                }
-                close_pseudoconsole(child);
-            }
-            Err(error) => eprintln!("failed to poll shell child during cleanup: {error}"),
-        }
-        if let Some(reader) = self.reader.take()
-            && reader.join().is_err()
-        {
-            eprintln!("pty reader thread panicked during shell cleanup");
+        process::cleanup(child, "shell child during cleanup");
+        if let Some(reader) = self.reader.take() {
+            process::join_reader(reader, "pty reader thread");
         }
     }
 }
-#[cfg(windows)]
-fn close_pseudoconsole(child: &PtyChild) {
-    child.close_pseudoconsole();
-}
-#[cfg(not(windows))]
-fn close_pseudoconsole(_child: &PtyChild) {}

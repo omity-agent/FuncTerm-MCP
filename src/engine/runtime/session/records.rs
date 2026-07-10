@@ -107,9 +107,6 @@ pub(super) fn write_failed_result(
     record: &CommandRecord,
     _message: &str,
 ) -> Result<()> {
-    if record.done.exists() {
-        return Ok(());
-    }
     if let Some(parent) = record.stderr.parent() {
         fs::create_dir_all(parent)
             .with_context(|| format!("failed to create command directory {}", parent.display()))?;
@@ -121,18 +118,8 @@ pub(super) fn write_failed_result(
         cwd: crate::text::path_text(&record.initial_cwd, "cwd")?,
     };
     let text = sonic_rs::to_string(&done).context("failed to serialize failed done file")?;
-    let temp_path = record.done.with_extension("json.tmp");
-    fs::write(&temp_path, text)
-        .with_context(|| format!("failed to write {}", temp_path.display()))?;
-    match fs::rename(&temp_path, &record.done) {
-        Ok(()) => Ok(()),
-        Err(_error) if record.done.exists() => {
-            fs::remove_file(&temp_path)
-                .with_context(|| format!("failed to remove {}", temp_path.display()))?;
-            Ok(())
-        }
-        Err(error) => Err(error).context("failed to publish failed done file"),
-    }
+    crate::file_publish::write_once(&record.done, text)
+        .context("failed to publish failed done file")
 }
 pub(super) fn command_note(stdout: &str, stderr: &str, extra: &str) -> String {
     let mut lines = Vec::new();

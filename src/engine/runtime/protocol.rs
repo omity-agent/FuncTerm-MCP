@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 pub(crate) mod format;
 mod kind;
+mod presentation;
+pub(crate) use presentation::{CommandPresentation, ShellPresentation};
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) enum Request {
     Ping,

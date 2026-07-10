@@ -26,6 +26,7 @@ pub(crate) struct DriverStartup {
 pub(crate) trait ShellDriver {
     fn choice(&self) -> ShellChoice;
     fn id(&self) -> &'static str;
+    fn display_name(&self) -> &'static str;
     fn shim_executable_names(&self) -> &'static [&'static str];
     fn shim_env_name(&self) -> &'static str;
     fn executable_candidates(&self, settings: &Settings) -> Result<Vec<String>>;

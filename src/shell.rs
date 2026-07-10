@@ -79,14 +79,8 @@ impl ShellChoice {
     pub(crate) fn canonical_name(self) -> &'static str {
         self.driver().id()
     }
-    pub(crate) const fn display_name(self) -> &'static str {
-        match self {
-            Self::PowerShell => "PowerShell",
-            Self::Bash => "Bash",
-            Self::NuShell => "NuShell",
-            Self::Zsh => "Zsh",
-            Self::Cmd => "Windows CMD",
-        }
+    pub(crate) fn display_name(self) -> &'static str {
+        self.driver().display_name()
     }
     pub(crate) fn shim_env_name(self) -> &'static str {
         self.driver().shim_env_name()

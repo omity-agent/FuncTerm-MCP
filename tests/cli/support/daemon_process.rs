@@ -82,7 +82,7 @@ pub(crate) fn locked_with_env(extra_env: &[(&str, &str)]) -> TestGuard {
         let value = pair.1.to_owned();
         (key, value)
     }));
-    env.extend(temp::temp_env());
+    env.extend(temp_environment());
     set_active_env(&env);
     let child = spawn_daemon(&env, &service_name);
     TestGuard {
@@ -104,6 +104,18 @@ pub(crate) fn set_active_env(env: &[(String, String)]) {
 fn unique_service_name() -> String {
     let unique = SERVICE_COUNTER.fetch_add(1, Ordering::Relaxed);
     format!("functerm/test/{}/{}", unique, std::process::id())
+}
+fn temp_environment() -> Vec<(String, String)> {
+    let text = temp::temp_root().to_string_lossy().into_owned();
+    platform_temp_environment(text)
+}
+#[cfg(windows)]
+fn platform_temp_environment(text: String) -> Vec<(String, String)> {
+    vec![("TMP".to_owned(), text.clone()), ("TEMP".to_owned(), text)]
+}
+#[cfg(not(windows))]
+fn platform_temp_environment(text: String) -> Vec<(String, String)> {
+    vec![("TMPDIR".to_owned(), text)]
 }
 fn spawn_daemon(env: &[(String, String)], service_name: &str) -> ChildGuard {
     let mut command = Command::new(exe());
