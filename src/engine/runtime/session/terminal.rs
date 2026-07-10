@@ -1,34 +1,25 @@
 use alloc::sync::Arc;
-use anyhow::{Context as _, Result};
-use rmux_pty::PtyIo;
+use anyhow::Result;
+use std::io::{Read, Write};
 use std::sync::{Mutex, MutexGuard};
-use std::thread::JoinHandle;
+use std::thread::{self, JoinHandle};
 use tastty_core::{HostProfile, Parser, host_reply::auto_reply_bytes};
 pub(super) type TerminalParser = Parser;
-pub(super) type TerminalWriter = Arc<Mutex<PtyIo>>;
 pub(super) fn start_reader(
     screen: Arc<Mutex<TerminalParser>>,
-    writer: TerminalWriter,
-    reader: PtyIo,
+    writer: Arc<Mutex<Box<dyn Write + Send>>>,
+    mut owned_reader: Box<dyn Read + Send>,
 ) -> std::io::Result<JoinHandle<()>> {
-    std::thread::Builder::new()
+    thread::Builder::new()
         .name("functerm-pty-reader".to_owned())
         .spawn(move || {
-            release_startup_guard(&reader);
             let host = HostProfile::default();
             let mut buffer = [0_u8; 8192];
             loop {
-                match reader.read(&mut buffer) {
-                    Ok(0) => break,
-                    Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
-                    Err(error) if is_pty_eof(&error) => break,
-                    Err(error) => {
-                        eprintln!("failed to read pty output: {error}");
-                        break;
-                    }
+                match owned_reader.read(&mut buffer) {
+                    Ok(0) | Err(_) => break,
                     Ok(read_len) => {
                         let Some(chunk) = buffer.get(..read_len) else {
-                            eprintln!("pty returned an invalid output length: {read_len}");
                             break;
                         };
                         let replies = match screen.lock() {
@@ -39,18 +30,11 @@ pub(super) fn start_reader(
                                     .drain_events()
                                     .into_iter()
                                     .filter_map(|event| auto_reply_bytes(&event, &host))
-                                    .flatten()
-                                    .collect::<Vec<u8>>()
+                                    .collect::<Vec<_>>()
                             }
-                            Err(error) => {
-                                eprintln!("screen mutex poisoned while reading pty: {error}");
-                                break;
-                            }
+                            Err(_) => break,
                         };
-                        if let Err(error) = write_replies(&writer, &replies) {
-                            eprintln!("failed to answer terminal host query: {error:#}");
-                            break;
-                        }
+                        write_replies(&writer, &replies);
                     }
                 }
             }
@@ -59,13 +43,24 @@ pub(super) fn start_reader(
 pub(super) fn screen_title(parser: &TerminalParser) -> String {
     parser.screen().title().to_owned()
 }
-fn write_replies(writer: &TerminalWriter, replies: &[u8]) -> Result<()> {
+fn write_replies(writer: &Arc<Mutex<Box<dyn Write + Send>>>, replies: &[Vec<u8>]) {
     if replies.is_empty() {
-        return Ok(());
+        return;
     }
-    lock_mutex(writer, "pty writer")?
-        .write_all(replies)
-        .context("failed to write terminal host query reply")
+    match writer.lock() {
+        Ok(mut locked_writer) => {
+            for reply in replies {
+                if let Err(error) = locked_writer.write_all(reply) {
+                    eprintln!("failed to answer terminal host query: {error}");
+                    return;
+                }
+            }
+            if let Err(error) = locked_writer.flush() {
+                eprintln!("failed to flush terminal host query replies: {error}");
+            }
+        }
+        Err(error) => eprintln!("terminal writer mutex poisoned while replying: {error}"),
+    }
 }
 pub(super) fn lock_mutex<'guard, T>(
     mutex: &'guard Mutex<T>,
@@ -74,18 +69,4 @@ pub(super) fn lock_mutex<'guard, T>(
     mutex
         .lock()
         .map_err(|error| anyhow::anyhow!("{name} mutex poisoned: {error}"))
-}
-#[cfg(unix)]
-fn release_startup_guard(reader: &PtyIo) {
-    reader.release_startup_slave_guard();
-}
-#[cfg(not(unix))]
-const fn release_startup_guard(_reader: &PtyIo) {}
-#[cfg(unix)]
-fn is_pty_eof(error: &std::io::Error) -> bool {
-    error.raw_os_error() == Some(libc::EIO)
-}
-#[cfg(not(unix))]
-const fn is_pty_eof(_error: &std::io::Error) -> bool {
-    false
 }

@@ -1,25 +1,28 @@
-use super::process;
+use super::{process, process_tree};
 use crate::runtime::session::keyboard;
 use crate::runtime::session::records::{CommandRecord, read_done};
-use crate::runtime::session::terminal::{TerminalParser, TerminalWriter, lock_mutex, screen_title};
+use crate::runtime::session::terminal::{TerminalParser, lock_mutex, screen_title};
 use crate::shell::{ShellChoice, shims};
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use core::time::Duration;
-use rmux_pty::PtyChild;
+use portable_pty::{Child, SlavePty};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::thread::JoinHandle;
 pub(super) struct ShellSession {
     choice: Mutex<ShellChoice>,
     cwd: Mutex<PathBuf>,
-    writer: TerminalWriter,
+    writer: Arc<Mutex<Box<dyn Write + Send>>>,
     screen: Arc<Mutex<TerminalParser>>,
     busy: Mutex<Option<String>>,
     command_root: PathBuf,
     active_shell_file: PathBuf,
     command_start_timeout: Duration,
-    child: Mutex<PtyChild>,
+    process_tree: process_tree::ProcessTree,
+    child: Mutex<Box<dyn Child + Send + Sync>>,
+    _slave: Mutex<Box<dyn SlavePty + Send>>,
     reader: Option<JoinHandle<()>>,
 }
 #[derive(Debug)]
@@ -30,13 +33,15 @@ pub(super) enum KeyboardWriteFailure {
 pub(super) struct ShellSessionParts {
     pub(super) choice: ShellChoice,
     pub(super) cwd: PathBuf,
-    pub(super) writer: TerminalWriter,
+    pub(super) writer: Arc<Mutex<Box<dyn Write + Send>>>,
     pub(super) screen: Arc<Mutex<TerminalParser>>,
     pub(super) busy: Option<String>,
     pub(super) command_root: PathBuf,
     pub(super) active_shell_file: PathBuf,
     pub(super) command_start_timeout: Duration,
-    pub(super) child: PtyChild,
+    pub(super) process_tree: process_tree::ProcessTree,
+    pub(super) child: Box<dyn Child + Send + Sync>,
+    pub(super) slave: Box<dyn SlavePty + Send>,
     pub(super) reader: Option<JoinHandle<()>>,
 }
 impl ShellSession {
@@ -50,7 +55,9 @@ impl ShellSession {
             command_root: parts.command_root,
             active_shell_file: parts.active_shell_file,
             command_start_timeout: parts.command_start_timeout,
+            process_tree: parts.process_tree,
             child: Mutex::new(parts.child),
+            _slave: Mutex::new(parts.slave),
             reader: parts.reader,
         }
     }
@@ -82,7 +89,7 @@ impl ShellSession {
     }
     pub(super) fn is_alive(&self) -> Result<bool> {
         let mut child = lock_mutex(&self.child, "child")?;
-        let alive = process::is_alive(&mut child)?;
+        let alive = process::is_alive(child.as_mut())?;
         drop(child);
         Ok(alive)
     }
@@ -102,7 +109,11 @@ impl ShellSession {
         let choice = self.current_choice()?;
         let keyboard_bytes = choice.keyboard_bytes(bytes);
         let physical_bytes = keyboard::physical_bytes(keyboard_bytes.as_ref());
-        self.write_bytes(physical_bytes.as_ref(), "failed to write to pty")
+        let mut writer = lock_mutex(&self.writer, "writer")?;
+        writer
+            .write_all(physical_bytes.as_ref())
+            .context("failed to write to pty")?;
+        writer.flush().context("failed to flush pty writer")
     }
     pub(super) fn write_invocation(
         &self,
@@ -117,12 +128,11 @@ impl ShellSession {
             &record.directory,
             &record.initial_cwd,
         )?;
-        self.write_bytes(line.as_bytes(), "failed to write command invocation")
-    }
-    fn write_bytes(&self, bytes: &[u8], write_context: &'static str) -> Result<()> {
-        lock_mutex(&self.writer, "pty writer")?
-            .write_all(bytes)
-            .context(write_context)
+        let mut writer = lock_mutex(&self.writer, "writer")?;
+        writer
+            .write_all(line.as_bytes())
+            .context("failed to write command invocation")?;
+        writer.flush().context("failed to flush command invocation")
     }
     pub(super) fn update_cwd_from_done(&self, record: &CommandRecord) -> Result<()> {
         if let Some(done) = read_done(&record.done)? {
@@ -165,6 +175,9 @@ impl ShellSession {
 }
 impl Drop for ShellSession {
     fn drop(&mut self) {
+        if let Err(error) = self.process_tree.terminate() {
+            eprintln!("failed to terminate shell process tree during cleanup: {error}");
+        }
         let child = match self.child.get_mut() {
             Ok(child) => child,
             Err(error) => {
@@ -172,7 +185,7 @@ impl Drop for ShellSession {
                 error.into_inner()
             }
         };
-        process::cleanup(child, "shell child during cleanup");
+        process::cleanup(child.as_mut(), "shell child during cleanup");
         if let Some(reader) = self.reader.take() {
             process::join_reader(reader, "pty reader thread");
         }

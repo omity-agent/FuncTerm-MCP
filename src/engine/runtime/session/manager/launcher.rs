@@ -1,14 +1,17 @@
 use super::process;
-use super::shell_session::{ShellSession, ShellSessionParts};
+use super::{
+    process_tree,
+    shell_session::{ShellSession, ShellSessionParts},
+};
 use crate::runtime::config::Settings;
 use crate::runtime::session::records::wait_for_path;
 use crate::runtime::session::terminal::{TerminalParser, lock_mutex, start_reader};
 use crate::runtime::temp;
-use crate::shell::{ShellChoice, shims};
+use crate::shell::{ShellChoice, ShellStartup, shims};
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result, bail};
 use core::time::Duration;
-use rmux_pty::{ChildCommand, PtyChild, TerminalSize as PtyTerminalSize};
+use portable_pty::{Child, CommandBuilder, PtySize, native_pty_system};
 use std::path::Path;
 use std::sync::Mutex;
 use tastty_core::TerminalSize;
@@ -49,32 +52,44 @@ impl ShellLauncher {
             &self.shim_dir,
             starting_shell,
         )?);
-        let executable = starting_shell.executable_path(&self.settings)?;
+        let pair = native_pty_system()
+            .openpty(PtySize {
+                rows: self.settings.terminal_rows,
+                cols: self.settings.terminal_cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .context("failed to open pty")?;
+        let executable = starting_shell.executable(&self.settings)?;
+        let mut command = CommandBuilder::new(executable);
         let ready_file = startup.ready_file.clone();
-        let startup_timeout =
-            Duration::try_from_secs_f64(self.settings.shell_startup_timeout_seconds)
-                .context("shell_startup_timeout_seconds must be finite and non-negative")?;
-        let mut command = ChildCommand::new(executable)
-            .args(startup.args)
-            .current_dir(starting_directory)
-            .size(PtyTerminalSize::new(
-                self.settings.terminal_cols,
-                self.settings.terminal_rows,
-            ));
-        for (name, value) in startup.env {
-            command = command.env(name, value);
+        apply_startup(&mut command, startup);
+        command.cwd(starting_directory);
+        let process_tree = process_tree::ProcessTree::new();
+        let mut child = pair
+            .slave
+            .spawn_command(command)
+            .context("failed to spawn shell")?;
+        if let Err(error) = process_tree
+            .attach(child.as_ref())
+            .context("failed to guard shell process tree")
+        {
+            process::cleanup(child.as_mut(), "unregistered shell child");
+            return Err(error);
         }
-        let spawned = command.spawn().context("failed to spawn shell")?;
-        let (master, mut child) = spawned.into_parts();
-        let writer_io = match master.try_clone_io() {
-            Ok(writer_io) => writer_io,
-            Err(error) => {
-                process::cleanup(&mut child, "unregistered shell child");
-                return Err(error).context("failed to clone pty writer");
-            }
-        };
+        let reader = pair
+            .master
+            .try_clone_reader()
+            .map_err(|error| {
+                process::cleanup(child.as_mut(), "unregistered shell child");
+                anyhow::anyhow!(error)
+            })
+            .context("failed to clone pty reader")?;
+        let writer_io = pair.master.take_writer().map_err(|error| {
+            process::cleanup(child.as_mut(), "unregistered shell child");
+            anyhow::anyhow!(error)
+        })?;
         let writer = Arc::new(Mutex::new(writer_io));
-        let reader = master.into_io();
         let screen = Arc::new(Mutex::new(TerminalParser::new(
             TerminalSize {
                 rows: self.settings.terminal_rows,
@@ -82,17 +97,20 @@ impl ShellLauncher {
             },
             0,
         )));
+        let startup_timeout =
+            Duration::try_from_secs_f64(self.settings.shell_startup_timeout_seconds)
+                .context("shell_startup_timeout_seconds must be finite and non-negative")?;
         let reader_worker = match start_reader(Arc::clone(&screen), Arc::clone(&writer), reader) {
             Ok(worker) => worker,
             Err(error) => {
-                process::cleanup(&mut child, "unregistered shell child");
+                process::cleanup(child.as_mut(), "unregistered shell child");
                 return Err(error).context("failed to start pty reader");
             }
         };
         if let Err(error) =
             wait_for_shell_startup(&mut child, &ready_file, &screen, startup_timeout)
         {
-            process::cleanup(&mut child, "unregistered shell child");
+            process::cleanup(child.as_mut(), "unregistered shell child");
             process::join_reader(reader_worker, "pty reader thread");
             return Err(error);
         }
@@ -106,7 +124,9 @@ impl ShellLauncher {
             command_root,
             active_shell_file,
             command_start_timeout: startup_timeout,
+            process_tree,
             child,
+            slave: pair.slave,
             reader: Some(reader_worker),
         })))
     }
@@ -114,8 +134,14 @@ impl ShellLauncher {
 fn runtime_generation() -> String {
     format!("{}-{}", std::process::id(), nanoid::nanoid!())
 }
+pub(super) fn apply_startup(command: &mut CommandBuilder, startup: ShellStartup) {
+    for (name, value) in startup.env {
+        command.env(name, value);
+    }
+    command.args(startup.args);
+}
 pub(super) fn wait_for_shell_startup(
-    child: &mut PtyChild,
+    child: &mut Box<dyn Child + Send + Sync>,
     ready_file: &Path,
     screen: &Arc<Mutex<TerminalParser>>,
     timeout: Duration,
@@ -135,6 +161,7 @@ pub(super) fn wait_for_shell_startup(
             startup_screen(screen)?
         );
     }
+    child.kill().context("failed to kill unready shell")?;
     bail!(
         "shell did not report startup readiness within {timeout:?}; screen: {}",
         startup_screen(screen)?

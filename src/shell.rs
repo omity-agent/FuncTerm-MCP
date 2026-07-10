@@ -15,6 +15,9 @@ pub(crate) struct ShellStartup {
     pub(crate) ready_file: std::path::PathBuf,
 }
 impl ShellChoice {
+    pub(crate) fn executable(self, settings: &Settings) -> Result<String> {
+        crate::text::path_text(&self.executable_path(settings)?, "executable path")
+    }
     pub(crate) fn executable_path(self, settings: &Settings) -> Result<std::path::PathBuf> {
         executable::select_available_executable(
             self,

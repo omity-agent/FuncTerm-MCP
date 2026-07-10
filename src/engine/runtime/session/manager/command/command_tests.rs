@@ -1,10 +1,12 @@
 use crate::runtime::session::manager::shell_session::{
     KeyboardWriteFailure, ShellSession, ShellSessionParts,
 };
-use crate::runtime::session::terminal::{TerminalParser, TerminalWriter, start_reader};
+use crate::runtime::session::terminal::TerminalParser;
 use crate::shell::ShellChoice;
 use alloc::sync::Arc;
-use rmux_pty::{ChildCommand, TerminalSize as PtyTerminalSize};
+use anyhow::Error;
+use portable_pty::{Child, ChildKiller, CommandBuilder, ExitStatus, SlavePty};
+use std::io::{Result as IoResult, Write};
 use std::sync::{Barrier, Mutex};
 use std::thread;
 use tastty_core::TerminalSize;
@@ -79,39 +81,62 @@ fn manual_write_allows_running_command() {
     shell.write_keyboard_for_running_command(b"typed").unwrap();
 }
 fn test_shell(busy: Option<&str>) -> ShellSession {
-    let spawned = test_child_command()
-        .size(PtyTerminalSize::new(120, 30))
-        .spawn()
-        .unwrap();
-    let (master, child) = spawned.into_parts();
-    let writer: TerminalWriter = Arc::new(Mutex::new(master.try_clone_io().unwrap()));
-    let screen = Arc::new(Mutex::new(TerminalParser::new(
-        TerminalSize {
-            rows: 30,
-            cols: 120,
-        },
-        0,
-    )));
-    let reader = start_reader(Arc::clone(&screen), Arc::clone(&writer), master.into_io()).unwrap();
+    let writer: Box<dyn Write + Send> = Box::<Vec<u8>>::default();
+    let child: Box<dyn Child + Send + Sync> = Box::new(TestChild);
+    let slave: Box<dyn SlavePty + Send> = Box::new(TestSlave);
     ShellSession::new(ShellSessionParts {
         choice: ShellChoice::PowerShell,
         cwd: crate::test_fs::temp_root(),
-        writer,
-        screen,
+        writer: Arc::new(Mutex::new(writer)),
+        screen: Arc::new(Mutex::new(TerminalParser::new(
+            TerminalSize {
+                rows: 30,
+                cols: 120,
+            },
+            0,
+        ))),
         busy: busy.map(str::to_owned),
         command_root: crate::test_fs::temp_dir("command-manager"),
         active_shell_file: crate::test_fs::temp_dir("command-manager-active")
             .join("active-shell.txt"),
         command_start_timeout: core::time::Duration::from_secs(1),
+        process_tree: crate::runtime::session::manager::process_tree::ProcessTree::new(),
         child,
-        reader: Some(reader),
+        slave,
+        reader: None,
     })
 }
-#[cfg(windows)]
-fn test_child_command() -> ChildCommand {
-    ChildCommand::new("cmd.exe").args(["/D", "/Q"])
+#[derive(Debug)]
+struct TestChild;
+impl ChildKiller for TestChild {
+    fn kill(&mut self) -> IoResult<()> {
+        Ok(())
+    }
+    fn clone_killer(&self) -> Box<dyn ChildKiller + Send + Sync> {
+        Box::new(Self)
+    }
 }
-#[cfg(not(windows))]
-fn test_child_command() -> ChildCommand {
-    ChildCommand::new("sh")
+impl Child for TestChild {
+    fn try_wait(&mut self) -> IoResult<Option<ExitStatus>> {
+        Ok(Some(ExitStatus::with_exit_code(0)))
+    }
+    fn wait(&mut self) -> IoResult<ExitStatus> {
+        Ok(ExitStatus::with_exit_code(0))
+    }
+    fn process_id(&self) -> Option<u32> {
+        None
+    }
+    #[cfg(windows)]
+    fn as_raw_handle(&self) -> Option<std::os::windows::io::RawHandle> {
+        None
+    }
+}
+struct TestSlave;
+impl SlavePty for TestSlave {
+    fn spawn_command(
+        &self,
+        _command: CommandBuilder,
+    ) -> Result<Box<dyn Child + Send + Sync>, Error> {
+        anyhow::bail!("test slave cannot spawn commands")
+    }
 }
