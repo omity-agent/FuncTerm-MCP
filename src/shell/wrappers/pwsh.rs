@@ -22,14 +22,48 @@ function Ensure-FuncTermShims {
     if ([string]::IsNullOrEmpty($env:@HELPER_ENV@)) {
         throw '@HELPER_ENV@ is not set'
     }
-    $shimOutput = & $env:@HELPER_ENV@ internal-ensure-shims --directory $env:FUNCTERM_SHIM_DIR 2>&1
-    $shimExitCode = $LASTEXITCODE
+    $shimStart = [Diagnostics.ProcessStartInfo]::new($env:@HELPER_ENV@)
+    $shimStart.UseShellExecute = $false
+    $shimStart.RedirectStandardOutput = $true
+    $shimStart.RedirectStandardError = $true
+    $shimStart.ArgumentList.Add('internal-ensure-shims')
+    $shimStart.ArgumentList.Add('--directory')
+    $shimStart.ArgumentList.Add($env:FUNCTERM_SHIM_DIR)
+    try {
+        $shimProcess = [Diagnostics.Process]::Start($shimStart)
+    }
+    catch {
+        throw ('failed to start FuncTerm shell shim helper (helper: {0}; shim directory: {1}): {2}' -f $env:@HELPER_ENV@, $env:FUNCTERM_SHIM_DIR, $_.Exception.Message)
+    }
+    if ($null -eq $shimProcess) {
+        throw ('FuncTerm shell shim helper did not start a process (helper: {0}; shim directory: {1})' -f $env:@HELPER_ENV@, $env:FUNCTERM_SHIM_DIR)
+    }
+    try {
+        $shimStdoutRead = $shimProcess.StandardOutput.ReadToEndAsync()
+        $shimStderrRead = $shimProcess.StandardError.ReadToEndAsync()
+        $shimProcess.WaitForExit()
+        $shimStdout = $shimStdoutRead.GetAwaiter().GetResult().Trim()
+        $shimStderr = $shimStderrRead.GetAwaiter().GetResult().Trim()
+        $shimExitCode = $shimProcess.ExitCode
+    }
+    catch {
+        throw ('failed while waiting for FuncTerm shell shim helper (helper: {0}; shim directory: {1}): {2}' -f $env:@HELPER_ENV@, $env:FUNCTERM_SHIM_DIR, $_.Exception.Message)
+    }
+    finally {
+        $shimProcess.Dispose()
+    }
     if ($shimExitCode -ne 0) {
-        $shimError = ($shimOutput | Out-String).Trim()
-        if ([string]::IsNullOrEmpty($shimError)) {
-            $shimError = 'no error output'
+        $shimDetails = @()
+        if (-not [string]::IsNullOrEmpty($shimStderr)) {
+            $shimDetails += 'stderr: ' + $shimStderr
         }
-        throw ('failed to ensure FuncTerm shell shims (exit code {0}): {1}' -f $shimExitCode, $shimError)
+        if (-not [string]::IsNullOrEmpty($shimStdout)) {
+            $shimDetails += 'stdout: ' + $shimStdout
+        }
+        if ($shimDetails.Count -eq 0) {
+            $shimDetails += 'no stdout or stderr output'
+        }
+        throw ('failed to ensure FuncTerm shell shims (helper: {0}; shim directory: {1}; exit code {2}): {3}' -f $env:@HELPER_ENV@, $env:FUNCTERM_SHIM_DIR, $shimExitCode, ($shimDetails -join [Environment]::NewLine))
     }
 }
 if (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue) {
@@ -150,10 +184,12 @@ function @FUNCTION@ {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn shim_failure_includes_helper_output_and_exit_code() {
+    fn shim_helper_uses_process_exit_code_and_captures_output() {
         let wrapper = super::wrapper();
-        assert!(wrapper.contains("internal-ensure-shims --directory $env:FUNCTERM_SHIM_DIR 2>&1"));
-        assert!(wrapper.contains("$shimExitCode = $LASTEXITCODE"));
-        assert!(wrapper.contains("(exit code {0}): {1}' -f $shimExitCode, $shimError"));
+        assert!(wrapper.contains("[Diagnostics.ProcessStartInfo]::new"));
+        assert!(wrapper.contains("$shimStart.RedirectStandardOutput = $true"));
+        assert!(wrapper.contains("$shimStart.RedirectStandardError = $true"));
+        assert!(wrapper.contains("$shimExitCode = $shimProcess.ExitCode"));
+        assert!(wrapper.contains("helper: {0}; shim directory: {1}; exit code {2}"));
     }
 }

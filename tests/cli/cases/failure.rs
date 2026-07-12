@@ -68,6 +68,28 @@ mod tests {
         assert!(result.stdout.contains("FUNCTERM_CLIENT_PATH_PROBE"));
     }
     #[cfg(windows)]
+    #[test]
+    fn powershell_runs_internal_helpers_when_client_pathext_excludes_exe() {
+        let guard = locked();
+        let mut client_env = guard.env();
+        client_env.push(("PATHEXT".to_owned(), ".CPL".to_owned()));
+        let tab = create_tab_with_env(&temp_root(), "powershell", &client_env);
+        let output = send_command(
+            &tab.tab_id,
+            "Write-Output 'FUNCTERM_RESTRICTED_PATHEXT_PROBE'",
+            5.0,
+        );
+        let result = parse_command_result(&output);
+        assert!(result.finished, "command should finish: {}", result.stderr);
+        assert_eq!(result.exit_code, Some(0_i32), "stderr: {}", result.stderr);
+        assert!(
+            result.stdout.contains("FUNCTERM_RESTRICTED_PATHEXT_PROBE"),
+            "stdout: {}; stderr: {}",
+            result.stdout,
+            result.stderr
+        );
+    }
+    #[cfg(windows)]
     fn system_shell_daemon() -> crate::support::TestGuard {
         locked()
     }
