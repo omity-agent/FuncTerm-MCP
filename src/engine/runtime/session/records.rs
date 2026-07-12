@@ -5,6 +5,7 @@ use crate::contract::{
 use crate::runtime::protocol::{CommandSnapshot, CommandView};
 mod wait;
 use anyhow::{Context as _, Result, bail};
+use core::time::Duration;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -59,15 +60,17 @@ pub(super) fn create_record(
 }
 pub(super) fn read_command_result(
     record: &CommandRecord,
-    observed_time_consumption: String,
+    observed_time_consumption: Duration,
 ) -> Result<CommandSnapshot> {
     let stdout = read_optional(&record.stdout)?;
     let stderr = read_optional(&record.stderr)?;
     let done = read_done(&record.done)?;
     let exit_code = done.as_ref().map(|file| file.exit_code);
     let finished = done.is_some();
-    let measured_time_consumption =
-        done.map_or(observed_time_consumption, |file| file.time_consumption);
+    let measured_time_consumption = done.map_or(Ok(observed_time_consumption), |file| {
+        humantime::parse_duration(&file.time_consumption)
+            .context("done file contains an invalid time consumption")
+    })?;
     let note = command_note(&stdout, &stderr, "");
     Ok(CommandSnapshot {
         command: CommandView {
@@ -82,7 +85,7 @@ pub(super) fn read_command_result(
 }
 pub(super) fn read_and_clear_command_result(
     record: &CommandRecord,
-    time_consumption: String,
+    time_consumption: Duration,
 ) -> Result<CommandSnapshot> {
     let result = read_command_result(record, time_consumption)?;
     if let Err(error) = remove_record_directory(record) {

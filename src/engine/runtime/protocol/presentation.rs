@@ -17,7 +17,7 @@ pub(crate) struct CommandPresentation<'view> {
     pub(crate) stdout: &'view str,
     pub(crate) stderr: &'view str,
     pub(crate) exit_code: Option<i32>,
-    pub(crate) time_consumption: &'view str,
+    pub(crate) time_consumption: String,
     pub(crate) finished: bool,
 }
 impl ShellView {
@@ -41,7 +41,7 @@ impl CommandView {
             stdout: &self.stdout,
             stderr: &self.stderr,
             exit_code: self.exit_code,
-            time_consumption: &self.time_consumption,
+            time_consumption: super::time_consumption::milliseconds(self.time_consumption),
             finished: self.finished,
         }
     }

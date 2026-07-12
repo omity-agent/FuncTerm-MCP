@@ -116,14 +116,14 @@ impl ManagedCommand {
             .lock()
             .map_err(|error| anyhow::anyhow!("command view mutex poisoned: {error}"))
     }
-    fn time_consumption(&self) -> String {
-        format!("{:?}", self.started_at.elapsed())
+    fn time_consumption(&self) -> Duration {
+        self.started_at.elapsed()
     }
 }
 fn failure_view(
     record: &CommandRecord,
     message: &str,
-    time_consumption: String,
+    time_consumption: Duration,
 ) -> Result<CommandSnapshot> {
     let mut snapshot = read_command_result(record, time_consumption)?;
     if !snapshot.command.finished {

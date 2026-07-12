@@ -109,7 +109,10 @@ fn command_text(command: &CommandView, command_id: Option<&str>) -> String {
         element("STDOUT", presentation.stdout),
         element("STDERR", presentation.stderr),
         element("EXIT_CODE", &exit_code),
-        element("TIME_CONSUMPTION", presentation.time_consumption),
+        element(
+            "TIME_CONSUMPTION",
+            &super::time_consumption::adaptive(command.time_consumption),
+        ),
         element("FINISHED", &presentation.finished.to_string()),
     ]);
     items.join("\n")

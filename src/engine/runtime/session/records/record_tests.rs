@@ -35,7 +35,7 @@ fn failed_result_closes_command_lifecycle() {
     let record = create_record(&root, "command-failed", Path::new("F:\\cwd")).unwrap();
     write_failed_result("command-failed", &record, "shell exited").unwrap();
     assert!(wait_for_done(&record.done, Duration::from_millis(0)).unwrap());
-    let result = read_command_result(&record, "1ms".to_owned()).unwrap();
+    let result = read_command_result(&record, Duration::from_millis(1)).unwrap();
     assert!(result.command.finished);
     assert_eq!(result.command.exit_code, Some(1_i32));
     assert!(
@@ -53,7 +53,7 @@ fn read_and_clear_keeps_result_while_removing_record_files() {
     std::fs::write(&record.stdout, "kept stdout").unwrap();
     std::fs::write(&record.stderr, "kept stderr").unwrap();
     write_failed_result("command-clear", &record, "done").unwrap();
-    let result = read_and_clear_command_result(&record, "1ms".to_owned()).unwrap();
+    let result = read_and_clear_command_result(&record, Duration::from_millis(1)).unwrap();
     assert!(result.command.finished);
     assert_eq!(result.command.stdout, "kept stdout");
     assert!(result.command.stderr.contains("kept stderr"));
