@@ -8,20 +8,36 @@ mod wrappers;
 use alloc::borrow::Cow;
 use anyhow::{Context as _, Result};
 pub(crate) use choice::ShellChoice;
+use std::ffi::OsString;
 use std::path::Path;
 pub(crate) struct ShellStartup {
     pub(crate) args: Vec<String>,
-    pub(crate) env: Vec<(String, String)>,
+    pub(crate) env: Vec<(OsString, OsString)>,
     pub(crate) ready_file: std::path::PathBuf,
 }
 impl ShellChoice {
-    pub(crate) fn executable(self, settings: &Settings) -> Result<String> {
-        crate::text::path_text(&self.executable_path(settings)?, "executable path")
+    pub(crate) fn executable(
+        self,
+        settings: &Settings,
+        environment: &crate::runtime::protocol::EnvironmentSnapshot,
+        cwd: &Path,
+    ) -> Result<String> {
+        crate::text::path_text(
+            &self.executable_path(settings, environment, cwd)?,
+            "executable path",
+        )
     }
-    pub(crate) fn executable_path(self, settings: &Settings) -> Result<std::path::PathBuf> {
+    pub(crate) fn executable_path(
+        self,
+        settings: &Settings,
+        environment: &crate::runtime::protocol::EnvironmentSnapshot,
+        cwd: &Path,
+    ) -> Result<std::path::PathBuf> {
         executable::select_available_executable(
             self,
             &self.driver().executable_candidates(settings)?,
+            environment,
+            cwd,
         )
     }
     pub(crate) fn startup(self, cwd: &Path, session_root: &Path) -> Result<ShellStartup> {
@@ -46,7 +62,11 @@ impl ShellChoice {
             ready_file: &ready_file,
         })?;
         let args = startup.args;
-        let env = startup.env;
+        let env = startup
+            .env
+            .into_iter()
+            .map(|(name, value)| (OsString::from(name), OsString::from(value)))
+            .collect();
         Ok(ShellStartup {
             args,
             env,

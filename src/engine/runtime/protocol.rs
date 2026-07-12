@@ -3,9 +3,11 @@ use anyhow::{Context as _, Result};
 use core::time::Duration;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+mod environment;
 pub(crate) mod format;
 mod kind;
 mod presentation;
+pub(crate) use environment::EnvironmentSnapshot;
 pub(crate) use presentation::{CommandPresentation, ShellPresentation};
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) enum Request {
@@ -13,6 +15,7 @@ pub(crate) enum Request {
     NewTab {
         starting_directory: PathBuf,
         starting_shell: ShellChoice,
+        environment: EnvironmentSnapshot,
     },
     ManualWrite {
         tab_id: String,

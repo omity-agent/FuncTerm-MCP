@@ -25,7 +25,11 @@ impl Drop for ChildGuard {
         self.terminate();
     }
 }
-pub(crate) fn wait_for_status(child: &mut Child, timeout: Duration) -> ExitStatus {
+pub(crate) fn wait_for_status(
+    child: &mut Child,
+    timeout: Duration,
+    description: &str,
+) -> ExitStatus {
     let start = Instant::now();
     loop {
         if let Some(status) = child.try_wait().unwrap() {
@@ -34,7 +38,7 @@ pub(crate) fn wait_for_status(child: &mut Child, timeout: Duration) -> ExitStatu
         if start.elapsed() >= timeout {
             child.kill().unwrap();
             let status = child.wait().unwrap();
-            panic!("CLI command timed out after {timeout:?} with status {status}");
+            panic!("CLI command {description} timed out after {timeout:?} with status {status}");
         }
         thread::sleep(Duration::from_millis(50));
     }

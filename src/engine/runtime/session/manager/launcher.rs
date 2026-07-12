@@ -4,6 +4,7 @@ use super::{
     shell_session::{ShellSession, ShellSessionParts},
 };
 use crate::runtime::config::Settings;
+use crate::runtime::protocol::EnvironmentSnapshot;
 use crate::runtime::session::records::wait_for_path;
 use crate::runtime::session::terminal::{TerminalParser, lock_mutex, start_reader};
 use crate::runtime::temp;
@@ -39,6 +40,7 @@ impl ShellLauncher {
         tab_id: &str,
         starting_directory: &Path,
         starting_shell: ShellChoice,
+        environment: &EnvironmentSnapshot,
     ) -> Result<Arc<ShellSession>> {
         let tab_root = temp::tab_root(&self.generation_root, tab_id);
         let tab_state = temp::tab_state_directory(&tab_root);
@@ -51,6 +53,8 @@ impl ShellLauncher {
             &tab_root,
             &self.shim_dir,
             starting_shell,
+            environment,
+            starting_directory,
         )?);
         let pair = native_pty_system()
             .openpty(PtySize {
@@ -60,8 +64,10 @@ impl ShellLauncher {
                 pixel_height: 0,
             })
             .context("failed to open pty")?;
-        let executable = starting_shell.executable(&self.settings)?;
+        let executable =
+            starting_shell.executable(&self.settings, environment, starting_directory)?;
         let mut command = CommandBuilder::new(executable);
+        command.env_clear();
         let ready_file = startup.ready_file.clone();
         apply_startup(&mut command, startup);
         command.cwd(starting_directory);
@@ -111,6 +117,8 @@ impl ShellLauncher {
             wait_for_shell_startup(&mut child, &ready_file, &screen, startup_timeout)
         {
             process::cleanup(child.as_mut(), "unregistered shell child");
+            drop(pair.slave);
+            drop(pair.master);
             process::join_reader(reader_worker, "pty reader thread");
             return Err(error);
         }

@@ -126,8 +126,9 @@ fn dispatch(manager: &Arc<Manager>, request: Request) -> Result<Payload> {
         Request::NewTab {
             starting_directory,
             starting_shell,
+            environment,
         } => {
-            let tab_id = manager.new_tab(&starting_directory, starting_shell)?;
+            let tab_id = manager.new_tab(&starting_directory, starting_shell, &environment)?;
             Ok(Payload::TabCreated { tab_id })
         }
         Request::ManualWrite { tab_id, bytes } => {

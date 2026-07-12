@@ -5,6 +5,7 @@ mod process_tree;
 mod shell_session;
 mod tab;
 use crate::runtime::config::Settings;
+use crate::runtime::protocol::EnvironmentSnapshot;
 use crate::shell::ShellChoice;
 use anyhow::{Result, bail};
 use std::path::Path;
@@ -23,6 +24,7 @@ impl Manager {
         &self,
         starting_directory: &Path,
         starting_shell: ShellChoice,
+        environment: &EnvironmentSnapshot,
     ) -> Result<String> {
         if !starting_directory.is_dir() {
             bail!(
@@ -31,9 +33,9 @@ impl Manager {
             );
         }
         let tab_id = self.tabs.next_tab_id()?;
-        let session = self
-            .launcher
-            .launch(&tab_id, starting_directory, starting_shell)?;
+        let session =
+            self.launcher
+                .launch(&tab_id, starting_directory, starting_shell, environment)?;
         self.tabs.insert(tab::Tab::new(tab_id.clone(), session)?)?;
         Ok(tab_id)
     }
@@ -46,7 +48,7 @@ mod tests {
     use std::path::Path;
     fn test_settings() -> Settings {
         Settings {
-            daemon_service_name: "functerm/test".to_owned(),
+            daemon_service_name: format!("functerm/test/manager/{}", nanoid::nanoid!()),
             terminal_rows: 30,
             terminal_cols: 120,
             shell_startup_timeout_seconds: 10.0,
@@ -64,6 +66,7 @@ mod tests {
             .new_tab(
                 Path::new("Z:\\definitely-missing-mcp-pty-cwd"),
                 ShellChoice::PowerShell,
+                &crate::runtime::protocol::EnvironmentSnapshot::capture(),
             )
             .unwrap_err();
         assert!(
@@ -75,19 +78,21 @@ mod tests {
     #[test]
     fn immediately_exiting_shell_is_rejected_before_registration() {
         let mut settings = test_settings();
+        settings.shell_startup_timeout_seconds = 0.1_f64;
         settings.powershell = vec![immediately_exiting_executable().to_owned()];
         let manager = Manager::new(settings).unwrap();
         let error = manager
             .new_tab(
                 crate::test_fs::temp_root().as_path(),
                 ShellChoice::PowerShell,
+                &crate::runtime::protocol::EnvironmentSnapshot::capture(),
             )
             .unwrap_err();
-        assert!(error.to_string().contains("startup"));
+        assert!(error.to_string().contains("startup"), "{error:#}");
     }
     #[cfg(windows)]
     fn immediately_exiting_executable() -> &'static str {
-        "where.exe"
+        "whoami.exe"
     }
     #[cfg(not(windows))]
     fn immediately_exiting_executable() -> &'static str {

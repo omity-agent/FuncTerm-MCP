@@ -1,4 +1,4 @@
-use crate::runtime::protocol::{Payload, Request, waiting_from_seconds};
+use crate::runtime::protocol::{EnvironmentSnapshot, Payload, Request, waiting_from_seconds};
 use crate::runtime::working_dir;
 use crate::shell::ShellChoice;
 use anyhow::Result;
@@ -20,6 +20,7 @@ pub(crate) fn new_tab_payload(
     let request = Request::NewTab {
         starting_directory: resolved_directory,
         starting_shell,
+        environment: EnvironmentSnapshot::capture(),
     };
     call_payload(call, &request)
 }

@@ -1,14 +1,27 @@
 use super::{ShellChoice, shims};
+use crate::runtime::protocol::EnvironmentSnapshot;
 use anyhow::{Context as _, Result, bail};
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 pub(super) fn select_available_executable(
     choice: ShellChoice,
     candidates: &[String],
+    environment: &EnvironmentSnapshot,
+    cwd: &Path,
 ) -> Result<PathBuf> {
+    let search_path = environment.value("PATH");
+    let inherited_shim = environment.value(shims::SHIM_DIR_ENV);
     let mut errors = Vec::new();
     for candidate in candidates {
-        match resolve_executable(choice, candidate) {
-            Ok(path) => return Ok(path),
+        match resolve_executable(
+            choice,
+            candidate,
+            search_path.as_deref(),
+            cwd,
+            inherited_shim.as_deref(),
+            environment,
+        ) {
+            Ok(executable) => return Ok(executable),
             Err(error) => errors.push(format!("{candidate}: {error:#}")),
         }
     }
@@ -18,26 +31,39 @@ pub(super) fn select_available_executable(
         errors.join("; ")
     )
 }
-fn resolve_executable(choice: ShellChoice, candidate: &str) -> Result<PathBuf> {
-    let paths = which::which_all(candidate)?;
-    for path in paths {
-        if !is_rejected_executable(choice, &path)? {
-            return Ok(path);
+fn resolve_executable(
+    choice: ShellChoice,
+    candidate: &str,
+    path: Option<&OsStr>,
+    cwd: &Path,
+    inherited_shim: Option<&OsStr>,
+    environment: &EnvironmentSnapshot,
+) -> Result<PathBuf> {
+    let executables = which::which_in_all(candidate, path, cwd)?;
+    for executable in executables {
+        if !is_rejected_executable(choice, &executable, inherited_shim, environment)? {
+            return Ok(executable);
         }
     }
     bail!("all executable candidates for `{candidate}` are unsuitable")
 }
-fn is_rejected_executable(choice: ShellChoice, path: &Path) -> Result<bool> {
-    Ok(is_inherited_shim(path)? || is_windows_subsystem_bash(choice, path)?)
+fn is_rejected_executable(
+    choice: ShellChoice,
+    path: &Path,
+    inherited_shim: Option<&OsStr>,
+    environment: &EnvironmentSnapshot,
+) -> Result<bool> {
+    Ok(is_inherited_shim(path, inherited_shim)?
+        || is_windows_subsystem_bash(choice, path, environment)?)
 }
-fn is_inherited_shim(path: &Path) -> Result<bool> {
+fn is_inherited_shim(path: &Path, inherited_shim: Option<&OsStr>) -> Result<bool> {
     if same_file(
         path,
         &std::env::current_exe().context("failed to resolve current executable")?,
     ) {
         return Ok(true);
     }
-    let Some(shim_dir) = std::env::var_os(shims::SHIM_DIR_ENV) else {
+    let Some(shim_dir) = inherited_shim else {
         return Ok(false);
     };
     let Some(parent) = path.parent() else {
@@ -46,11 +72,15 @@ fn is_inherited_shim(path: &Path) -> Result<bool> {
     Ok(same_file(parent, &PathBuf::from(shim_dir)))
 }
 #[cfg(windows)]
-fn is_windows_subsystem_bash(choice: ShellChoice, path: &Path) -> Result<bool> {
+fn is_windows_subsystem_bash(
+    choice: ShellChoice,
+    path: &Path,
+    environment: &EnvironmentSnapshot,
+) -> Result<bool> {
     if choice != ShellChoice::Bash {
         return Ok(false);
     }
-    let Some(system_root) = std::env::var_os("SystemRoot") else {
+    let Some(system_root) = environment.value("SystemRoot") else {
         bail!("SystemRoot is required to identify WSL Bash");
     };
     Ok(is_windows_subsystem_bash_path(
@@ -59,7 +89,11 @@ fn is_windows_subsystem_bash(choice: ShellChoice, path: &Path) -> Result<bool> {
     ))
 }
 #[cfg(not(windows))]
-fn is_windows_subsystem_bash(_choice: ShellChoice, _path: &Path) -> Result<bool> {
+fn is_windows_subsystem_bash(
+    _choice: ShellChoice,
+    _path: &Path,
+    _environment: &EnvironmentSnapshot,
+) -> Result<bool> {
     Ok(false)
 }
 #[cfg(windows)]

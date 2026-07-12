@@ -22,7 +22,7 @@ pub(super) struct ShellSession {
     command_start_timeout: Duration,
     process_tree: process_tree::ProcessTree,
     child: Mutex<Box<dyn Child + Send + Sync>>,
-    _slave: Mutex<Box<dyn SlavePty + Send>>,
+    slave: Mutex<Option<Box<dyn SlavePty + Send>>>,
     reader: Option<JoinHandle<()>>,
 }
 #[derive(Debug)]
@@ -57,7 +57,7 @@ impl ShellSession {
             command_start_timeout: parts.command_start_timeout,
             process_tree: parts.process_tree,
             child: Mutex::new(parts.child),
-            _slave: Mutex::new(parts.slave),
+            slave: Mutex::new(Some(parts.slave)),
             reader: parts.reader,
         }
     }
@@ -186,6 +186,14 @@ impl Drop for ShellSession {
             }
         };
         process::cleanup(child.as_mut(), "shell child during cleanup");
+        let slave = match self.slave.get_mut() {
+            Ok(slave) => slave,
+            Err(error) => {
+                eprintln!("slave mutex poisoned during shell cleanup");
+                error.into_inner()
+            }
+        };
+        drop(slave.take());
         if let Some(reader) = self.reader.take() {
             process::join_reader(reader, "pty reader thread");
         }

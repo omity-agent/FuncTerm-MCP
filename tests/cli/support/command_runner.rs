@@ -44,6 +44,18 @@ pub(crate) fn run_cli_with_pipes(arguments: &[&str]) -> Output {
 pub(crate) fn create_tab(cwd: &Path, shell: &str) -> TabCreated {
     create_tab_from_directory_argument(cwd.to_str().unwrap(), shell)
 }
+pub(crate) fn create_tab_with_env(cwd: &Path, shell: &str, env: &[(String, String)]) -> TabCreated {
+    parse_tab_created(&run_cli_with_env(
+        &[
+            "new-tab",
+            "--starting-directory",
+            cwd.to_str().unwrap(),
+            "--starting-shell",
+            shell,
+        ],
+        env,
+    ))
+}
 pub(crate) fn create_tab_from_directory_argument(cwd: &str, shell: &str) -> TabCreated {
     parse_tab_created(&run_cli(&[
         "new-tab",
@@ -90,7 +102,8 @@ fn output_to_files(mut command: Command, timeout: Duration) -> Output {
     command
         .stdout(Stdio::from(fs::File::create(&stdout_path).unwrap()))
         .stderr(Stdio::from(fs::File::create(&stderr_path).unwrap()));
-    let status = wait_for_status(&mut command.spawn().unwrap(), timeout);
+    let description = format!("{command:?}");
+    let status = wait_for_status(&mut command.spawn().unwrap(), timeout, &description);
     let output = output_from_parts(
         status,
         fs::read(&stdout_path).unwrap(),
@@ -102,12 +115,13 @@ fn output_to_files(mut command: Command, timeout: Duration) -> Output {
 }
 #[cfg(windows)]
 fn output_from_pipes(mut command: Command, timeout: Duration) -> Output {
+    let description = format!("{command:?}");
     let mut child = command.spawn().unwrap();
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
     let stdout_rx = read_pipe(stdout);
     let stderr_rx = read_pipe(stderr);
-    let status = wait_for_status(&mut child, timeout);
+    let status = wait_for_status(&mut child, timeout, &description);
     output_from_parts(
         status,
         stdout_rx.recv_timeout(PIPE_CLOSE_TIMEOUT).unwrap(),
