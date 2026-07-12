@@ -29,7 +29,7 @@ function Ensure-FuncTermShims {
         if ([string]::IsNullOrEmpty($shimError)) {
             $shimError = 'no error output'
         }
-        throw 'failed to ensure FuncTerm shell shims (exit code ${shimExitCode}): $shimError'
+        throw ('failed to ensure FuncTerm shell shims (exit code {0}): {1}' -f $shimExitCode, $shimError)
     }
 }
 if (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue) {
@@ -154,6 +154,6 @@ mod tests {
         let wrapper = super::wrapper();
         assert!(wrapper.contains("internal-ensure-shims --directory $env:FUNCTERM_SHIM_DIR 2>&1"));
         assert!(wrapper.contains("$shimExitCode = $LASTEXITCODE"));
-        assert!(wrapper.contains("(exit code ${shimExitCode}): $shimError"));
+        assert!(wrapper.contains("(exit code {0}): {1}' -f $shimExitCode, $shimError"));
     }
 }
