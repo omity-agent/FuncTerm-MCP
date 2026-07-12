@@ -42,6 +42,8 @@ impl ShellLauncher {
         starting_shell: ShellChoice,
         environment: &EnvironmentSnapshot,
     ) -> Result<Arc<ShellSession>> {
+        let tab_environment = EnvironmentSnapshot::tab_launch_environment(environment)
+            .context("failed to construct tab environment")?;
         let tab_root = temp::tab_root(&self.generation_root, tab_id);
         let tab_state = temp::tab_state_directory(&tab_root);
         let command_root = temp::tab_commands_directory(&tab_root);
@@ -53,7 +55,7 @@ impl ShellLauncher {
             &tab_root,
             &self.shim_dir,
             starting_shell,
-            environment,
+            &tab_environment,
             starting_directory,
         )?);
         let pair = native_pty_system()
@@ -65,7 +67,7 @@ impl ShellLauncher {
             })
             .context("failed to open pty")?;
         let executable =
-            starting_shell.executable(&self.settings, environment, starting_directory)?;
+            starting_shell.executable(&self.settings, &tab_environment, starting_directory)?;
         let mut command = CommandBuilder::new(executable);
         command.env_clear();
         let ready_file = startup.ready_file.clone();

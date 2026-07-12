@@ -20,7 +20,7 @@ pub(crate) fn new_tab_payload(
     let request = Request::NewTab {
         starting_directory: resolved_directory,
         starting_shell,
-        environment: EnvironmentSnapshot::capture(),
+        environment: EnvironmentSnapshot::for_new_tab_request(),
     };
     call_payload(call, &request)
 }

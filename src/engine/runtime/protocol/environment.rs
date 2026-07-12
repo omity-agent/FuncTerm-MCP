@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::ffi::{OsStr, OsString};
+#[cfg(windows)]
+mod windows;
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) struct EnvironmentSnapshot {
     variables: Vec<(NativeString, NativeString)>,
@@ -12,6 +14,7 @@ struct NativeString {
     units: Vec<u16>,
 }
 impl EnvironmentSnapshot {
+    #[cfg(any(not(windows), test))]
     pub(crate) fn capture() -> Self {
         Self::from_variables(std::env::vars_os())
     }
@@ -24,6 +27,22 @@ impl EnvironmentSnapshot {
                 .map(|(name, value)| (NativeString::from(name), NativeString::from(value)))
                 .collect(),
         }
+    }
+    #[cfg(windows)]
+    pub(crate) fn for_new_tab_request() -> Self {
+        Self::from_variables([])
+    }
+    #[cfg(not(windows))]
+    pub(crate) fn for_new_tab_request() -> Self {
+        Self::capture()
+    }
+    #[cfg(windows)]
+    pub(crate) fn tab_launch_environment(_client_environment: &Self) -> anyhow::Result<Self> {
+        windows::capture_user_environment()
+    }
+    #[cfg(not(windows))]
+    pub(crate) fn tab_launch_environment(client_environment: &Self) -> anyhow::Result<Self> {
+        Ok(client_environment.clone())
     }
     pub(crate) fn variables(&self) -> Vec<(OsString, OsString)> {
         self.variables
@@ -100,6 +119,15 @@ mod tests {
         assert_eq!(
             decoded.value("FUNCTERM_TEST_NAME"),
             Some(OsString::from("snapshot value"))
+        );
+    }
+    #[cfg(windows)]
+    #[test]
+    fn new_tab_request_does_not_send_client_environment() {
+        assert!(
+            EnvironmentSnapshot::for_new_tab_request()
+                .variables()
+                .is_empty()
         );
     }
 }

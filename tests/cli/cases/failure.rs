@@ -4,10 +4,13 @@ mod tests {
     use crate::support::locked;
     #[cfg(not(windows))]
     use crate::support::locked_with_env;
+    #[cfg(not(windows))]
+    use crate::support::temp_dir;
     use crate::support::{
         create_tab, create_tab_with_env, parse_command_result, parse_tab_view, run_cli_with_env,
-        send_command, temp_dir, temp_root,
+        send_command, temp_root,
     };
+    #[cfg(not(windows))]
     use std::path::Path;
     use std::thread;
     #[test]
@@ -46,6 +49,7 @@ mod tests {
         assert!(result.finished, "wrapper should still publish done.json");
         assert_eq!(result.exit_code, Some(expected_delete_exit_code()));
     }
+    #[cfg(not(windows))]
     #[test]
     fn new_tab_uses_client_path_after_daemon_startup() {
         let guard = system_shell_daemon();
@@ -66,6 +70,26 @@ mod tests {
         assert!(result.finished);
         assert_eq!(result.exit_code, Some(0_i32));
         assert!(result.stdout.contains("FUNCTERM_CLIENT_PATH_PROBE"));
+    }
+    #[cfg(windows)]
+    #[test]
+    fn new_tab_uses_fresh_user_environment() {
+        let guard = locked();
+        let mut client_env = guard.env();
+        client_env.push((
+            "FUNCTERM_CLIENT_ENV_PROBE".to_owned(),
+            "must-not-be-inherited".to_owned(),
+        ));
+        let tab = create_tab_with_env(&temp_root(), "powershell", &client_env);
+        let output = send_command(
+            &tab.tab_id,
+            "if ($null -ne $env:FUNCTERM_CLIENT_ENV_PROBE) { exit 2 }; if ([string]::IsNullOrEmpty($env:SystemRoot) -or [string]::IsNullOrEmpty($env:USERPROFILE)) { exit 3 }; Write-Output 'FUNCTERM_FRESH_ENVIRONMENT'",
+            5.0,
+        );
+        let result = parse_command_result(&output);
+        assert!(result.finished, "command should finish: {}", result.stderr);
+        assert_eq!(result.exit_code, Some(0_i32), "stderr: {}", result.stderr);
+        assert!(result.stdout.contains("FUNCTERM_FRESH_ENVIRONMENT"));
     }
     #[cfg(windows)]
     #[test]
@@ -122,14 +146,6 @@ mod tests {
     const fn expected_delete_exit_code() -> i32 {
         1
     }
-    #[cfg(windows)]
-    fn write_path_probe(directory: &Path) {
-        std::fs::write(
-            directory.join("functerm-client-path-probe.cmd"),
-            "@echo FUNCTERM_CLIENT_PATH_PROBE\r\n",
-        )
-        .unwrap();
-    }
     #[cfg(not(windows))]
     fn write_path_probe(directory: &Path) {
         use std::os::unix::fs::PermissionsExt as _;
@@ -137,6 +153,7 @@ mod tests {
         std::fs::write(&path, "#!/bin/sh\nprintf 'FUNCTERM_CLIENT_PATH_PROBE\\n'\n").unwrap();
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
+    #[cfg(not(windows))]
     const fn path_probe_command() -> &'static str {
         "functerm-client-path-probe"
     }
