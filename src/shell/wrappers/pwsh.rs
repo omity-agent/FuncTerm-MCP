@@ -22,9 +22,14 @@ function Ensure-FuncTermShims {
     if ([string]::IsNullOrEmpty($env:@HELPER_ENV@)) {
         throw '@HELPER_ENV@ is not set'
     }
-    & $env:@HELPER_ENV@ internal-ensure-shims --directory $env:FUNCTERM_SHIM_DIR
-    if ($LASTEXITCODE -ne 0) {
-        throw 'failed to ensure FuncTerm shell shims'
+    $shimOutput = & $env:@HELPER_ENV@ internal-ensure-shims --directory $env:FUNCTERM_SHIM_DIR 2>&1
+    $shimExitCode = $LASTEXITCODE
+    if ($shimExitCode -ne 0) {
+        $shimError = ($shimOutput | Out-String).Trim()
+        if ([string]::IsNullOrEmpty($shimError)) {
+            $shimError = 'no error output'
+        }
+        throw 'failed to ensure FuncTerm shell shims (exit code ${shimExitCode}): $shimError'
     }
 }
 if (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue) {
@@ -142,3 +147,13 @@ function @FUNCTION@ {
     }
 }
 " ;
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn shim_failure_includes_helper_output_and_exit_code() {
+        let wrapper = super::wrapper();
+        assert!(wrapper.contains("internal-ensure-shims --directory $env:FUNCTERM_SHIM_DIR 2>&1"));
+        assert!(wrapper.contains("$shimExitCode = $LASTEXITCODE"));
+        assert!(wrapper.contains("(exit code ${shimExitCode}): $shimError"));
+    }
+}
