@@ -7,6 +7,9 @@ terminal_rows = 30
 # Shell PTY 的默认列数。
 terminal_cols = 120
 
+# Shell 尚未设置窗口标题时使用的初始标题。
+terminal_initial_title = "FuncTerm"
+
 # Shell 启动注入脚本写入 ready 文件前最多等待的秒数。
 shell_startup_timeout_seconds = 10.0
 

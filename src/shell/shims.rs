@@ -152,6 +152,7 @@ mod tests {
             daemon_service_name: "functerm/test".to_owned(),
             terminal_rows: 30,
             terminal_cols: 120,
+            terminal_initial_title: "FuncTerm".to_owned(),
             shell_startup_timeout_seconds: 10.0,
             powershell: vec!["definitely-missing-powershell".to_owned()],
             bash: "definitely-missing-bash".to_owned(),

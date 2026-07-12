@@ -51,6 +51,7 @@ mod tests {
             daemon_service_name: format!("functerm/test/manager/{}", nanoid::nanoid!()),
             terminal_rows: 30,
             terminal_cols: 120,
+            terminal_initial_title: "FuncTerm".to_owned(),
             shell_startup_timeout_seconds: 10.0,
             powershell: vec!["powershell.exe".to_owned()],
             bash: "bash.exe".to_owned(),
