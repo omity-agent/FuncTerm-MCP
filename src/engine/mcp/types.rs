@@ -44,14 +44,14 @@ pub(super) struct SendCommandRequest {
     pub(super) tab_id: String,
     pub(super) command: String,
     #[schemars(
-        description = "等待时长，单位为秒。一般建议设置略大于预期时长。输入 0 代表运行即脱离，不等待命令，对于一些不会自然停止的程序（如 `vim`），不应该等待它。脱离等待后命令不会被终止，仍可通过 view 查看其状态。"
+        description = "等待时长，单位为秒。一般建议设置略大于预期时长。时间结束后命令不会被终止，仍可通过 view 查看其状态。输入 0 代表不等待，适用于不会自然停止的程序（如 `vim`）。"
     )]
     pub(super) waiting: f64,
 }
 #[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
 pub(super) struct ViewRequest {
     #[schemars(
-        description = "如果输入标签页 ID，将返回终端屏幕范围内显示的内容；如果输入命令 ID，将返回该命令目前的状态。"
+        description = "如果输入命令 ID，将返回该命令目前的状态；如果输入标签页 ID，将返回终端屏幕范围内显示的内容。一般输入命令 ID。"
     )]
     pub(super) id: String,
     #[schemars(description = "等待时长，单位为秒。")]
