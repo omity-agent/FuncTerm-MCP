@@ -34,12 +34,6 @@ impl PosixDialect {
             ),
         }
     }
-    pub(super) const fn write_done_temp(self) -> &'static str {
-        match self {
-            Self::Bash => ">",
-            Self::Zsh => ">|",
-        }
-    }
     pub(super) const fn cd(self) -> &'static str {
         match self {
             Self::Bash => "cd",

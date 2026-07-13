@@ -70,12 +70,15 @@ impl Tab {
         &self,
         command: &ManagedCommand,
     ) -> Result<()> {
-        if let Some(session) = self.optional_session()? {
-            session.update_cwd_from_done(command.record())?;
-            session.release(command.id())?;
-            self.remember(&session)?;
+        let session = self.optional_session()?;
+        if let Some(active_session) = session.as_ref() {
+            active_session.update_cwd_from_done(command.record())?;
         }
         command.mark_finished()?;
+        if let Some(active_session) = session {
+            active_session.release(command.id())?;
+            self.remember(&active_session)?;
+        }
         Ok(())
     }
     pub(in crate::engine::runtime::session::manager) fn abort_if_shell_dead(
@@ -96,7 +99,7 @@ impl Tab {
         self.command_snapshot_result(snapshot)
     }
     fn command_snapshot_result(&self, snapshot: CommandSnapshot) -> Result<ViewResult> {
-        let shell = if let Some(session) = self.optional_session()? {
+        let mut shell = if let Some(session) = self.optional_session()? {
             let alive = session.is_alive()?;
             if alive {
                 self.remember(&session)?.shell_view(true)
@@ -106,6 +109,7 @@ impl Tab {
         } else {
             self.snapshot_shell_view()?
         };
+        shell.title = snapshot.title;
         Ok(ViewResult::Command {
             shell,
             command: snapshot.command,

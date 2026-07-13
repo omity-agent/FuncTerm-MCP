@@ -1,10 +1,8 @@
 mod invocation;
 mod stdio;
-use crate::contract::{COMMAND_STATE_DIRECTORY, DONE_FILE};
 use crate::shell::{ShellChoice, ShellStartup, shims};
 use anyhow::{Context as _, Result};
 use core::time::Duration;
-use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
@@ -93,16 +91,18 @@ fn complete_active_command(cwd: &Path, time_consumption: Duration) -> Result<()>
         return Ok(());
     };
     let directory_path = PathBuf::from(directory);
-    let state_dir = directory_path.join(COMMAND_STATE_DIRECTORY);
-    let done_path = state_dir.join(DONE_FILE);
-    let done = EarlyDone {
-        command_id: command_id.to_string_lossy().into_owned(),
+    let command_id_text = command_id.to_string_lossy().into_owned();
+    let time_consumption_text = format!("{time_consumption:?}");
+    let cwd_text = cwd.to_string_lossy().into_owned();
+    let done = crate::app::command_state::DoneOutput {
+        command_id: &command_id_text,
         exit_code: 0,
-        time_consumption: format!("{time_consumption:?}"),
-        cwd: cwd.to_string_lossy().into_owned(),
+        time_consumption: &time_consumption_text,
+        cwd: &cwd_text,
     };
-    let text = sonic_rs::to_string(&done).context("failed to serialize early done file")?;
-    crate::file_publish::write_once(&done_path, text).context("failed to publish early done file")
+    let mut terminal = stdio::terminal_output()?;
+    crate::app::command_state::write_done_to(&done, &directory_path, &mut terminal)
+        .context("failed to publish early done file")
 }
 fn current_shell() -> Option<ShellChoice> {
     let value = std::env::var(shims::CURRENT_SHELL_ENV).ok()?;
@@ -132,13 +132,6 @@ fn real_executable(choice: ShellChoice) -> Result<String> {
 }
 fn exit_code(status: ExitStatus) -> i32 {
     status.code().unwrap_or(1)
-}
-#[derive(Serialize)]
-struct EarlyDone {
-    command_id: String,
-    exit_code: i32,
-    time_consumption: String,
-    cwd: String,
 }
 struct ActiveShellGuard {
     path: PathBuf,

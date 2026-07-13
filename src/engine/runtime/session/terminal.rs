@@ -1,83 +1,125 @@
+mod io;
+mod sequence;
+mod title;
+pub(super) use self::io::start_reader;
+use self::sequence::ProtocolParser;
+use self::title::CaptureRegistry;
+pub(super) use self::title::CommandTitle;
 use alloc::sync::Arc;
-use anyhow::{Result, bail};
-use std::io::{Read, Write};
+use anyhow::{Context as _, Result, bail};
 use std::sync::{Mutex, MutexGuard};
-use std::thread::{self, JoinHandle};
 use tastty_core::{HostProfile, Parser, host_reply::auto_reply_bytes};
-pub(super) type TerminalParser = Parser;
-pub(super) fn create_parser(
-    size: tastty_core::TerminalSize,
-    scrollback_len: usize,
-    initial_title: &str,
-) -> Result<TerminalParser> {
-    if initial_title.chars().any(char::is_control) {
-        bail!("terminal_initial_title must not contain control characters");
-    }
-    let mut parser = TerminalParser::new(size, scrollback_len);
-    let mut title_sequence = Vec::new();
-    title_sequence.extend_from_slice(b"\x1b]2;");
-    title_sequence.extend_from_slice(initial_title.as_bytes());
-    title_sequence.extend_from_slice(b"\x1b\\");
-    parser.process(&title_sequence);
-    drop(parser.screen_mut().drain_events());
-    Ok(parser)
+pub(super) struct Terminal {
+    state: Mutex<TerminalState>,
 }
-pub(super) fn start_reader(
-    screen: Arc<Mutex<TerminalParser>>,
-    writer: Arc<Mutex<Box<dyn Write + Send>>>,
-    mut owned_reader: Box<dyn Read + Send>,
-) -> std::io::Result<JoinHandle<()>> {
-    thread::Builder::new()
-        .name("functerm-pty-reader".to_owned())
-        .spawn(move || {
-            let host = HostProfile::default();
-            let mut buffer = [0_u8; 8192];
-            loop {
-                match owned_reader.read(&mut buffer) {
-                    Ok(0) | Err(_) => break,
-                    Ok(read_len) => {
-                        let Some(chunk) = buffer.get(..read_len) else {
-                            break;
-                        };
-                        let replies = match screen.lock() {
-                            Ok(mut parser) => {
-                                parser.process(chunk);
-                                parser
-                                    .screen_mut()
-                                    .drain_events()
-                                    .into_iter()
-                                    .filter_map(|event| auto_reply_bytes(&event, &host))
-                                    .collect::<Vec<_>>()
-                            }
-                            Err(_) => break,
-                        };
-                        write_replies(&writer, &replies);
-                    }
-                }
-            }
+struct TerminalState {
+    parser: Parser,
+    protocol: ProtocolParser,
+    captures: CaptureRegistry,
+}
+impl Terminal {
+    pub(super) fn new(
+        size: tastty_core::TerminalSize,
+        scrollback_len: usize,
+        initial_title: &str,
+    ) -> Result<Self> {
+        if initial_title.chars().any(char::is_control) {
+            bail!("terminal_initial_title must not contain control characters");
+        }
+        let mut parser = Parser::new(size, scrollback_len);
+        parser.process(title_sequence(initial_title).as_bytes());
+        drop(parser.screen_mut().drain_events());
+        Ok(Self {
+            state: Mutex::new(TerminalState {
+                parser,
+                protocol: ProtocolParser::new(),
+                captures: CaptureRegistry::new(initial_title.to_owned()),
+            }),
         })
-}
-pub(super) fn screen_title(parser: &TerminalParser) -> String {
-    parser.screen().title().to_owned()
-}
-fn write_replies(writer: &Arc<Mutex<Box<dyn Write + Send>>>, replies: &[Vec<u8>]) {
-    if replies.is_empty() {
-        return;
     }
-    match writer.lock() {
-        Ok(mut locked_writer) => {
-            for reply in replies {
-                if let Err(error) = locked_writer.write_all(reply) {
-                    eprintln!("failed to answer terminal host query: {error}");
-                    return;
-                }
+    pub(super) fn capture_title(&self, command_id: &str) -> Result<Arc<CommandTitle>> {
+        self.lock()?.captures.register(command_id)
+    }
+    pub(super) fn contents(&self) -> Result<String> {
+        Ok(self.lock()?.parser.screen().contents())
+    }
+    pub(super) fn title(&self) -> Result<String> {
+        Ok(self.lock()?.parser.screen().title().to_owned())
+    }
+    pub(super) fn process(&self, chunk: &[u8], host: &HostProfile) -> Result<Vec<Vec<u8>>> {
+        let mut state = self.lock()?;
+        match state.process(chunk, host) {
+            Ok(replies) => {
+                drop(state);
+                Ok(replies)
             }
-            if let Err(error) = locked_writer.flush() {
-                eprintln!("failed to flush terminal host query replies: {error}");
+            Err(error) => {
+                state
+                    .captures
+                    .fail_all(&format!("failed to process terminal output: {error:#}"));
+                drop(state);
+                Err(error)
             }
         }
-        Err(error) => eprintln!("terminal writer mutex poisoned while replying: {error}"),
     }
+    pub(super) fn reader_closed(&self, message: &str) {
+        match self.lock() {
+            Ok(mut state) => state.captures.fail_all(message),
+            Err(error) => eprintln!("failed to close command title captures: {error:#}"),
+        }
+    }
+    fn lock(&self) -> Result<MutexGuard<'_, TerminalState>> {
+        self.state
+            .lock()
+            .map_err(|error| anyhow::anyhow!("terminal mutex poisoned: {error}"))
+    }
+}
+impl TerminalState {
+    fn process(&mut self, chunk: &[u8], host: &HostProfile) -> Result<Vec<Vec<u8>>> {
+        let mut replies = Vec::new();
+        let mut parsed_end = 0_usize;
+        let mut protocol_end = 0_usize;
+        while protocol_end < chunk.len() {
+            let remaining = chunk
+                .get(protocol_end..)
+                .context("terminal protocol offset exceeds PTY output")?;
+            let (consumed, event) = self.protocol.advance(remaining);
+            if consumed == 0 {
+                bail!("terminal protocol parser made no progress");
+            }
+            protocol_end = protocol_end
+                .checked_add(consumed)
+                .context("terminal protocol offset overflow")?;
+            let Some(protocol_event) = event else {
+                continue;
+            };
+            let segment = chunk
+                .get(parsed_end..protocol_end)
+                .context("terminal event offset exceeds PTY output")?;
+            self.process_screen(segment, host, &mut replies);
+            let screen_title = self.parser.screen().title().to_owned();
+            self.captures.handle(protocol_event, &screen_title)?;
+            parsed_end = protocol_end;
+        }
+        let tail = chunk
+            .get(parsed_end..)
+            .context("terminal tail offset exceeds PTY output")?;
+        self.process_screen(tail, host, &mut replies);
+        Ok(replies)
+    }
+    fn process_screen(&mut self, bytes: &[u8], host: &HostProfile, replies: &mut Vec<Vec<u8>>) {
+        self.parser.process(bytes);
+        replies.extend(
+            self.parser
+                .screen_mut()
+                .drain_events()
+                .into_iter()
+                .filter_map(|event| auto_reply_bytes(&event, host)),
+        );
+    }
+}
+fn title_sequence(title: &str) -> String {
+    format!("\x1b]2;{title}\x1b\\")
 }
 pub(super) fn lock_mutex<'guard, T>(
     mutex: &'guard Mutex<T>,
@@ -88,29 +130,5 @@ pub(super) fn lock_mutex<'guard, T>(
         .map_err(|error| anyhow::anyhow!("{name} mutex poisoned: {error}"))
 }
 #[cfg(test)]
-mod tests {
-    use super::create_parser;
-    use tastty_core::TerminalSize;
-    const SIZE: TerminalSize = TerminalSize {
-        rows: 30,
-        cols: 120,
-    };
-    #[test]
-    fn shell_title_overwrites_initial_title() {
-        let mut parser = create_parser(SIZE, 0, "FuncTerm").unwrap();
-        assert_eq!(parser.screen().title(), "FuncTerm");
-        parser.process(b"\x1b]2;Shell title\x1b\\");
-        assert_eq!(parser.screen().title(), "Shell title");
-    }
-    #[test]
-    fn control_characters_are_rejected() {
-        let result = create_parser(SIZE, 0, "unsafe\x1btitle");
-        let Err(error) = result else {
-            panic!("control characters should be rejected");
-        };
-        assert_eq!(
-            error.to_string(),
-            "terminal_initial_title must not contain control characters"
-        );
-    }
-}
+#[path = "terminal/terminal_tests.rs"]
+mod tests;

@@ -53,6 +53,13 @@ enum CliCommand {
         directory: PathBuf,
     },
     #[command(hide = true)]
+    InternalWriteStart {
+        #[arg(long)]
+        command_id: String,
+        #[arg(long)]
+        directory: PathBuf,
+    },
+    #[command(hide = true)]
     InternalEnsureShims {
         #[arg(long)]
         directory: PathBuf,
@@ -72,6 +79,10 @@ pub(crate) async fn run() -> Result<()> {
             cwd,
             directory,
         } => write_done(&command_id, exit_code, &time_consumption, &cwd, &directory),
+        CliCommand::InternalWriteStart {
+            command_id,
+            directory,
+        } => crate::app::command_state::write_start(&command_id, &directory),
         CliCommand::Mcp => crate::mcp::run(config::load()?).await,
         CliCommand::Daemon => crate::runtime::daemon::run(config::load()?),
         CliCommand::NewTab {
@@ -131,8 +142,8 @@ fn write_done(
     cwd: &str,
     directory: &Path,
 ) -> Result<()> {
-    crate::app::done::write(
-        &crate::app::done::DoneOutput {
+    crate::app::command_state::write_done(
+        &crate::app::command_state::DoneOutput {
             command_id,
             exit_code,
             time_consumption,
@@ -154,25 +165,26 @@ mod tests {
     #[test]
     fn internal_done_writer_serializes_json_strings() {
         let directory = crate::test_fs::temp_dir("internal-done-writer");
-        super::write_done(
-            "command\"id",
-            7,
-            "123.456ms",
-            "cwd\nwith\\chars",
-            &directory,
-        )
-        .unwrap();
+        let done = crate::app::command_state::DoneOutput {
+            command_id: "command\"id",
+            exit_code: 7,
+            time_consumption: "123.456ms",
+            cwd: "cwd\nwith\\chars",
+        };
+        let mut terminal_output = Vec::new();
+        crate::app::command_state::write_done_to(&done, &directory, &mut terminal_output).unwrap();
+        assert_eq!(terminal_output, b"\x1b]9999;FuncTerm;end;command\"id\x1b\\");
         let text = std::fs::read_to_string(
             directory
                 .join(crate::contract::COMMAND_STATE_DIRECTORY)
                 .join(crate::contract::DONE_FILE),
         )
         .unwrap();
-        let done = sonic_rs::from_str::<WrittenDone>(&text).unwrap();
-        assert_eq!(done.command_id, "command\"id");
-        assert_eq!(done.exit_code, 7_i32);
-        assert_eq!(done.time_consumption, "123.456ms");
-        assert_eq!(done.cwd, "cwd\nwith\\chars");
+        let written = sonic_rs::from_str::<WrittenDone>(&text).unwrap();
+        assert_eq!(written.command_id, "command\"id");
+        assert_eq!(written.exit_code, 7_i32);
+        assert_eq!(written.time_consumption, "123.456ms");
+        assert_eq!(written.cwd, "cwd\nwith\\chars");
         std::fs::remove_dir_all(directory).unwrap();
     }
 }

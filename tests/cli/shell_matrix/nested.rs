@@ -45,7 +45,14 @@ fn cli_keeps_nested_launch_result_stable_after_nested_shell_exits() {
         let launch_id = parse_command_id(&launch_output);
         let launch = parse_command_result(&launch_output);
         assert!(launch.finished, "{} nested launch should finish", case.name);
-        assert_eq!(launch.exit_code, Some(0_i32));
+        assert_eq!(
+            launch.exit_code,
+            Some(0_i32),
+            "{} nested launch failed: stdout: {}\nstderr: {}",
+            case.name,
+            launch.stdout,
+            launch.stderr
+        );
         let marker = format!("MCP_PTY_NESTED_{}", case.name.to_ascii_uppercase());
         let nested = parse_command_result(&send_command(
             &created.tab_id,

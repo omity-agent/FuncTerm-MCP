@@ -108,11 +108,13 @@ sonic-rs = ">=0.5.8"
 tastty-core = ">=0.1.1"
 tokio = { version = ">=1.52.3", features = ["macros", "rt-multi-thread"] }
 toml = ">=1.1.2"
+vte = ">=0.15.0"
 which = ">=8.0.4"
 windows-sys = { version = ">=0.61.2", features = [
     "Win32_Foundation",
     "Win32_Security",
     "Win32_Storage_FileSystem",
+    "Win32_System_Console",
     "Win32_System_Environment",
     "Win32_System_JobObjects",
     "Win32_System_Threading",

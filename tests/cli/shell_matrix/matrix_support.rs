@@ -129,6 +129,28 @@ pub(super) fn case_command(shell: &str, next: &Path) -> String {
         other => panic!("unsupported shell case {other}"),
     }
 }
+pub(super) fn plain_title_command(shell: &str) -> &'static str {
+    match shell {
+        "powershell" => "Write-Output 'MCP_PTY_PLAIN_TITLE'",
+        "bash" | "zsh" => "printf 'MCP_PTY_PLAIN_TITLE\\n'",
+        "nu" => "print 'MCP_PTY_PLAIN_TITLE'",
+        "cmd" => "echo MCP_PTY_PLAIN_TITLE",
+        other => panic!("unsupported shell case {other}"),
+    }
+}
+pub(super) fn set_title_command(shell: &str, title: &str) -> String {
+    match shell {
+        "powershell" => format!(
+            "[Console]::Write(\"$([char]27)]2;{title}$([char]7)\"); Write-Output 'MCP_PTY_TITLE_SET'"
+        ),
+        "bash" | "zsh" => format!("printf '\\033]2;{title}\\007'; printf 'MCP_PTY_TITLE_SET\\n'"),
+        "nu" => format!(
+            "print --raw --no-newline $'(ansi osc)2;{title}(ansi st)'; print 'MCP_PTY_TITLE_SET'"
+        ),
+        "cmd" => format!("title {title}& echo MCP_PTY_TITLE_SET"),
+        other => panic!("unsupported shell case {other}"),
+    }
+}
 pub(super) fn nested_launch_command(shell: &str) -> &'static str {
     match shell {
         "powershell" => "pwsh -NoLogo",

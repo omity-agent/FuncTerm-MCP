@@ -15,7 +15,6 @@ if not exist "%output_dir%" mkdir "%output_dir%" || exit /b 1
 if not exist "%state_dir%" mkdir "%state_dir%" || exit /b 1
 set "stdout_file=%output_dir%\@STDOUT@"
 set "stderr_file=%output_dir%\@STDERR@"
-set "started_file=%state_dir%\@STARTED@"
 set "script_file=%input_dir%\@SCRIPT@"
 set "done_file=%state_dir%\@DONE@"
 set "time_consumption=0ns"
@@ -48,7 +47,12 @@ if errorlevel 1 (
     call :restore_command_environment
     exit /b 1
 )
-type nul > "%started_file%"
+call :publish_start
+if errorlevel 1 (
+    call :publish_done 1
+    call :restore_command_environment
+    exit /b 1
+)
 call :command_time_millis
 set "command_started_at=%ERRORLEVEL%"
 call "%script_file%" > "%stdout_file%" 2> "%stderr_file%"
@@ -78,6 +82,13 @@ if "%@HELPER_ENV@%"=="" (
     exit /b 1
 )
 "%@HELPER_ENV@%" internal-write-done --command-id "%command_id%" --exit-code "%~1" --time-consumption "%time_consumption%" --cwd "%CD%" --directory "%directory%"
+exit /b %ERRORLEVEL%
+:publish_start
+if "%@HELPER_ENV@%"=="" (
+    echo @HELPER_ENV@ is not set 1>&2
+    exit /b 1
+)
+"%@HELPER_ENV@%" internal-write-start --command-id "%command_id%" --directory "%directory%"
 exit /b %ERRORLEVEL%
 :command_time_millis
 for /f "tokens=1-4 delims=:. ," %%a in ("%TIME%") do (

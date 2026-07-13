@@ -12,3 +12,7 @@ pub(crate) const POSIX_COMMAND_FUNCTION: &str = "functerm_run_command";
 pub(crate) const STDERR_FILE: &str = "stderr.txt";
 pub(crate) const STARTED_FILE: &str = "started";
 pub(crate) const STDOUT_FILE: &str = "stdout.txt";
+pub(crate) const TERMINAL_MARKER_CODE: &[u8] = b"9999";
+pub(crate) const TERMINAL_MARKER_END: &[u8] = b"end";
+pub(crate) const TERMINAL_MARKER_NAME: &[u8] = b"FuncTerm";
+pub(crate) const TERMINAL_MARKER_START: &[u8] = b"start";

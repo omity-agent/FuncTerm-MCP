@@ -77,6 +77,7 @@ pub(crate) struct CommandView {
 }
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) struct CommandSnapshot {
+    pub(crate) title: String,
     pub(crate) command: CommandView,
     pub(crate) note: String,
 }

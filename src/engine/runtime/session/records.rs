@@ -61,6 +61,7 @@ pub(super) fn create_record(
 pub(super) fn read_command_result(
     record: &CommandRecord,
     observed_time_consumption: Duration,
+    title: String,
 ) -> Result<CommandSnapshot> {
     let stdout = read_optional(&record.stdout)?;
     let stderr = read_optional(&record.stderr)?;
@@ -73,6 +74,7 @@ pub(super) fn read_command_result(
     })?;
     let note = command_note(&stdout, &stderr, "");
     Ok(CommandSnapshot {
+        title,
         command: CommandView {
             stdout,
             stderr,
@@ -86,8 +88,9 @@ pub(super) fn read_command_result(
 pub(super) fn read_and_clear_command_result(
     record: &CommandRecord,
     time_consumption: Duration,
+    title: String,
 ) -> Result<CommandSnapshot> {
-    let result = read_command_result(record, time_consumption)?;
+    let result = read_command_result(record, time_consumption, title)?;
     if let Err(error) = remove_record_directory(record) {
         eprintln!("{error:#}");
     }

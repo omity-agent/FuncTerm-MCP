@@ -10,7 +10,6 @@ const TEMPLATE : & str = "def @FUNCTION@ [command_id: string, directory: path, w
     mkdir $input_dir $output_dir $state_dir
     let stdout_file = ($output_dir | path join '@STDOUT@')
     let stderr_file = ($output_dir | path join '@STDERR@')
-    let started_file = ($state_dir | path join '@STARTED@')
     let command_file = ($input_dir | path join '@COMMAND@')
     let done_file = ($state_dir | path join '@DONE@')
     let zero_time_consumption = '0ns'
@@ -57,7 +56,14 @@ const TEMPLATE : & str = "def @FUNCTION@ [command_id: string, directory: path, w
         if ($nushell | is-empty) {
             error make {msg: 'FUNCTERM_REAL_NUSHELL is not set'}
         }
-        '' | save --force --raw $started_file
+        let helper = $env.@HELPER_ENV@?
+        if ($helper | is-empty) {
+            error make {msg: '@HELPER_ENV@ is not set'}
+        }
+        ^$helper internal-write-start --command-id $command_id --directory $directory
+        if $env.LAST_EXIT_CODE != 0 {
+            error make {msg: 'failed to publish command start'}
+        }
         let command_started_at = date now
         let result = (^$nushell --no-history --config $config_file --env-config $env_config_file --interactive --execute $command | complete)
         let time_consumption = ((date now) - $command_started_at) | into string

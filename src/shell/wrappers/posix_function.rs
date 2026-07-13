@@ -3,7 +3,7 @@ use super::posix_startup::{path_function, shim_path_function};
 use crate::contract::{
     COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, COMMAND_INPUT_DIRECTORY,
     COMMAND_OUTPUT_DIRECTORY, COMMAND_STATE_DIRECTORY, DONE_FILE, HELPER_EXECUTABLE_ENV,
-    POSIX_COMMAND_FUNCTION, STARTED_FILE, STDERR_FILE, STDOUT_FILE,
+    POSIX_COMMAND_FUNCTION, STDERR_FILE, STDOUT_FILE,
 };
 pub(in crate::shell) fn bash_wrapper() -> String {
     format!(
@@ -55,7 +55,6 @@ fn command_function(dialect: PosixDialect) -> String {
     {mkdir} "$input_dir" "$output_dir" "$state_dir" || return 1
     local stdout_file="$output_dir/{stdout}"
     local stderr_file="$output_dir/{stderr}"
-    local started_file="$state_dir/{started}"
     local command_file="$input_dir/{command_file}"
     local done_file="$state_dir/{done}"
     local previous_command_id="${{{command_id_env}-}}"
@@ -100,7 +99,17 @@ fn command_function(dialect: PosixDialect) -> String {
         fi
         return 1
     fi
-    : {write_started} "$started_file"
+    if ! functerm_publish_start "$command_id" "$native_directory"; then
+        local publish_result=0
+        functerm_publish_done "$command_id" 1 "0ns" "$PWD" "$native_directory" || publish_result=$?
+        functerm_restore_command_environment \
+            "$had_previous_command_id" "$previous_command_id" \
+            "$had_previous_command_directory" "$previous_command_directory"
+        if [ "$publish_result" -ne 0 ]; then
+            return "$publish_result"
+        fi
+        return 1
+    fi
     local command_started_at="$(functerm_command_time_millis)" || return 1
     {{ eval "$script"; }} > "$stdout_file" 2> "$stderr_file"
     local exit_code=$?
@@ -154,6 +163,7 @@ functerm_publish_done() {{
         --cwd "$cwd" \
         --directory "$native_directory"
 }}
+{publish_start}
 functerm_command_time_millis() {{ {emulate}    perl -MTime::HiRes=time -e 'printf "%.0f\n", time() * 1000'; }}
 functerm_ensure_shims() {{
 {emulate}    local shim_dir="${{FUNCTERM_SHIM_DIR-}}"
@@ -176,16 +186,15 @@ functerm_ensure_shims() {{
         state_dir = COMMAND_STATE_DIRECTORY,
         stdout = STDOUT_FILE,
         stderr = STDERR_FILE,
-        started = STARTED_FILE,
         command_file = COMMAND_FILE,
         done = DONE_FILE,
         helper_env = HELPER_EXECUTABLE_ENV,
         command_id_env = COMMAND_ID_ENV,
         command_dir_env = COMMAND_DIRECTORY_ENV,
         previous_flags = dialect.previous_flags(),
-        write_started = dialect.write_done_temp(),
         cd = dialect.cd(),
         test_one = dialect.test_arg("1"),
         test_three = dialect.test_arg("3"),
+        publish_start = super::start::posix(dialect),
     )
 }

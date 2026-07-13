@@ -33,7 +33,8 @@ impl Tab {
         let reservation = ShellReservation::new(&session, &command_id)?;
         let initial_cwd = session.cwd()?;
         let record = create_record(session.command_root(), &command_id, &initial_cwd)?;
-        let managed = Arc::new(ManagedCommand::new(command_id, record));
+        let title = session.capture_title(&command_id)?;
+        let managed = Arc::new(ManagedCommand::new(command_id, record, title));
         self.insert_command(Arc::clone(&managed))?;
         if let Err(error) = session.write_invocation(managed.id(), command_text, managed.record()) {
             self.abandon_start(&managed, &session)?;

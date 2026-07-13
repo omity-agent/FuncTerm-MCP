@@ -3,6 +3,8 @@ use crate::runtime::session::records::{
     CommandRecord, command_note, read_and_clear_command_result, read_command_result,
     remove_record_directory, wait_for_done, write_failed_result,
 };
+use crate::runtime::session::terminal::CommandTitle;
+use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use core::time::Duration;
 use std::sync::Mutex;
@@ -13,6 +15,7 @@ pub(in crate::engine::runtime::session::manager) struct ManagedCommand {
     started_at: Instant,
     state: Mutex<CommandState>,
     cached_view: Mutex<Option<CommandSnapshot>>,
+    title: Arc<CommandTitle>,
 }
 #[derive(Clone, Copy)]
 enum CommandState {
@@ -26,13 +29,14 @@ pub(in crate::engine::runtime::session::manager) enum CommandWait {
     Failed,
 }
 impl ManagedCommand {
-    pub(super) fn new(id: String, record: CommandRecord) -> Self {
+    pub(super) fn new(id: String, record: CommandRecord, title: Arc<CommandTitle>) -> Self {
         Self {
             id,
             record,
             started_at: Instant::now(),
             state: Mutex::new(CommandState::Running),
             cached_view: Mutex::new(None),
+            title,
         }
     }
     pub(in crate::engine::runtime::session::manager) fn id(&self) -> &str {
@@ -63,7 +67,7 @@ impl ManagedCommand {
         if let Some(view) = self.cached_view()? {
             return Ok(view);
         }
-        read_command_result(&self.record, self.time_consumption())
+        read_command_result(&self.record, self.time_consumption(), self.title.current()?)
     }
     #[expect(
         clippy::significant_drop_tightening,
@@ -77,7 +81,8 @@ impl ManagedCommand {
                 .context("finished command is missing cached view")?;
             return Ok(());
         }
-        let view = read_and_clear_command_result(&self.record, self.time_consumption())?;
+        let title = self.title.wait_finished()?;
+        let view = read_and_clear_command_result(&self.record, self.time_consumption(), title)?;
         *self.lock_cached_view()? = Some(view);
         *state = CommandState::Finished;
         Ok(())
@@ -89,8 +94,14 @@ impl ManagedCommand {
         let failure_message = message.into();
         let mut state = self.lock_state()?;
         if matches!(*state, CommandState::Running) {
+            let title = self.title.cancel()?;
             write_failed_result(&self.id, &self.record, &failure_message)?;
-            let view = failure_view(&self.record, &failure_message, self.time_consumption())?;
+            let view = failure_view(
+                &self.record,
+                &failure_message,
+                self.time_consumption(),
+                title,
+            )?;
             if let Err(error) = remove_record_directory(&self.record) {
                 eprintln!("{error:#}");
             }
@@ -124,8 +135,9 @@ fn failure_view(
     record: &CommandRecord,
     message: &str,
     time_consumption: Duration,
+    title: String,
 ) -> Result<CommandSnapshot> {
-    let mut snapshot = read_command_result(record, time_consumption)?;
+    let mut snapshot = read_command_result(record, time_consumption, title)?;
     if !snapshot.command.finished {
         snapshot.command.finished = true;
         snapshot.command.exit_code = Some(1_i32);
