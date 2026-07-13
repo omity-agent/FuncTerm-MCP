@@ -68,7 +68,7 @@ const fn invocation_line_ending() -> &'static str {
 }
 fn initialization_script(context: StartupContext<'_>) -> Result<String> {
     Ok(format!(
-        "$env.{CURRENT_SHELL_ENV} = 'nu'\n{}\ncd {}\n'' | save --force --raw {}\n",
+        "$env.{CURRENT_SHELL_ENV} = 'nu'\n$env.config.shell_integration.osc133 = true\n{}\ncd {}\n'' | save --force --raw {}\n",
         nushell_wrapper(),
         quote::nushell_path(context.cwd)?,
         quote::nushell_path(context.ready_file)?

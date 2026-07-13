@@ -1,4 +1,7 @@
-use super::{DriverStartup, InvocationContext, ShellDriver, StartupContext, os_strings_lower};
+use super::{
+    DriverStartup, InvocationContext, PROMPT_END_SEQUENCE, ShellDriver, StartupContext,
+    os_strings_lower,
+};
 use crate::contract::POSIX_COMMAND_FUNCTION;
 use crate::runtime::config::Settings;
 use crate::shell::ShellChoice;
@@ -88,7 +91,7 @@ impl ShellDriver for PosixDriver {
 }
 fn bash_startup(context: StartupContext<'_>) -> Result<DriverStartup> {
     let init_path = context.startup_directory.join("bash_init.sh");
-    let script = initialization_script(context, "bash", &bash_wrapper(), ">")?;
+    let script = initialization_script(context, PosixKind::Bash, &bash_wrapper(), ">")?;
     std::fs::write(&init_path, script).context("failed to write Bash initialization script")?;
     Ok(DriverStartup {
         args: vec![
@@ -102,7 +105,7 @@ fn bash_startup(context: StartupContext<'_>) -> Result<DriverStartup> {
 }
 fn zsh_startup(context: StartupContext<'_>) -> Result<DriverStartup> {
     let init_path = context.startup_directory.join(".zshrc");
-    let script = initialization_script(context, "zsh", &zsh_wrapper(), ">|")?;
+    let script = initialization_script(context, PosixKind::Zsh, &zsh_wrapper(), ">|")?;
     std::fs::write(&init_path, script).context("failed to write Zsh initialization script")?;
     Ok(DriverStartup {
         args: vec!["-i".to_owned()],
@@ -114,12 +117,22 @@ fn zsh_startup(context: StartupContext<'_>) -> Result<DriverStartup> {
 }
 fn initialization_script(
     context: StartupContext<'_>,
-    shell: &str,
+    kind: PosixKind,
     wrapper: &str,
     overwrite: &str,
 ) -> Result<String> {
+    let (shell, prompt_setup) = match kind {
+        PosixKind::Bash => (
+            "bash",
+            format!(r#"PS1="${{PS1}}"'\[{PROMPT_END_SEQUENCE}\]'"#),
+        ),
+        PosixKind::Zsh => (
+            "zsh",
+            format!(r#"PROMPT="${{PROMPT}}"'%{{{PROMPT_END_SEQUENCE}%}}'"#),
+        ),
+    };
     Ok(format!(
-        "export {CURRENT_SHELL_ENV}={shell}\n{wrapper}\nfuncterm_cwd=$(functerm_posix_path {}) || exit 1\nfuncterm_ready_file=$(functerm_posix_path {}) || exit 1\ncd \"$functerm_cwd\"\n: {overwrite} \"$functerm_ready_file\"\n",
+        "export {CURRENT_SHELL_ENV}={shell}\n{wrapper}\nfuncterm_cwd=$(functerm_posix_path {}) || exit 1\nfuncterm_ready_file=$(functerm_posix_path {}) || exit 1\ncd \"$functerm_cwd\"\n{prompt_setup}\n: {overwrite} \"$functerm_ready_file\"\n",
         quote::posix_string(&quote::native_path(context.cwd)?),
         quote::posix_string(&quote::native_path(context.ready_file)?)
     ))

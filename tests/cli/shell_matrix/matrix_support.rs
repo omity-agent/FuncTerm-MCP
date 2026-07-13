@@ -129,6 +129,34 @@ pub(super) fn case_command(shell: &str, next: &Path) -> String {
         other => panic!("unsupported shell case {other}"),
     }
 }
+pub(super) fn title_probe_command(shell: &str, title: &str) -> String {
+    const PROBE: &str = "terminal_title_probe";
+    const ENV: &str = "FUNCTERM_TITLE_PROBE";
+    let executable = std::env::current_exe().unwrap();
+    let native_executable = quote::native_path(&executable).unwrap();
+    match shell {
+        "powershell" => format!(
+            "$env:{ENV} = {}; & {} {PROBE} --nocapture",
+            quote::powershell_string(title),
+            quote::powershell_path(&executable).unwrap()
+        ),
+        "bash" | "zsh" => format!(
+            "{ENV}={} {} {PROBE} --nocapture",
+            quote::posix_string(title),
+            quote::posix_string(&native_executable)
+        ),
+        "nu" => format!(
+            "$env.{ENV} = {}; ^{} {PROBE} --nocapture",
+            quote::nushell_string(title),
+            quote::nushell_path(&executable).unwrap()
+        ),
+        "cmd" => format!(
+            "set \"{ENV}={title}\"& {} {PROBE} --nocapture",
+            quote::cmd_string(&native_executable)
+        ),
+        other => panic!("unsupported shell case {other}"),
+    }
+}
 pub(super) fn nested_launch_command(shell: &str) -> &'static str {
     match shell {
         "powershell" => "pwsh -NoLogo",

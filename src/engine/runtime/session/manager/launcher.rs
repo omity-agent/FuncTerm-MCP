@@ -6,7 +6,7 @@ use super::{
 use crate::runtime::config::Settings;
 use crate::runtime::protocol::EnvironmentSnapshot;
 use crate::runtime::session::records::wait_for_path;
-use crate::runtime::session::terminal::{TerminalParser, create_parser, lock_mutex, start_reader};
+use crate::runtime::session::terminal::{TerminalState, create_parser, lock_mutex, start_reader};
 use crate::runtime::temp;
 use crate::shell::{ShellChoice, ShellStartup, shims};
 use alloc::sync::Arc;
@@ -154,7 +154,7 @@ pub(super) fn apply_startup(command: &mut CommandBuilder, startup: ShellStartup)
 pub(super) fn wait_for_shell_startup(
     child: &mut Box<dyn Child + Send + Sync>,
     ready_file: &Path,
-    screen: &Arc<Mutex<TerminalParser>>,
+    screen: &Arc<Mutex<TerminalState>>,
     timeout: Duration,
 ) -> Result<()> {
     if let Some(status) = child.try_wait().context("failed to poll shell startup")? {
@@ -178,7 +178,7 @@ pub(super) fn wait_for_shell_startup(
         startup_screen(screen)?
     );
 }
-fn startup_screen(screen: &Arc<Mutex<TerminalParser>>) -> Result<String> {
-    let contents = lock_mutex(screen, "screen")?.screen().contents();
+fn startup_screen(screen: &Arc<Mutex<TerminalState>>) -> Result<String> {
+    let contents = lock_mutex(screen, "screen")?.contents();
     Ok(contents.trim().to_owned())
 }

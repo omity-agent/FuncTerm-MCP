@@ -1,7 +1,7 @@
 use super::{process, process_tree};
 use crate::runtime::session::keyboard;
 use crate::runtime::session::records::{CommandRecord, read_done};
-use crate::runtime::session::terminal::{TerminalParser, lock_mutex, screen_title};
+use crate::runtime::session::terminal::{TerminalState, lock_mutex};
 use crate::shell::{ShellChoice, shims};
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
@@ -15,7 +15,7 @@ pub(super) struct ShellSession {
     choice: Mutex<ShellChoice>,
     cwd: Mutex<PathBuf>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
-    screen: Arc<Mutex<TerminalParser>>,
+    screen: Arc<Mutex<TerminalState>>,
     busy: Mutex<Option<String>>,
     command_root: PathBuf,
     active_shell_file: PathBuf,
@@ -34,7 +34,7 @@ pub(super) struct ShellSessionParts {
     pub(super) choice: ShellChoice,
     pub(super) cwd: PathBuf,
     pub(super) writer: Arc<Mutex<Box<dyn Write + Send>>>,
-    pub(super) screen: Arc<Mutex<TerminalParser>>,
+    pub(super) screen: Arc<Mutex<TerminalState>>,
     pub(super) busy: Option<String>,
     pub(super) command_root: PathBuf,
     pub(super) active_shell_file: PathBuf,
@@ -72,11 +72,10 @@ impl ShellSession {
         Ok(())
     }
     pub(super) fn screen_contents(&self) -> Result<String> {
-        Ok(lock_mutex(&self.screen, "screen")?.screen().contents())
+        Ok(lock_mutex(&self.screen, "screen")?.contents())
     }
     pub(super) fn screen_title(&self) -> Result<String> {
-        let parser = lock_mutex(&self.screen, "screen")?;
-        Ok(screen_title(&parser))
+        Ok(lock_mutex(&self.screen, "screen")?.title().to_owned())
     }
     pub(super) fn current_choice(&self) -> Result<ShellChoice> {
         Ok(*lock_mutex(&self.choice, "choice")?)

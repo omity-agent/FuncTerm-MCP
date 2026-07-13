@@ -1,7 +1,7 @@
 use crate::runtime::session::manager::shell_session::{
     KeyboardWriteFailure, ShellSession, ShellSessionParts,
 };
-use crate::runtime::session::terminal::TerminalParser;
+use crate::runtime::session::terminal::create_parser;
 use crate::shell::ShellChoice;
 use alloc::sync::Arc;
 use anyhow::Error;
@@ -88,13 +88,17 @@ fn test_shell(busy: Option<&str>) -> ShellSession {
         choice: ShellChoice::PowerShell,
         cwd: crate::test_fs::temp_root(),
         writer: Arc::new(Mutex::new(writer)),
-        screen: Arc::new(Mutex::new(TerminalParser::new(
-            TerminalSize {
-                rows: 30,
-                cols: 120,
-            },
-            0,
-        ))),
+        screen: Arc::new(Mutex::new(
+            create_parser(
+                TerminalSize {
+                    rows: 30,
+                    cols: 120,
+                },
+                0,
+                "FuncTerm",
+            )
+            .unwrap(),
+        )),
         busy: busy.map(str::to_owned),
         command_root: crate::test_fs::temp_dir("command-manager"),
         active_shell_file: crate::test_fs::temp_dir("command-manager-active")

@@ -1,4 +1,7 @@
-use super::{DriverStartup, InvocationContext, ShellDriver, StartupContext, os_strings_lower};
+use super::{
+    DriverStartup, InvocationContext, PROMPT_END_SEQUENCE, ShellDriver, StartupContext,
+    os_strings_lower,
+};
 use crate::contract::POWERSHELL_COMMAND_FUNCTION;
 use crate::runtime::config::Settings;
 use crate::shell::ShellChoice;
@@ -70,10 +73,11 @@ impl ShellDriver for PowerShellDriver {
 }
 fn initialization_script(context: StartupContext<'_>) -> Result<String> {
     Ok(format!(
-        "$env:{CURRENT_SHELL_ENV} = 'powershell'\n{}\nSet-Location -LiteralPath {}\n$script:FuncTermReadyWritten = $false\n$script:FuncTermOriginalPrompt = (Get-Command prompt).ScriptBlock\nfunction prompt {{\n    if (-not $script:FuncTermReadyWritten) {{\n        Set-Content -LiteralPath {} -Value '' -NoNewline\n        $script:FuncTermReadyWritten = $true\n    }}\n    & $script:FuncTermOriginalPrompt\n}}",
+        "$env:{CURRENT_SHELL_ENV} = 'powershell'\n{}\nSet-Location -LiteralPath {}\n$script:FuncTermReadyWritten = $false\n$script:FuncTermOriginalPrompt = (Get-Command prompt).ScriptBlock\nfunction prompt {{\n    $promptText = & $script:FuncTermOriginalPrompt\n    if (-not $script:FuncTermReadyWritten) {{\n        Set-Content -LiteralPath {} -Value '' -NoNewline\n        $script:FuncTermReadyWritten = $true\n    }}\n    $promptText + {}\n}}",
         powershell_wrapper(),
         quote::powershell_path(context.cwd)?,
-        quote::powershell_path(context.ready_file)?
+        quote::powershell_path(context.ready_file)?,
+        quote::powershell_string(PROMPT_END_SEQUENCE)
     ))
 }
 fn keyboard_bytes(bytes: &[u8]) -> Cow<'_, [u8]> {
@@ -128,6 +132,7 @@ mod tests {
         assert!(script.contains("Invoke-FuncTermCommand"));
         assert!(script.contains("Set-Location -LiteralPath ([Text.Encoding]::UTF8.GetString"));
         assert!(script.contains("Set-Content -LiteralPath ([Text.Encoding]::UTF8.GetString"));
+        assert!(script.contains("$promptText + ([Text.Encoding]::UTF8.GetString"));
     }
     #[test]
     fn invocation_passes_command_directory() {

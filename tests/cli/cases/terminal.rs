@@ -6,10 +6,11 @@ mod tests {
     use crate::support::locked_with_env;
     use crate::support::{create_tab, parse_command_result, send_command, temp_root};
     use functerm::shell::quote;
-    use std::io::{IsTerminal as _, stderr, stdin, stdout};
+    use std::io::{IsTerminal as _, Write as _, stderr, stdin, stdout};
     use std::path::Path;
     const PROBE_ENV: &str = "FUNCTERM_IS_TERMINAL_PROBE";
     const PROBE_MARKER: &str = "FUNCTERM_IS_TERMINAL";
+    const TITLE_PROBE_ENV: &str = "FUNCTERM_TITLE_PROBE";
     #[test]
     fn cli_tab_exposes_terminal_stdin_to_child_programs() {
         #[cfg(windows)]
@@ -57,6 +58,17 @@ mod tests {
             stdout().is_terminal(),
             stderr().is_terminal()
         );
+    }
+    #[test]
+    fn terminal_title_probe() {
+        let Ok(title) = std::env::var(TITLE_PROBE_ENV) else {
+            return;
+        };
+        let mut output = stdout().lock();
+        output.write_all(b"\x1b]2;").unwrap();
+        output.write_all(title.as_bytes()).unwrap();
+        output.write_all(b"\x1b\\").unwrap();
+        output.flush().unwrap();
     }
     #[cfg(windows)]
     fn probe_command(executable: &Path) -> String {

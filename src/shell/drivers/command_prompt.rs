@@ -1,4 +1,7 @@
-use super::{DriverStartup, InvocationContext, ShellDriver, StartupContext, os_strings_lower};
+use super::{
+    DriverStartup, InvocationContext, PROMPT_END_SEQUENCE, ShellDriver, StartupContext,
+    os_strings_lower,
+};
 use crate::runtime::config::Settings;
 use crate::shell::ShellChoice;
 use crate::shell::quote;
@@ -60,8 +63,9 @@ impl ShellDriver for CmdDriver {
 }
 fn initialization_script(context: StartupContext<'_>) -> Result<String> {
     Ok(format!(
-        "@echo off\r\nset {CURRENT_SHELL_ENV}=cmd\r\ndoskey /listsize=0 >nul 2>nul\r\ncd /d {}\r\ntype nul > {}\r\n",
+        "@echo off\r\nset {CURRENT_SHELL_ENV}=cmd\r\ndoskey /listsize=0 >nul 2>nul\r\ncd /d {}\r\nprompt $P$G{}\r\ntype nul > {}\r\n",
         quote::cmd_string(&quote::native_path(context.cwd)?),
+        PROMPT_END_SEQUENCE,
         quote::cmd_string(&quote::native_path(context.ready_file)?)
     ))
 }

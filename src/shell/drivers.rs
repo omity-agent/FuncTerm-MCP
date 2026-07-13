@@ -8,6 +8,7 @@ use alloc::borrow::Cow;
 use anyhow::{Result, bail};
 use std::ffi::OsString;
 use std::path::Path;
+const PROMPT_END_SEQUENCE: &str = "\x1b]133;B\x1b\\";
 #[derive(Clone, Copy)]
 pub(crate) struct StartupContext<'value> {
     pub(crate) cwd: &'value Path,

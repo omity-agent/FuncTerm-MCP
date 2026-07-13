@@ -3,27 +3,44 @@ use anyhow::{Result, bail};
 use std::io::{Read, Write};
 use std::sync::{Mutex, MutexGuard};
 use std::thread::{self, JoinHandle};
-use tastty_core::{HostProfile, Parser, host_reply::auto_reply_bytes};
-pub(super) type TerminalParser = Parser;
+use tastty_core::{
+    HostProfile, Parser, ScreenEvent, SemanticPrompt, TerminalSize, host_reply::auto_reply_bytes,
+};
+pub(super) struct TerminalState {
+    parser: Parser,
+    visible_title: String,
+    title_phase: TitlePhase,
+}
+enum TitlePhase {
+    Startup,
+    Live,
+}
 pub(super) fn create_parser(
-    size: tastty_core::TerminalSize,
+    size: TerminalSize,
     scrollback_len: usize,
     initial_title: &str,
-) -> Result<TerminalParser> {
+) -> Result<TerminalState> {
     if initial_title.chars().any(char::is_control) {
         bail!("terminal_initial_title must not contain control characters");
     }
-    let mut parser = TerminalParser::new(size, scrollback_len);
+    let mut parser = Parser::new(size, scrollback_len);
+    set_parser_title(&mut parser, initial_title);
+    drop(parser.screen_mut().drain_events());
+    Ok(TerminalState {
+        parser,
+        visible_title: initial_title.to_owned(),
+        title_phase: TitlePhase::Startup,
+    })
+}
+fn set_parser_title(parser: &mut Parser, title: &str) {
     let mut title_sequence = Vec::new();
     title_sequence.extend_from_slice(b"\x1b]2;");
-    title_sequence.extend_from_slice(initial_title.as_bytes());
+    title_sequence.extend_from_slice(title.as_bytes());
     title_sequence.extend_from_slice(b"\x1b\\");
     parser.process(&title_sequence);
-    drop(parser.screen_mut().drain_events());
-    Ok(parser)
 }
 pub(super) fn start_reader(
-    screen: Arc<Mutex<TerminalParser>>,
+    terminal: Arc<Mutex<TerminalState>>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     mut owned_reader: Box<dyn Read + Send>,
 ) -> std::io::Result<JoinHandle<()>> {
@@ -39,16 +56,12 @@ pub(super) fn start_reader(
                         let Some(chunk) = buffer.get(..read_len) else {
                             break;
                         };
-                        let replies = match screen.lock() {
-                            Ok(mut parser) => {
-                                parser.process(chunk);
-                                parser
-                                    .screen_mut()
-                                    .drain_events()
-                                    .into_iter()
-                                    .filter_map(|event| auto_reply_bytes(&event, &host))
-                                    .collect::<Vec<_>>()
-                            }
+                        let replies = match terminal.lock() {
+                            Ok(mut state) => state
+                                .process(chunk)
+                                .iter()
+                                .filter_map(|event| auto_reply_bytes(event, &host))
+                                .collect::<Vec<_>>(),
                             Err(_) => break,
                         };
                         write_replies(&writer, &replies);
@@ -57,8 +70,37 @@ pub(super) fn start_reader(
             }
         })
 }
-pub(super) fn screen_title(parser: &TerminalParser) -> String {
-    parser.screen().title().to_owned()
+impl TerminalState {
+    fn process(&mut self, bytes: &[u8]) -> Vec<ScreenEvent> {
+        self.parser.process(bytes);
+        let events = self.parser.screen_mut().drain_events();
+        let mut live_title_changed = false;
+        for event in &events {
+            if matches!(
+                event,
+                ScreenEvent::ShellIntegration {
+                    mark: SemanticPrompt::PromptEnd,
+                }
+            ) && matches!(self.title_phase, TitlePhase::Startup)
+            {
+                self.title_phase = TitlePhase::Live;
+            } else if matches!(self.title_phase, TitlePhase::Live)
+                && matches!(event, ScreenEvent::TitleChanged)
+            {
+                live_title_changed = true;
+            }
+        }
+        if live_title_changed {
+            self.visible_title = self.parser.screen().title().to_owned();
+        }
+        events
+    }
+    pub(super) fn contents(&self) -> String {
+        self.parser.screen().contents()
+    }
+    pub(super) fn title(&self) -> &str {
+        &self.visible_title
+    }
 }
 fn write_replies(writer: &Arc<Mutex<Box<dyn Write + Send>>>, replies: &[Vec<u8>]) {
     if replies.is_empty() {
@@ -88,29 +130,5 @@ pub(super) fn lock_mutex<'guard, T>(
         .map_err(|error| anyhow::anyhow!("{name} mutex poisoned: {error}"))
 }
 #[cfg(test)]
-mod tests {
-    use super::create_parser;
-    use tastty_core::TerminalSize;
-    const SIZE: TerminalSize = TerminalSize {
-        rows: 30,
-        cols: 120,
-    };
-    #[test]
-    fn shell_title_overwrites_initial_title() {
-        let mut parser = create_parser(SIZE, 0, "FuncTerm").unwrap();
-        assert_eq!(parser.screen().title(), "FuncTerm");
-        parser.process(b"\x1b]2;Shell title\x1b\\");
-        assert_eq!(parser.screen().title(), "Shell title");
-    }
-    #[test]
-    fn control_characters_are_rejected() {
-        let result = create_parser(SIZE, 0, "unsafe\x1btitle");
-        let Err(error) = result else {
-            panic!("control characters should be rejected");
-        };
-        assert_eq!(
-            error.to_string(),
-            "terminal_initial_title must not contain control characters"
-        );
-    }
-}
+#[path = "terminal/tests.rs"]
+mod tests;
