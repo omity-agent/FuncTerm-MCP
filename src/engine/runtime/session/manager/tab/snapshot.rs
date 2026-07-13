@@ -22,7 +22,7 @@ impl TabSnapshot {
         Ok(Self {
             screen,
             cwd,
-            title: session.screen_title()?,
+            title: session.model_title(),
             shell_type,
             idle: session.busy_command_id()?.is_none(),
         })

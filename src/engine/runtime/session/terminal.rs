@@ -10,6 +10,7 @@ use anyhow::{Context as _, Result, bail};
 use std::sync::{Mutex, MutexGuard};
 use tastty_core::{HostProfile, Parser, host_reply::auto_reply_bytes};
 pub(super) struct Terminal {
+    model_title: String,
     state: Mutex<TerminalState>,
 }
 struct TerminalState {
@@ -21,19 +22,17 @@ impl Terminal {
     pub(super) fn new(
         size: tastty_core::TerminalSize,
         scrollback_len: usize,
-        initial_title: &str,
+        model_title: &str,
     ) -> Result<Self> {
-        if initial_title.chars().any(char::is_control) {
-            bail!("terminal_initial_title must not contain control characters");
-        }
         let mut parser = Parser::new(size, scrollback_len);
-        parser.process(title_sequence(initial_title).as_bytes());
+        parser.process(crate::contract::window_title_sequence(model_title)?.as_bytes());
         drop(parser.screen_mut().drain_events());
         Ok(Self {
+            model_title: model_title.to_owned(),
             state: Mutex::new(TerminalState {
                 parser,
                 protocol: ProtocolParser::new(),
-                captures: CaptureRegistry::new(initial_title.to_owned()),
+                captures: CaptureRegistry::new(model_title.to_owned()),
             }),
         })
     }
@@ -43,7 +42,11 @@ impl Terminal {
     pub(super) fn contents(&self) -> Result<String> {
         Ok(self.lock()?.parser.screen().contents())
     }
-    pub(super) fn title(&self) -> Result<String> {
+    pub(super) fn model_title(&self) -> String {
+        self.model_title.clone()
+    }
+    #[cfg(test)]
+    fn raw_title(&self) -> Result<String> {
         Ok(self.lock()?.parser.screen().title().to_owned())
     }
     pub(super) fn process(&self, chunk: &[u8], host: &HostProfile) -> Result<Vec<Vec<u8>>> {
@@ -117,9 +120,6 @@ impl TerminalState {
                 .filter_map(|event| auto_reply_bytes(&event, host)),
         );
     }
-}
-fn title_sequence(title: &str) -> String {
-    format!("\x1b]2;{title}\x1b\\")
 }
 pub(super) fn lock_mutex<'guard, T>(
     mutex: &'guard Mutex<T>,

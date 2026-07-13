@@ -82,7 +82,14 @@ pub(crate) async fn run() -> Result<()> {
         CliCommand::InternalWriteStart {
             command_id,
             directory,
-        } => crate::app::command_state::write_start(&command_id, &directory),
+        } => {
+            let settings = config::load()?;
+            crate::app::command_state::write_start(
+                &command_id,
+                &directory,
+                &settings.terminal_model_title,
+            )
+        }
         CliCommand::Mcp => crate::mcp::run(config::load()?).await,
         CliCommand::Daemon => crate::runtime::daemon::run(config::load()?),
         CliCommand::NewTab {

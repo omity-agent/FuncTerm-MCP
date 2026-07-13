@@ -1,7 +1,7 @@
 use crate::contract::{
     TERMINAL_MARKER_CODE, TERMINAL_MARKER_END, TERMINAL_MARKER_NAME, TERMINAL_MARKER_START,
 };
-use vte::{Params, Perform};
+use vte::Perform;
 pub(super) struct ProtocolParser {
     parser: vte::Parser,
     detector: Detector,
@@ -24,7 +24,7 @@ impl ProtocolParser {
 pub(super) enum ProtocolEvent {
     Start(String),
     End(String),
-    WindowTitleChanged,
+    WindowTitleAssigned,
     Invalid(String),
 }
 #[derive(Default)]
@@ -34,7 +34,7 @@ struct Detector {
 impl Perform for Detector {
     fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
         if matches ! (params . first () , Some (code) if matches ! (* code , b"0" | b"2")) {
-            self.event = Some(ProtocolEvent::WindowTitleChanged);
+            self.event = Some(ProtocolEvent::WindowTitleAssigned);
             return;
         }
         let mut fields = params.iter().copied();
@@ -66,20 +66,6 @@ impl Perform for Detector {
         } else {
             ProtocolEvent::Invalid(format!("terminal marker has unknown phase {phase:?}"))
         });
-    }
-    fn csi_dispatch(&mut self, params: &Params, _intermediates: &[u8], ignore: bool, action: char) {
-        let values = params
-            .iter()
-            .filter_map(|value| value.first().copied())
-            .collect::<Vec<_>>();
-        if !ignore && action == 't' && matches!(values.as_slice(), [23] | [23, 0 | 2]) {
-            self.event = Some(ProtocolEvent::WindowTitleChanged);
-        }
-    }
-    fn esc_dispatch(&mut self, intermediates: &[u8], ignore: bool, byte: u8) {
-        if !ignore && intermediates.is_empty() && byte == b'c' {
-            self.event = Some(ProtocolEvent::WindowTitleChanged);
-        }
     }
     fn terminated(&self) -> bool {
         self.event.is_some()

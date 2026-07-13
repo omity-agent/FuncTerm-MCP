@@ -6,7 +6,7 @@ pub(crate) struct Settings {
     pub(crate) daemon_service_name: String,
     pub(crate) terminal_rows: u16,
     pub(crate) terminal_cols: u16,
-    pub(crate) terminal_initial_title: String,
+    pub(crate) terminal_model_title: String,
     pub(crate) shell_startup_timeout_seconds: f64,
     pub(crate) powershell: Vec<String>,
     pub(crate) bash: String,

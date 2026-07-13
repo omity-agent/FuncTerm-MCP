@@ -64,7 +64,7 @@ impl ShellLauncher {
                 cols: self.settings.terminal_cols,
             },
             0,
-            &self.settings.terminal_initial_title,
+            &self.settings.terminal_model_title,
         )?);
         let pair = native_pty_system()
             .openpty(PtySize {

@@ -75,8 +75,8 @@ impl ShellSession {
     pub(super) fn screen_contents(&self) -> Result<String> {
         self.screen.contents()
     }
-    pub(super) fn screen_title(&self) -> Result<String> {
-        self.screen.title()
+    pub(super) fn model_title(&self) -> String {
+        self.screen.model_title()
     }
     pub(super) fn capture_title(&self, command_id: &str) -> Result<Arc<CommandTitle>> {
         self.screen.capture_title(command_id)

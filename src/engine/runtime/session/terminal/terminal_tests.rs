@@ -10,7 +10,7 @@ fn command_without_title_ignores_titles_outside_its_boundaries() {
     let capture = terminal.capture_title("command-a").unwrap();
     process (& terminal , b"\x1b]2;Shell before\x1b\\\x1b]9999;FuncTerm;start;command-a\x1b\\output\x1b]9999;FuncTerm;end;command-a\x1b\\\x1b]2;Shell after\x1b\\" ,) ;
     assert_eq!(capture.wait_finished().unwrap(), "FuncTerm");
-    assert_eq!(terminal.title().unwrap(), "Shell after");
+    assert_eq!(terminal.raw_title().unwrap(), "Shell after");
 }
 #[test]
 fn command_title_is_frozen_before_shell_restores_its_title() {
@@ -22,7 +22,7 @@ fn command_title_is_frozen_before_shell_restores_its_title() {
         process(&terminal, before_split);
         process(&terminal, after_split);
         assert_eq!(capture.wait_finished().unwrap(), "Command title");
-        assert_eq!(terminal.title().unwrap(), "Shell title");
+        assert_eq!(terminal.raw_title().unwrap(), "Shell title");
     }
 }
 #[test]
@@ -33,6 +33,17 @@ fn repeated_window_title_still_counts_as_command_output() {
     assert_eq!(capture.wait_finished().unwrap(), "Repeated");
 }
 #[test]
+fn restored_shell_title_is_not_a_command_title_assignment() {
+    let terminal = Terminal::new(SIZE, 0, "FuncTerm").unwrap();
+    process(&terminal, b"\x1b]2;Shell title\x07\x1b[22;2t");
+    let capture = terminal.capture_title("command-d").unwrap();
+    process(
+        &terminal,
+        b"\x1b]9999;FuncTerm;start;command-d\x1b\\\x1b[23;2t\x1b]9999;FuncTerm;end;command-d\x1b\\",
+    );
+    assert_eq!(capture.wait_finished().unwrap(), "FuncTerm");
+}
+#[test]
 fn control_characters_are_rejected() {
     let result = Terminal::new(SIZE, 0, "unsafe\x1btitle");
     let Err(error) = result else {
@@ -40,7 +51,7 @@ fn control_characters_are_rejected() {
     };
     assert_eq!(
         error.to_string(),
-        "terminal_initial_title must not contain control characters"
+        "terminal_model_title must not contain control characters"
     );
 }
 fn process(terminal: &Terminal, bytes: &[u8]) {

@@ -105,14 +105,14 @@ impl CommandTitleState {
     }
 }
 pub(super) struct CaptureRegistry {
-    initial: String,
+    model_title: String,
     captures: BTreeMap<String, Arc<CommandTitle>>,
     active: Option<String>,
 }
 impl CaptureRegistry {
-    pub(super) const fn new(initial: String) -> Self {
+    pub(super) const fn new(model_title: String) -> Self {
         Self {
-            initial,
+            model_title,
             captures: BTreeMap::new(),
             active: None,
         }
@@ -121,7 +121,7 @@ impl CaptureRegistry {
         if self.captures.contains_key(id) {
             bail!("command title capture already exists for {id}");
         }
-        let capture = Arc::new(CommandTitle::new(self.initial.clone()));
+        let capture = Arc::new(CommandTitle::new(self.model_title.clone()));
         self.captures.insert(id.to_owned(), Arc::clone(&capture));
         Ok(capture)
     }
@@ -129,7 +129,7 @@ impl CaptureRegistry {
         match event {
             ProtocolEvent::Start(id) => self.start(&id),
             ProtocolEvent::End(id) => self.finish(&id),
-            ProtocolEvent::WindowTitleChanged => self.update(screen_title),
+            ProtocolEvent::WindowTitleAssigned => self.update(screen_title),
             ProtocolEvent::Invalid(message) => bail!(message),
         }
     }

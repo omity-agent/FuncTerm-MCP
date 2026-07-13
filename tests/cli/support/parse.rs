@@ -13,6 +13,7 @@ pub(crate) struct CommandResult {
 }
 pub(crate) struct TabView {
     pub(crate) alive: bool,
+    pub(crate) title: String,
     pub(crate) cwd: String,
     pub(crate) screen: String,
 }
@@ -36,6 +37,7 @@ pub(crate) fn parse_tab_view(output: &Output) -> TabView {
     let text = checked_stdout(output);
     TabView {
         alive: element(&text, "ALIVE").parse().unwrap(),
+        title: element(&text, "TITLE"),
         cwd: element(&text, "CWD"),
         screen: element(&text, "SCREEN"),
     }

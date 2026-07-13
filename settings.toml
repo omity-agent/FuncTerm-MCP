@@ -7,8 +7,8 @@ terminal_rows = 30
 # Shell PTY 的默认列数。
 terminal_cols = 120
 
-# Shell 尚未设置窗口标题时使用的初始标题。
-terminal_initial_title = "FuncTerm"
+# 对外展示并在每条命令开始前恢复的模型标题。
+terminal_model_title = "FuncTerm"
 
 # Shell 启动注入脚本写入 ready 文件前最多等待的秒数。
 shell_startup_timeout_seconds = 30.0
