@@ -12,13 +12,12 @@ def render_value(value: Any, variables: dict[str, str]) -> Any:
     if isinstance(value, list):
         return [render_value(item, variables) for item in value]
     if isinstance(value, dict):
-        return {
-            key: render_value(item, variables) for key, item in value.items()
-        }
+        return {key: render_value(item, variables) for key, item in value.items()}
     return value
 
 
 def render_text(text: str, variables: dict[str, str]) -> str:
+
     def replace(match: re.Match[str]) -> str:
         name = match.group(1)
         try:

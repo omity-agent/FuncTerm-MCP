@@ -15,10 +15,7 @@ async def open_mcp_session(
 ) -> AsyncIterator[ClientSession]:
     cwd = None if server.cwd is None else str(server.cwd)
     parameters = StdioServerParameters(
-        command=server.selected_command(),
-        args=server.args,
-        cwd=cwd,
-        env=server.env,
+        command=server.selected_command(), args=server.args, cwd=cwd, env=server.env
     )
     async with (
         stdio_client(parameters) as (read_stream, write_stream),
@@ -40,8 +37,6 @@ def tool_result_text(result: object) -> str:
     for item in content:
         text = getattr(item, "text", None)
         if not isinstance(text, str):
-            raise TypeError(
-                f"MCP tool result contains non-text content: {type(item).__name__}"
-            )
+            raise TypeError(f"MCP tool result contains non-text content: {type(item).__name__}")
         parts.append(text)
     return "\n".join(parts)

@@ -5,14 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-    PositiveInt,
-    field_validator,
-    model_validator,
-)
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator, model_validator
 
 
 class StepConfig(BaseModel):
@@ -91,17 +84,13 @@ class BenchConfig(BaseModel):
             raise ValueError("client profile names must be unique")
         for profile in self.profiles:
             if not profile.scenario:
-                raise ValueError(
-                    f"profile {profile.name} must contain at least one step"
-                )
+                raise ValueError(f"profile {profile.name} must contain at least one step")
         return self
 
     def client_count(self) -> int:
         return len(self.profiles)
 
-    def profile_order_for(
-        self, client_index: int
-    ) -> list[ClientProfileConfig]:
+    def profile_order_for(self, client_index: int) -> list[ClientProfileConfig]:
         return self.profiles[client_index:] + self.profiles[:client_index]
 
 
@@ -118,9 +107,7 @@ def load_config(path: Path) -> BenchConfig:
 def load_profiles(directory: Path) -> list[ClientProfileConfig]:
     paths = sorted(directory.glob("*.yaml"))
     if not paths:
-        raise ValueError(
-            f"profile directory contains no yaml files: {directory}"
-        )
+        raise ValueError(f"profile directory contains no yaml files: {directory}")
     return [load_profile(path) for path in paths]
 
 

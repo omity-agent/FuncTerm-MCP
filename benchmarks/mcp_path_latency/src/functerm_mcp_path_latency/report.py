@@ -7,9 +7,7 @@ from functerm_mcp_path_latency.config import ReportConfig
 from functerm_mcp_path_latency.result import BenchmarkResult
 
 
-def write_reports(
-    result: BenchmarkResult, config: ReportConfig
-) -> tuple[Path, Path]:
+def write_reports(result: BenchmarkResult, config: ReportConfig) -> tuple[Path, Path]:
     config.directory.mkdir(parents=True, exist_ok=True)
     summary_path = config.directory / config.summary_file
     events_path = config.directory / config.events_file
