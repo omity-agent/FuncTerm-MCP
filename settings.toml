@@ -11,7 +11,7 @@ terminal_cols = 120
 terminal_initial_title = "FuncTerm"
 
 # Shell 启动注入脚本写入 ready 文件前最多等待的秒数。
-shell_startup_timeout_seconds = 10.0
+shell_startup_timeout_seconds = 30.0
 
 # PowerShell 可执行文件候选
 powershell = ["pwsh.exe", "powershell.exe"]
