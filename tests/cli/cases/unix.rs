@@ -44,7 +44,7 @@ mod tests {
             );
             let command_id = parse_command_id(&accepted);
             let typed = format!("{marker}\n");
-            let written = manual_write(&shell.tab_id, typed.as_bytes());
+            let written = manual_write(&shell.tab_id, typed.as_bytes(), 5.0);
             assert!(
                 written.status.success(),
                 "stdout: {}\nstderr: {}",
@@ -55,7 +55,12 @@ mod tests {
                 String::from_utf8_lossy(&written.stdout).contains("<SCREEN>\n"),
                 "manual_write should return a screen snapshot"
             );
-            let completed = wait_for_command_finished(&command_id);
+            assert!(
+                String::from_utf8_lossy(&written.stdout).contains(&marker),
+                "manual_write should wait for the typed input to reach the screen"
+            );
+            let completed =
+                parse_command_result(&run_cli(&["view", &command_id, "--waiting", "5"]));
             assert!(completed.stdout.contains(&marker));
         }
     }

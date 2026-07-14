@@ -1,15 +1,11 @@
-use crate::runtime::session::manager::shell_session::{
-    KeyboardWriteFailure, ShellSession, ShellSessionParts,
-};
-use crate::runtime::session::terminal::Terminal;
-use crate::shell::ShellChoice;
+use crate::runtime::protocol::KeyboardInput;
+use crate::runtime::session::manager::shell_session::KeyboardWriteFailure;
 use alloc::sync::Arc;
-use anyhow::Error;
-use portable_pty::{Child, ChildKiller, CommandBuilder, ExitStatus, SlavePty};
-use std::io::{Result as IoResult, Write};
-use std::sync::{Barrier, Mutex};
+use std::sync::{Barrier, mpsc};
 use std::thread;
-use tastty_core::TerminalSize;
+#[path = "test_support.rs"]
+mod support;
+use support::{test_shell, test_shell_with_flush, test_shell_with_writer};
 #[test]
 fn busy_state_rejects_conflicting_reservation() {
     let shell = test_shell(Some("command-current"));
@@ -71,76 +67,70 @@ fn busy_state_allows_only_one_concurrent_reservation() {
 fn manual_write_rejects_idle_prompt() {
     let shell = test_shell(None);
     let error = shell
-        .write_keyboard_for_running_command(b"typed")
+        .write_keyboard_for_running_command(
+            KeyboardInput::Bytes(b"typed".to_vec()),
+            core::time::Duration::ZERO,
+        )
         .unwrap_err();
     assert!(matches!(error, KeyboardWriteFailure::IdlePrompt));
 }
 #[test]
 fn manual_write_allows_running_command() {
     let shell = test_shell(Some("command-current"));
-    shell.write_keyboard_for_running_command(b"typed").unwrap();
+    shell
+        .write_keyboard_for_running_command(
+            KeyboardInput::Bytes(b"typed".to_vec()),
+            core::time::Duration::ZERO,
+        )
+        .unwrap();
 }
-fn test_shell(busy: Option<&str>) -> ShellSession {
-    let writer: Box<dyn Write + Send> = Box::<Vec<u8>>::default();
-    let child: Box<dyn Child + Send + Sync> = Box::new(TestChild);
-    let slave: Box<dyn SlavePty + Send> = Box::new(TestSlave);
-    ShellSession::new(ShellSessionParts {
-        choice: ShellChoice::PowerShell,
-        cwd: crate::test_fs::temp_root(),
-        writer: Arc::new(Mutex::new(writer)),
-        screen: Arc::new(
-            Terminal::new(
-                TerminalSize {
-                    rows: 30,
-                    cols: 120,
-                },
-                0,
-                "FuncTerm",
-            )
-            .unwrap(),
-        ),
-        busy: busy.map(str::to_owned),
-        command_root: crate::test_fs::temp_dir("command-manager"),
-        active_shell_file: crate::test_fs::temp_dir("command-manager-active")
-            .join("active-shell.txt"),
-        command_start_timeout: core::time::Duration::from_secs(1),
-        process_tree: crate::runtime::session::manager::process_tree::ProcessTree::new(),
-        child,
-        slave,
-        reader: None,
-    })
+#[test]
+fn raw_keyboard_bytes_skip_shell_text_normalization() {
+    let (shell, written) = test_shell_with_writer(Some("command-current"));
+    shell
+        .write_keyboard_for_running_command(
+            KeyboardInput::Bytes(b"line\n".to_vec()),
+            core::time::Duration::ZERO,
+        )
+        .unwrap();
+    assert_eq!(*written.lock().unwrap(), b"line\n");
 }
-#[derive(Debug)]
-struct TestChild;
-impl ChildKiller for TestChild {
-    fn kill(&mut self) -> IoResult<()> {
-        Ok(())
-    }
-    fn clone_killer(&self) -> Box<dyn ChildKiller + Send + Sync> {
-        Box::new(Self)
-    }
+#[test]
+fn keyboard_text_uses_active_shell_normalization() {
+    let (shell, written) = test_shell_with_writer(Some("command-current"));
+    shell
+        .write_keyboard_for_running_command(
+            KeyboardInput::Text("line\n".to_owned()),
+            core::time::Duration::ZERO,
+        )
+        .unwrap();
+    assert_eq!(*written.lock().unwrap(), b"line\r\n");
 }
-impl Child for TestChild {
-    fn try_wait(&mut self) -> IoResult<Option<ExitStatus>> {
-        Ok(Some(ExitStatus::with_exit_code(0)))
-    }
-    fn wait(&mut self) -> IoResult<ExitStatus> {
-        Ok(ExitStatus::with_exit_code(0))
-    }
-    fn process_id(&self) -> Option<u32> {
-        None
-    }
-    #[cfg(windows)]
-    fn as_raw_handle(&self) -> Option<std::os::windows::io::RawHandle> {
-        None
-    }
-}
-struct TestSlave;
-impl SlavePty for TestSlave {
-    fn spawn_command(
-        &self,
-        _command: CommandBuilder,
-    ) -> Result<Box<dyn Child + Send + Sync>, Error> {
-        anyhow::bail!("test slave cannot spawn commands")
-    }
+#[test]
+fn output_wait_does_not_hold_the_busy_state_lock() {
+    let (shell, terminal, flushed) = test_shell_with_flush(Some("command-current"));
+    let shared_shell = Arc::new(shell);
+    let writing_shell = Arc::clone(&shared_shell);
+    let writer = thread::spawn(move || {
+        writing_shell.write_keyboard_for_running_command(
+            KeyboardInput::Bytes(b"typed".to_vec()),
+            core::time::Duration::from_secs(10),
+        )
+    });
+    flushed
+        .recv_timeout(core::time::Duration::from_secs(1))
+        .unwrap();
+    let releasing_shell = Arc::clone(&shared_shell);
+    let (released_tx, released_rx) = mpsc::channel();
+    let releaser = thread::spawn(move || {
+        let result = releasing_shell.release("command-current");
+        released_tx.send(result).unwrap();
+    });
+    released_rx
+        .recv_timeout(core::time::Duration::from_secs(1))
+        .unwrap()
+        .unwrap();
+    terminal.reader_closed();
+    writer.join().unwrap().unwrap();
+    releaser.join().unwrap();
 }

@@ -1,4 +1,4 @@
-use super::{CommandView, Payload, ShellView, ViewResult};
+use super::{CommandView, KeyboardInput, Payload, Request, ShellView, ViewResult};
 use crate::shell::ShellChoice;
 use core::time::Duration;
 #[doc = " 该程序输出的主要消费者为 LLM，如果输出中存在 JSON/XML 转义会增加认知负荷和无意义的上下文占用，使用伪结构化文本可读性更高。"]
@@ -101,6 +101,22 @@ fn structured_command_time_always_uses_milliseconds() {
         finished: true,
     };
     assert_eq!(command.presentation(None).time_consumption, "90250ms");
+}
+#[test]
+fn manual_write_request_round_trip_preserves_input_kind_and_waiting() {
+    for input in [
+        KeyboardInput::Text("line\n".to_owned()),
+        KeyboardInput::Bytes(vec![0, 3, 10, 255]),
+    ] {
+        let request = Request::ManualWrite {
+            tab_id: "tab-round-trip".to_owned(),
+            input,
+            waiting: Duration::from_millis(1_250),
+        };
+        let serialized = sonic_rs::to_string(&request).unwrap();
+        let restored = sonic_rs::from_str::<Request>(&serialized).unwrap();
+        assert_eq!(restored, request);
+    }
 }
 fn shell(alive: bool) -> ShellView {
     ShellView {

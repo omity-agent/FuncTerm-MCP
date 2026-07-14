@@ -2,20 +2,17 @@ mod output;
 mod types;
 use crate::runtime::client;
 use crate::runtime::config::Settings;
-use alloc::sync::Arc;
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use rmcp::{
     ServerHandler, ServiceExt as _,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::CallToolResult,
     tool, tool_handler, tool_router,
 };
-use std::sync::Mutex;
 use types::{ManualWriteRequest, NewTabRequest, SendCommandRequest, ViewRequest};
 #[derive(Clone, Debug)]
 struct McpServer {
     daemon_service_name: String,
-    daemon: Arc<Mutex<Option<client::DaemonClient>>>,
     tool_router: ToolRouter<Self>,
 }
 #[expect(
@@ -29,7 +26,6 @@ impl McpServer {
     fn new(daemon_service_name: String) -> Self {
         Self {
             daemon_service_name,
-            daemon: Arc::new(Mutex::new(None)),
             tool_router: Self::tool_router(),
         }
     }
@@ -37,15 +33,8 @@ impl McpServer {
         &self,
         request: &crate::runtime::protocol::Request,
     ) -> Result<crate::runtime::protocol::Payload> {
-        let mut daemon = self.daemon.lock().map_err(|error| anyhow!("{error}"))?;
-        if daemon.is_none() {
-            client::ensure_daemon(&self.daemon_service_name)?;
-            *daemon = Some(client::DaemonClient::connect(&self.daemon_service_name)?);
-        }
-        daemon
-            .as_mut()
-            .ok_or_else(|| anyhow!("daemon returned an unexpected response"))?
-            .call(request)
+        client::ensure_daemon(&self.daemon_service_name)?;
+        client::DaemonClient::connect(&self.daemon_service_name)?.call(request)
     }
     # [tool (name = "new_tab" , description = "打开一个新的终端标签页。" , output_schema = output :: schema ::< output :: NewTabOutput < 'static > > ())]
     async fn new_tab(
@@ -65,10 +54,14 @@ impl McpServer {
         &self,
         Parameters(request): Parameters<ManualWriteRequest>,
     ) -> Result<CallToolResult, String> {
-        let (tab_id, bytes) = request.into_parts().map_err(error_text)?;
-        let payload =
-            crate::commands::manual_write_payload(|command| self.call(command), tab_id, bytes)
-                .map_err(error_text)?;
+        let (tab_id, input, waiting) = request.into_parts().map_err(error_text)?;
+        let payload = crate::commands::manual_write_payload(
+            |command| self.call(command),
+            tab_id,
+            input,
+            waiting,
+        )
+        .map_err(error_text)?;
         output::manual_write(payload)
     }
     # [tool (name = "send_command" , description = "执行命令。该工具会在等待时长结束或命令结束时输出。" , output_schema = output :: schema ::< output :: SendCommandOutput < 'static > > ())]

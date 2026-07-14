@@ -3,14 +3,14 @@ use super::super::{
     tab::Tab,
 };
 use super::{CommandWait, ManagedCommand};
-use crate::runtime::protocol::{CommandSnapshot, ViewResult};
-use crate::runtime::session::keyboard;
+use crate::runtime::protocol::{CommandSnapshot, KeyboardInput, ViewResult};
 use anyhow::{Context as _, Result};
 use core::time::Duration;
 impl Tab {
     pub(in crate::engine::runtime::session::manager) fn manual_write(
         &self,
-        bytes: &[u8],
+        input: KeyboardInput,
+        waiting: Duration,
     ) -> Result<ViewResult> {
         let session = self.live_session()?;
         if !session.is_alive()? {
@@ -18,17 +18,14 @@ impl Tab {
             anyhow::bail!("tab id {} was generated, but its shell is gone", self.id());
         }
         session.refresh_choice()?;
-        let interrupted_command_id = if keyboard::requests_interrupt(bytes) {
-            session.busy_command_id()?
-        } else {
-            None
-        };
-        match session.write_keyboard_for_running_command(bytes) {
+        match session.write_keyboard_for_running_command(input, waiting) {
             Ok(()) => {
-                if let Some(command_id) = interrupted_command_id {
-                    self.mark_interrupted_command(&session, &command_id)?;
+                if session.is_alive()? {
+                    Ok(self.remember(&session)?.into_view(true))
+                } else {
+                    self.close_session(&session)?;
+                    self.snapshot_view()
                 }
-                Ok(self.remember(&session)?.into_view(true))
             }
             Err(KeyboardWriteFailure::IdlePrompt) => {
                 anyhow::bail!(
@@ -40,12 +37,6 @@ impl Tab {
                 Err(error)
             }
         }
-    }
-    fn mark_interrupted_command(&self, session: &ShellSession, command_id: &str) -> Result<()> {
-        if let Some(command) = self.find_command(command_id)? {
-            command.mark_failed("command interrupted by Ctrl+C")?;
-        }
-        session.release(command_id)
     }
     pub(in crate::engine::runtime::session::manager) fn command_view(
         &self,

@@ -5,14 +5,19 @@ mod start;
 #[path = "command/command_tests.rs"]
 mod tests;
 use super::Manager;
-use crate::runtime::protocol::{EndReason, ViewResult};
+use crate::runtime::protocol::{EndReason, KeyboardInput, ViewResult};
 use alloc::sync::Arc;
 use anyhow::Result;
 use core::time::Duration;
 pub(super) use lifecycle::{CommandWait, ManagedCommand};
 impl Manager {
-    pub(crate) fn manual_write(&self, tab_id: &str, bytes: &[u8]) -> Result<ViewResult> {
-        self.tabs.manual_write(tab_id, bytes)
+    pub(crate) fn manual_write(
+        &self,
+        tab_id: &str,
+        input: KeyboardInput,
+        waiting: Duration,
+    ) -> Result<ViewResult> {
+        self.tabs.manual_write(tab_id, input, waiting)
     }
     pub(crate) fn send_command(
         self: &Arc<Self>,

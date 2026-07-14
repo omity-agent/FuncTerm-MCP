@@ -131,8 +131,12 @@ fn dispatch(manager: &Arc<Manager>, request: Request) -> Result<Payload> {
             let tab_id = manager.new_tab(&starting_directory, starting_shell, &environment)?;
             Ok(Payload::TabCreated { tab_id })
         }
-        Request::ManualWrite { tab_id, bytes } => {
-            let view = manager.manual_write(&tab_id, &bytes)?;
+        Request::ManualWrite {
+            tab_id,
+            input,
+            waiting,
+        } => {
+            let view = manager.manual_write(&tab_id, input, waiting)?;
             Ok(Payload::KeyboardWritten { view })
         }
         Request::SendCommand {

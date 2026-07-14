@@ -1,4 +1,8 @@
 use super::Terminal;
+use alloc::sync::Arc;
+use core::time::Duration;
+use std::sync::mpsc::{self, TryRecvError};
+use std::thread;
 use tastty_core::{HostProfile, TerminalSize};
 const SIZE: TerminalSize = TerminalSize {
     rows: 30,
@@ -53,6 +57,81 @@ fn control_characters_are_rejected() {
         error.to_string(),
         "terminal_model_title must not contain control characters"
     );
+}
+#[test]
+fn input_waits_for_the_next_terminal_output_revision() {
+    let terminal = Arc::new(Terminal::new(SIZE, 0, "FuncTerm").unwrap());
+    process(&terminal, b"before");
+    let revision = terminal.output_revision().unwrap();
+    let waiting_terminal = Arc::clone(&terminal);
+    let (waiting_tx, waiting_rx) = mpsc::channel();
+    let (returned_tx, returned_rx) = mpsc::channel();
+    let worker = thread::spawn(move || {
+        waiting_tx.send(()).unwrap();
+        let result = waiting_terminal.wait_for_output(revision, Duration::from_secs(1));
+        returned_tx.send(result).unwrap();
+    });
+    waiting_rx.recv().unwrap();
+    assert!(matches!(returned_rx.try_recv(), Err(TryRecvError::Empty)));
+    process(&terminal, b" after");
+    returned_rx.recv().unwrap().unwrap();
+    worker.join().unwrap();
+    assert!(terminal.contents().unwrap().contains("before after"));
+}
+#[test]
+fn normal_reader_close_wakes_output_wait_without_failure() {
+    let terminal = Arc::new(Terminal::new(SIZE, 0, "FuncTerm").unwrap());
+    let revision = terminal.output_revision().unwrap();
+    let waiting_terminal = Arc::clone(&terminal);
+    let worker =
+        thread::spawn(move || waiting_terminal.wait_for_output(revision, Duration::from_secs(1)));
+    terminal.reader_closed();
+    worker.join().unwrap().unwrap();
+}
+#[test]
+fn reader_failure_wakes_output_wait_with_error() {
+    let terminal = Terminal::new(SIZE, 0, "FuncTerm").unwrap();
+    let revision = terminal.output_revision().unwrap();
+    terminal.reader_failed("reader test failure");
+    let error = terminal
+        .wait_for_output(revision, Duration::from_secs(1))
+        .unwrap_err();
+    assert!(error.to_string().contains("reader test failure"));
+}
+#[cfg(windows)]
+#[test]
+fn startup_replies_stay_raw_before_conpty_win32_input_mode() {
+    let output = b"\x1b[6n\x1b[c\x1b[?1004h\x1b[?9001h\x1b[6n";
+    for split in 0..=output.len() {
+        let terminal = Terminal::new(SIZE, 0, "FuncTerm").unwrap();
+        let (before, after) = output.split_at(split);
+        let mut replies = terminal.process(before, &HostProfile::default()).unwrap();
+        replies.extend(terminal.process(after, &HostProfile::default()).unwrap());
+        let mut reply_iterator = replies.into_iter();
+        let Some(startup_position_reply) = reply_iterator.next() else {
+            panic!("expected a startup cursor position reply");
+        };
+        let Some(startup_attributes_reply) = reply_iterator.next() else {
+            panic!("expected a startup device attributes reply");
+        };
+        let Some(application_reply) = reply_iterator.next() else {
+            panic!("expected an application cursor position reply");
+        };
+        assert!(reply_iterator.next().is_none());
+        assert!(!startup_position_reply.win32_input);
+        assert_eq!(startup_position_reply.bytes, b"\x1b[1;1R");
+        assert!(!startup_attributes_reply.win32_input);
+        assert_eq!(startup_attributes_reply.bytes, b"\x1b[?62;22;52c");
+        assert!(application_reply.win32_input);
+        assert_eq!(application_reply.bytes, b"\x1b[1;1R");
+        let encoded = crate::runtime::session::keyboard::host_reply_bytes(
+            &application_reply.bytes,
+            application_reply.win32_input,
+        )
+        .unwrap();
+        assert!(encoded.starts_with(b"\x1b[0;0;27;1;0;1_"));
+        assert!(encoded.ends_with(b"\x1b[0;0;82;1;0;1_"));
+    }
 }
 fn process(terminal: &Terminal, bytes: &[u8]) {
     terminal.process(bytes, &HostProfile::default()).unwrap();

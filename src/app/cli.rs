@@ -1,4 +1,5 @@
 use crate::runtime::config;
+use crate::runtime::protocol::KeyboardInput;
 use crate::shell::ShellChoice;
 use anyhow::{Context as _, Result};
 use base64_turbo::STANDARD;
@@ -22,8 +23,12 @@ enum CliCommand {
     },
     ManualWrite {
         tab_id: String,
-        #[arg(long)]
-        base64: String,
+        #[arg(long, required_unless_present = "base64", conflicts_with = "base64")]
+        text: Option<String>,
+        #[arg(long, required_unless_present = "text", conflicts_with = "text")]
+        base64: Option<String>,
+        #[arg(long, default_value_t = 0.0)]
+        waiting: f64,
     },
     SendCommand {
         tab_id: String,
@@ -104,14 +109,25 @@ pub(crate) async fn run() -> Result<()> {
                 },
             ))
         }
-        CliCommand::ManualWrite { tab_id, base64 } => {
+        CliCommand::ManualWrite {
+            tab_id,
+            text,
+            base64,
+            waiting,
+        } => {
             let settings = config::load()?;
-            let bytes = STANDARD
-                .decode(&base64)
-                .context("invalid base64 keyboard input")?;
+            let input = match (text, base64) {
+                (Some(input_text), None) => KeyboardInput::Text(input_text),
+                (None, Some(encoded)) => KeyboardInput::Bytes(
+                    STANDARD
+                        .decode(&encoded)
+                        .context("invalid base64 keyboard input")?,
+                ),
+                _ => anyhow::bail!("manual-write requires exactly one of --text or --base64"),
+            };
             print_result(crate::commands::with_daemon(
                 &settings.daemon_service_name,
-                |call| crate::commands::manual_write(call, tab_id, bytes),
+                |call| crate::commands::manual_write(call, tab_id, input, waiting),
             ))
         }
         CliCommand::SendCommand {
@@ -160,38 +176,5 @@ fn write_done(
     )
 }
 #[cfg(test)]
-mod tests {
-    use serde::Deserialize;
-    #[derive(Deserialize)]
-    struct WrittenDone {
-        command_id: String,
-        exit_code: i32,
-        time_consumption: String,
-        cwd: String,
-    }
-    #[test]
-    fn internal_done_writer_serializes_json_strings() {
-        let directory = crate::test_fs::temp_dir("internal-done-writer");
-        let done = crate::app::command_state::DoneOutput {
-            command_id: "command\"id",
-            exit_code: 7,
-            time_consumption: "123.456ms",
-            cwd: "cwd\nwith\\chars",
-        };
-        let mut terminal_output = Vec::new();
-        crate::app::command_state::write_done_to(&done, &directory, &mut terminal_output).unwrap();
-        assert_eq!(terminal_output, b"\x1b]9999;FuncTerm;end;command\"id\x1b\\");
-        let text = std::fs::read_to_string(
-            directory
-                .join(crate::contract::COMMAND_STATE_DIRECTORY)
-                .join(crate::contract::DONE_FILE),
-        )
-        .unwrap();
-        let written = sonic_rs::from_str::<WrittenDone>(&text).unwrap();
-        assert_eq!(written.command_id, "command\"id");
-        assert_eq!(written.exit_code, 7_i32);
-        assert_eq!(written.time_consumption, "123.456ms");
-        assert_eq!(written.cwd, "cwd\nwith\\chars");
-        std::fs::remove_dir_all(directory).unwrap();
-    }
-}
+#[path = "cli/tests.rs"]
+mod tests;

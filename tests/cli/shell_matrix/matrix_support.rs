@@ -92,7 +92,7 @@ fn in_func_term_shim_dir(path: &Path) -> bool {
 }
 #[cfg(windows)]
 pub(super) fn immediately_exiting_executable() -> &'static str {
-    "where.exe"
+    "whoami.exe"
 }
 #[cfg(not(windows))]
 pub(super) fn immediately_exiting_executable() -> &'static str {

@@ -93,9 +93,16 @@ pub(crate) fn send_command_with_env(
         env,
     )
 }
-pub(crate) fn manual_write(tab_id: &str, bytes: &[u8]) -> Output {
+pub(crate) fn manual_write(tab_id: &str, bytes: &[u8], waiting: f64) -> Output {
     let encoded = STANDARD.encode(bytes);
-    run_cli(&["manual-write", tab_id, "--base64", &encoded])
+    run_cli(&[
+        "manual-write",
+        tab_id,
+        "--base64",
+        &encoded,
+        "--waiting",
+        &waiting.to_string(),
+    ])
 }
 fn output_to_files(mut command: Command, timeout: Duration) -> Output {
     let (stdout_path, stderr_path) = output_paths();

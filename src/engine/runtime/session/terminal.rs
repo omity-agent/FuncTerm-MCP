@@ -1,22 +1,30 @@
+mod input_mode;
 mod io;
 mod sequence;
+mod sync;
 mod title;
+use self::input_mode::InputModeTracker;
 pub(super) use self::io::start_reader;
 use self::sequence::ProtocolParser;
 use self::title::CaptureRegistry;
 pub(super) use self::title::CommandTitle;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result, bail};
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Condvar, Mutex, MutexGuard};
 use tastty_core::{HostProfile, Parser, host_reply::auto_reply_bytes};
 pub(super) struct Terminal {
     model_title: String,
     state: Mutex<TerminalState>,
+    changed: Condvar,
 }
 struct TerminalState {
     parser: Parser,
     protocol: ProtocolParser,
+    input_mode: InputModeTracker,
     captures: CaptureRegistry,
+    revision: u64,
+    reader_closed: bool,
+    reader_failure: Option<String>,
 }
 impl Terminal {
     pub(super) fn new(
@@ -32,8 +40,13 @@ impl Terminal {
             state: Mutex::new(TerminalState {
                 parser,
                 protocol: ProtocolParser::new(),
+                input_mode: InputModeTracker::new(),
                 captures: CaptureRegistry::new(model_title.to_owned()),
+                revision: 0,
+                reader_closed: false,
+                reader_failure: None,
             }),
+            changed: Condvar::new(),
         })
     }
     pub(super) fn capture_title(&self, command_id: &str) -> Result<Arc<CommandTitle>> {
@@ -49,26 +62,30 @@ impl Terminal {
     fn raw_title(&self) -> Result<String> {
         Ok(self.lock()?.parser.screen().title().to_owned())
     }
-    pub(super) fn process(&self, chunk: &[u8], host: &HostProfile) -> Result<Vec<Vec<u8>>> {
+    pub(super) fn process(&self, chunk: &[u8], host: &HostProfile) -> Result<Vec<HostReply>> {
         let mut state = self.lock()?;
-        match state.process(chunk, host) {
+        let processed = state.process(chunk, host).and_then(|replies| {
+            state.revision = state
+                .revision
+                .checked_add(1)
+                .context("terminal output revision overflow")?;
+            Ok(replies)
+        });
+        match processed {
             Ok(replies) => {
                 drop(state);
+                self.changed.notify_all();
                 Ok(replies)
             }
             Err(error) => {
-                state
-                    .captures
-                    .fail_all(&format!("failed to process terminal output: {error:#}"));
+                let message = format!("failed to process terminal output: {error:#}");
+                state.captures.fail_all(&message);
+                state.reader_closed = true;
+                state.reader_failure = Some(message);
                 drop(state);
+                self.changed.notify_all();
                 Err(error)
             }
-        }
-    }
-    pub(super) fn reader_closed(&self, message: &str) {
-        match self.lock() {
-            Ok(mut state) => state.captures.fail_all(message),
-            Err(error) => eprintln!("failed to close command title captures: {error:#}"),
         }
     }
     fn lock(&self) -> Result<MutexGuard<'_, TerminalState>> {
@@ -77,8 +94,12 @@ impl Terminal {
             .map_err(|error| anyhow::anyhow!("terminal mutex poisoned: {error}"))
     }
 }
+pub(super) struct HostReply {
+    bytes: Vec<u8>,
+    win32_input: bool,
+}
 impl TerminalState {
-    fn process(&mut self, chunk: &[u8], host: &HostProfile) -> Result<Vec<Vec<u8>>> {
+    fn process(&mut self, chunk: &[u8], host: &HostProfile) -> Result<Vec<HostReply>> {
         let mut replies = Vec::new();
         let mut parsed_end = 0_usize;
         let mut protocol_end = 0_usize;
@@ -99,7 +120,7 @@ impl TerminalState {
             let segment = chunk
                 .get(parsed_end..protocol_end)
                 .context("terminal event offset exceeds PTY output")?;
-            self.process_screen(segment, host, &mut replies);
+            self.process_screen(segment, host, &mut replies)?;
             let screen_title = self.parser.screen().title().to_owned();
             self.captures.handle(protocol_event, &screen_title)?;
             parsed_end = protocol_end;
@@ -107,18 +128,31 @@ impl TerminalState {
         let tail = chunk
             .get(parsed_end..)
             .context("terminal tail offset exceeds PTY output")?;
-        self.process_screen(tail, host, &mut replies);
+        self.process_screen(tail, host, &mut replies)?;
         Ok(replies)
     }
-    fn process_screen(&mut self, bytes: &[u8], host: &HostProfile, replies: &mut Vec<Vec<u8>>) {
-        self.parser.process(bytes);
-        replies.extend(
-            self.parser
-                .screen_mut()
-                .drain_events()
-                .into_iter()
-                .filter_map(|event| auto_reply_bytes(&event, host)),
-        );
+    fn process_screen(
+        &mut self,
+        bytes: &[u8],
+        host: &HostProfile,
+        replies: &mut Vec<HostReply>,
+    ) -> Result<()> {
+        let parser = &mut self.parser;
+        self.input_mode
+            .process_segments(bytes, |segment, win32_input| {
+                parser.process(segment);
+                replies.extend(
+                    parser
+                        .screen_mut()
+                        .drain_events()
+                        .into_iter()
+                        .filter_map(|event| auto_reply_bytes(&event, host))
+                        .map(|reply_bytes| HostReply {
+                            bytes: reply_bytes,
+                            win32_input,
+                        }),
+                );
+            })
     }
 }
 pub(super) fn lock_mutex<'guard, T>(

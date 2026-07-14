@@ -1,3 +1,4 @@
+use crate::runtime::protocol::KeyboardInput;
 use crate::shell::ShellChoice;
 use anyhow::{Result, bail};
 use serde::Deserialize;
@@ -17,26 +18,33 @@ impl NewTabRequest {
 pub(super) struct ManualWriteRequest {
     pub(super) tab_id: String,
     #[serde(default)]
-    #[schemars(description = "要写入的 UTF-8 文本")]
+    #[schemars(description = "要写入的 UTF-8 文本；换行会按当前 Shell 的键盘规则规范化")]
     pub(super) text: Option<String>,
     #[serde(default)]
-    #[schemars(description = "要写入的原始字节")]
+    #[schemars(
+        description = "要写入的原始字节；跳过 Shell 文本换行规范化，Windows Ctrl+C 仍会转换为物理按键事件"
+    )]
     pub(super) bytes: Option<Vec<u8>>,
+    #[schemars(
+        description = "等待终端产生新输出的最长时长，单位为秒。输入 0 代表写入后立即返回，此时可能尚未更新。"
+    )]
+    pub(super) waiting: f64,
 }
 impl ManualWriteRequest {
-    pub(super) fn into_parts(self) -> Result<(String, Vec<u8>)> {
+    pub(super) fn into_parts(self) -> Result<(String, KeyboardInput, f64)> {
         let Self {
             tab_id,
             text,
             bytes,
+            waiting,
         } = self;
-        let keyboard_bytes = match (text, bytes) {
-            (Some(input_text), None) => input_text.into_bytes(),
-            (None, Some(input_bytes)) => input_bytes,
+        let input = match (text, bytes) {
+            (Some(input_text), None) => KeyboardInput::Text(input_text),
+            (None, Some(input_bytes)) => KeyboardInput::Bytes(input_bytes),
             (Some(_), Some(_)) => bail!("text and bytes cannot be provided together"),
             (None, None) => bail!("either text or bytes must be provided"),
         };
-        Ok((tab_id, keyboard_bytes))
+        Ok((tab_id, input, waiting))
     }
 }
 #[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
@@ -60,13 +68,14 @@ pub(super) struct ViewRequest {
 #[cfg(test)]
 mod tests {
     use super::ManualWriteRequest;
+    use crate::runtime::protocol::KeyboardInput;
     fn parse_manual_write_request(json: &str) -> ManualWriteRequest {
         match sonic_rs::from_str(json) {
             Ok(request) => request,
             Err(error) => panic!("request should be valid json: {error}"),
         }
     }
-    fn accepted_parts(request: ManualWriteRequest) -> (String, Vec<u8>) {
+    fn accepted_parts(request: ManualWriteRequest) -> (String, KeyboardInput, f64) {
         match request.into_parts() {
             Ok(parts) => parts,
             Err(error) => panic!("request should be accepted: {error}"),
@@ -80,27 +89,31 @@ mod tests {
     }
     #[test]
     fn manual_write_accepts_text() {
-        let request = parse_manual_write_request(r#"{"tab_id":"tab","text":"echo 你好\n"}"#);
-        let (tab_id, bytes) = accepted_parts(request);
+        let request =
+            parse_manual_write_request(r#"{"tab_id":"tab","text":"echo 你好\n","waiting":1.5}"#);
+        let (tab_id, input, waiting) = accepted_parts(request);
         assert_eq!(tab_id, "tab");
-        assert_eq!(bytes, "echo 你好\n".as_bytes());
+        assert_eq!(input, KeyboardInput::Text("echo 你好\n".to_owned()));
+        assert!((waiting - 1.5_f64).abs() < f64::EPSILON);
     }
     #[test]
     fn manual_write_accepts_bytes() {
-        let request = parse_manual_write_request(r#"{"tab_id":"tab","bytes":[3,10]}"#);
-        let (tab_id, bytes) = accepted_parts(request);
+        let request = parse_manual_write_request(r#"{"tab_id":"tab","bytes":[3,10],"waiting":0}"#);
+        let (tab_id, input, waiting) = accepted_parts(request);
         assert_eq!(tab_id, "tab");
-        assert_eq!(bytes, [3, 10]);
+        assert_eq!(input, KeyboardInput::Bytes(vec![3, 10]));
+        assert!(waiting.abs() < f64::EPSILON);
     }
     #[test]
     fn manual_write_rejects_text_and_bytes_together() {
-        let request = parse_manual_write_request(r#"{"tab_id":"tab","text":"x","bytes":[120]}"#);
+        let request =
+            parse_manual_write_request(r#"{"tab_id":"tab","text":"x","bytes":[120],"waiting":0}"#);
         let error = rejected_error(request);
         assert_eq!(error, "text and bytes cannot be provided together");
     }
     #[test]
     fn manual_write_rejects_missing_input() {
-        let request = parse_manual_write_request(r#"{"tab_id":"tab"}"#);
+        let request = parse_manual_write_request(r#"{"tab_id":"tab","waiting":0}"#);
         let error = rejected_error(request);
         assert_eq!(error, "either text or bytes must be provided");
     }

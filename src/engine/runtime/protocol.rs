@@ -20,7 +20,8 @@ pub(crate) enum Request {
     },
     ManualWrite {
         tab_id: String,
-        bytes: Vec<u8>,
+        input: KeyboardInput,
+        waiting: Duration,
     },
     SendCommand {
         tab_id: String,
@@ -31,6 +32,11 @@ pub(crate) enum Request {
         id: String,
         waiting: Duration,
     },
+}
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+pub(crate) enum KeyboardInput {
+    Text(String),
+    Bytes(Vec<u8>),
 }
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) enum Response {

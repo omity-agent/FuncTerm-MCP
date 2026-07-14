@@ -79,7 +79,6 @@ mod tests {
     #[test]
     fn immediately_exiting_shell_is_rejected_before_registration() {
         let mut settings = test_settings();
-        settings.shell_startup_timeout_seconds = 0.1_f64;
         settings.powershell = vec![immediately_exiting_executable().to_owned()];
         let manager = Manager::new(settings).unwrap();
         let error = manager

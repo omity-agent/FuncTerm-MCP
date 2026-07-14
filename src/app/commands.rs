@@ -1,4 +1,6 @@
-use crate::runtime::protocol::{EnvironmentSnapshot, Payload, Request, waiting_from_seconds};
+use crate::runtime::protocol::{
+    EnvironmentSnapshot, KeyboardInput, Payload, Request, waiting_from_seconds,
+};
 use crate::runtime::working_dir;
 use crate::shell::ShellChoice;
 use anyhow::Result;
@@ -27,16 +29,23 @@ pub(crate) fn new_tab_payload(
 pub(crate) fn manual_write(
     call: impl Fn(&Request) -> Result<Payload>,
     tab_id: String,
-    bytes: Vec<u8>,
+    input: KeyboardInput,
+    waiting_seconds: f64,
 ) -> Result<String> {
-    Ok(manual_write_payload(call, tab_id, bytes)?.into_plain_text())
+    Ok(manual_write_payload(call, tab_id, input, waiting_seconds)?.into_plain_text())
 }
 pub(crate) fn manual_write_payload(
     call: impl Fn(&Request) -> Result<Payload>,
     tab_id: String,
-    bytes: Vec<u8>,
+    input: KeyboardInput,
+    waiting_seconds: f64,
 ) -> Result<Payload> {
-    let request = Request::ManualWrite { tab_id, bytes };
+    let waiting = waiting_from_seconds(waiting_seconds)?;
+    let request = Request::ManualWrite {
+        tab_id,
+        input,
+        waiting,
+    };
     call_payload(call, &request)
 }
 pub(crate) fn send_command(

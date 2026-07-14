@@ -49,9 +49,8 @@ const TEMPLATE : & str = "def @FUNCTION@ [command_id: string, directory: path, w
             '$env.config.history.sync_on_enter = false'
             'if not ($env.FUNCTERM_SHIM_DIR? | is-empty) { $env.PATH = ($env.PATH | where {|entry| $entry != $env.FUNCTERM_SHIM_DIR } | prepend $env.FUNCTERM_SHIM_DIR) }'
             $'$env.config.hooks.env_change.PWD = [{|before, after| $after | save --force --raw ($cwd_file | to nuon) }]'
-            $'$env.config.hooks.pre_prompt = [{|| $env.PWD | save --force --raw ($cwd_file | to nuon); exit (if ($env.LAST_EXIT_CODE? | is-empty) { 0 } else { $env.LAST_EXIT_CODE }) }]'
         ] | str join (char newline) | save --force --raw $config_file
-        let command = $'source ($script_file | to nuon)'
+        let command = $'source ($script_file | to nuon); let functerm_exit_code = (if ($env.LAST_EXIT_CODE? | is-empty) { 0 } else { $env.LAST_EXIT_CODE }); $env.PWD | save --force --raw ($cwd_file | to nuon); exit $functerm_exit_code'
         let nushell = $env.FUNCTERM_REAL_NUSHELL?
         if ($nushell | is-empty) {
             error make {msg: 'FUNCTERM_REAL_NUSHELL is not set'}
@@ -65,7 +64,7 @@ const TEMPLATE : & str = "def @FUNCTION@ [command_id: string, directory: path, w
             error make {msg: 'failed to publish command start'}
         }
         let command_started_at = date now
-        let result = (^$nushell --no-history --config $config_file --env-config $env_config_file --interactive --execute $command | complete)
+        let result = (^$nushell --no-history --config $config_file --env-config $env_config_file --commands $command | complete)
         let time_consumption = ((date now) - $command_started_at) | into string
         $result.stdout | save --force --raw $stdout_file
         $result.stderr | save --force --raw $stderr_file
@@ -112,3 +111,13 @@ const TEMPLATE : & str = "def @FUNCTION@ [command_id: string, directory: path, w
     }
 }
 " ;
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn command_runner_exits_without_repl_prompt_hooks() {
+        let wrapper = super::wrapper();
+        assert!(wrapper.contains("--commands $command"));
+        assert!(!wrapper.contains("--interactive --execute"));
+        assert!(!wrapper.contains("hooks.pre_prompt"));
+    }
+}

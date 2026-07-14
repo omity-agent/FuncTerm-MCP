@@ -60,7 +60,7 @@ mod tests {
         let cwd = temp_root();
         let created = create_tab(&cwd, "powershell");
         let marker = "MCP_PTY_TYPED_INPUT";
-        let written = manual_write(&created.tab_id, marker.as_bytes());
+        let written = manual_write(&created.tab_id, marker.as_bytes(), 0.0);
         assert!(!written.status.success());
         assert!(
             String::from_utf8_lossy(&written.stderr).contains("prompt is idle"),
@@ -85,7 +85,7 @@ mod tests {
         assert!(!pending.finished, "command should wait for manual input");
         let command_id = parse_command_id(&accepted);
         let typed = format!("{marker}\r\n");
-        let written = manual_write(&created.tab_id, typed.as_bytes());
+        let written = manual_write(&created.tab_id, typed.as_bytes(), 5.0);
         assert!(
             written.status.success(),
             "stdout: {}\nstderr: {}",
@@ -96,11 +96,15 @@ mod tests {
             String::from_utf8_lossy(&written.stdout).contains("<SCREEN>\n"),
             "manual_write should return a screen snapshot"
         );
-        let completed = wait_for_command_finished(&command_id);
+        assert!(
+            String::from_utf8_lossy(&written.stdout).contains(marker),
+            "manual_write should wait for the typed input to reach the screen"
+        );
+        let completed = parse_command_result(&run_cli(&["view", &command_id, "--waiting", "5"]));
         assert!(completed.stdout.contains(marker));
     }
     #[test]
-    fn cli_manual_write_ctrl_c_interrupts_powershell_command() {
+    fn cli_manual_write_ctrl_c_keeps_command_reserved_until_completion() {
         let _guard = locked();
         let cwd = temp_root();
         let created = create_tab(&cwd, "powershell");
@@ -114,16 +118,17 @@ mod tests {
             !pending.finished,
             "command should keep running before Ctrl+C"
         );
-        let command_id = parse_command_id(&accepted);
-        let written = manual_write(&created.tab_id, &[3]);
+        let written = manual_write(&created.tab_id, &[3], 0.0);
         assert!(
             written.status.success(),
             "stdout: {}\nstderr: {}",
             String::from_utf8_lossy(&written.stdout),
             String::from_utf8_lossy(&written.stderr)
         );
-        let completed = wait_for_command_finished(&command_id);
-        assert!(completed.finished, "Ctrl+C should finish the command");
+        assert!(
+            String::from_utf8_lossy(&written.stdout).contains("<IDLE>\nfalse\n</IDLE>"),
+            "requesting Ctrl+C must not release the running command"
+        );
     }
     #[test]
     fn cli_waiting_command_does_not_block_other_requests() {
@@ -178,15 +183,5 @@ mod tests {
             "view should not wait for the full timeout after command completion; elapsed {elapsed:?}"
         );
         assert!(viewed.stdout.contains("MCP_PTY_VIEW_WAIT_DONE"));
-    }
-    fn wait_for_command_finished(command_id: &str) -> super::support::CommandResult {
-        for _attempt in 0_usize..50 {
-            let query = parse_command_result(&run_cli(&["view", command_id]));
-            if query.finished {
-                return query;
-            }
-            thread::sleep(Duration::from_millis(100));
-        }
-        panic!("command {command_id} should finish");
     }
 }

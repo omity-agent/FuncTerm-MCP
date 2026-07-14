@@ -3,7 +3,7 @@ mod tab_view;
 use self::snapshot::TabSnapshot;
 use super::command::ManagedCommand;
 use super::shell_session::ShellSession;
-use crate::runtime::protocol::{ShellView, ViewResult};
+use crate::runtime::protocol::{KeyboardInput, ShellView, ViewResult};
 use crate::runtime::session::terminal::lock_mutex;
 use alloc::sync::Arc;
 use anyhow::{Result, bail};
@@ -30,8 +30,13 @@ impl TabDirectory {
         lock_mutex(&self.tabs, "tab")?.insert(tab.id().to_owned(), Arc::new(tab));
         Ok(())
     }
-    pub(super) fn manual_write(&self, tab_id: &str, bytes: &[u8]) -> Result<ViewResult> {
-        self.require_tab(tab_id)?.manual_write(bytes)
+    pub(super) fn manual_write(
+        &self,
+        tab_id: &str,
+        input: KeyboardInput,
+        waiting: core::time::Duration,
+    ) -> Result<ViewResult> {
+        self.require_tab(tab_id)?.manual_write(input, waiting)
     }
     pub(super) fn send_command(
         &self,

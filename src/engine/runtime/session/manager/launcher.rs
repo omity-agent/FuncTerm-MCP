@@ -1,3 +1,4 @@
+mod startup;
 use super::process;
 use super::{
     process_tree,
@@ -5,14 +6,13 @@ use super::{
 };
 use crate::runtime::config::Settings;
 use crate::runtime::protocol::EnvironmentSnapshot;
-use crate::runtime::session::records::wait_for_path;
 use crate::runtime::session::terminal::{Terminal, start_reader};
 use crate::runtime::temp;
 use crate::shell::{ShellChoice, ShellStartup, shims};
 use alloc::sync::Arc;
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result};
 use core::time::Duration;
-use portable_pty::{Child, CommandBuilder, PtySize, native_pty_system};
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::path::Path;
 use std::sync::Mutex;
 use tastty_core::TerminalSize;
@@ -86,6 +86,13 @@ impl ShellLauncher {
             .slave
             .spawn_command(command)
             .context("failed to spawn shell")?;
+        #[cfg(windows)]
+        let retained_slave = Some(pair.slave);
+        #[cfg(not(windows))]
+        let retained_slave = {
+            drop(pair.slave);
+            None
+        };
         if let Err(error) = process_tree
             .attach(child.as_ref())
             .context("failed to guard shell process tree")
@@ -109,18 +116,22 @@ impl ShellLauncher {
         let startup_timeout =
             Duration::try_from_secs_f64(self.settings.shell_startup_timeout_seconds)
                 .context("shell_startup_timeout_seconds must be finite and non-negative")?;
-        let reader_worker = match start_reader(Arc::clone(&screen), Arc::clone(&writer), reader) {
+        let startup_events = startup::StartupEvents::new();
+        let reader_worker = match start_reader(
+            Arc::clone(&screen),
+            Arc::clone(&writer),
+            reader,
+            startup_events.reader_exit_notifier(),
+        ) {
             Ok(worker) => worker,
             Err(error) => {
                 process::cleanup(child.as_mut(), "unregistered shell child");
                 return Err(error).context("failed to start pty reader");
             }
         };
-        if let Err(error) =
-            wait_for_shell_startup(&mut child, &ready_file, &screen, startup_timeout)
-        {
+        if let Err(error) = startup_events.wait(&mut child, &ready_file, &screen, startup_timeout) {
             process::cleanup(child.as_mut(), "unregistered shell child");
-            drop(pair.slave);
+            drop(retained_slave);
             drop(pair.master);
             process::join_reader(reader_worker, "pty reader thread");
             return Err(error);
@@ -137,7 +148,7 @@ impl ShellLauncher {
             command_start_timeout: startup_timeout,
             process_tree,
             child,
-            slave: pair.slave,
+            slave: retained_slave,
             reader: Some(reader_worker),
         })))
     }
@@ -150,35 +161,4 @@ pub(super) fn apply_startup(command: &mut CommandBuilder, startup: ShellStartup)
         command.env(name, value);
     }
     command.args(startup.args);
-}
-pub(super) fn wait_for_shell_startup(
-    child: &mut Box<dyn Child + Send + Sync>,
-    ready_file: &Path,
-    screen: &Arc<Terminal>,
-    timeout: Duration,
-) -> Result<()> {
-    if let Some(status) = child.try_wait().context("failed to poll shell startup")? {
-        bail!(
-            "shell exited during startup with status {status}; screen: {}",
-            startup_screen(screen)?
-        );
-    }
-    if wait_for_path(ready_file, timeout)? {
-        return Ok(());
-    }
-    if let Some(status) = child.try_wait().context("failed to poll shell startup")? {
-        bail!(
-            "shell exited during startup with status {status}; screen: {}",
-            startup_screen(screen)?
-        );
-    }
-    child.kill().context("failed to kill unready shell")?;
-    bail!(
-        "shell did not report startup readiness within {timeout:?}; screen: {}",
-        startup_screen(screen)?
-    );
-}
-fn startup_screen(screen: &Terminal) -> Result<String> {
-    let contents = screen.contents()?;
-    Ok(contents.trim().to_owned())
 }
