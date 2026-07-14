@@ -18,11 +18,11 @@ impl NewTabRequest {
 pub(super) struct ManualWriteRequest {
     pub(super) tab_id: String,
     #[serde(default)]
-    #[schemars(description = "要写入的 UTF-8 文本；换行会按当前 Shell 的键盘规则规范化")]
+    #[schemars(description = "要写入的 UTF-8 文本")]
     pub(super) text: Option<String>,
     #[serde(default)]
     #[schemars(
-        description = "要写入的原始字节；跳过 Shell 文本换行规范化，Windows Ctrl+C 仍会转换为物理按键事件"
+        description = "要写入的原始字节"
     )]
     pub(super) bytes: Option<Vec<u8>>,
     #[schemars(
