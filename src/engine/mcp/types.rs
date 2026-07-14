@@ -21,9 +21,7 @@ pub(super) struct ManualWriteRequest {
     #[schemars(description = "要写入的 UTF-8 文本")]
     pub(super) text: Option<String>,
     #[serde(default)]
-    #[schemars(
-        description = "要写入的原始字节"
-    )]
+    #[schemars(description = "要写入的原始字节")]
     pub(super) bytes: Option<Vec<u8>>,
     #[schemars(
         description = "等待终端产生新输出的最长时长，单位为秒。输入 0 代表写入后立即返回，此时可能尚未更新。"

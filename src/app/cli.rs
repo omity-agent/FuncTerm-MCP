@@ -48,7 +48,7 @@ enum CliCommand {
     InternalWriteDone {
         #[arg(long)]
         command_id: String,
-        #[arg(long)]
+        #[arg(long, allow_negative_numbers = true)]
         exit_code: i32,
         #[arg(long)]
         time_consumption: String,

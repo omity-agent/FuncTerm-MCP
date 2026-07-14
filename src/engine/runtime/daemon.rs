@@ -8,6 +8,7 @@ use interprocess::local_socket::prelude::*;
 use std::io;
 use std::sync::mpsc;
 use std::thread;
+mod control_signal;
 pub(crate) mod report;
 pub(crate) fn run(settings: Settings) -> Result<()> {
     let mut startup_reporter = StartupReporter::from_env();
@@ -20,6 +21,7 @@ pub(crate) fn run(settings: Settings) -> Result<()> {
     }
 }
 fn run_inner(settings: Settings, startup_reporter: &mut StartupReporter) -> Result<()> {
+    control_signal::enable_ctrl_c_for_descendants()?;
     let service_name = settings.daemon_service_name.clone();
     let _daemon_instance = crate::runtime::daemon_lock::acquire_instance(&service_name)?;
     let manager = Arc::new(Manager::new(settings)?);

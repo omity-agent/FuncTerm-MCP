@@ -25,10 +25,8 @@ const fn windows_creation_flags(job: JobState) -> u32 {
 }
 #[cfg(windows)]
 const fn windows_creation_flags_for_job(job: JobState) -> u32 {
-    use windows_sys::Win32::System::Threading::{
-        CREATE_BREAKAWAY_FROM_JOB, CREATE_NEW_PROCESS_GROUP, DETACHED_PROCESS,
-    };
-    let base = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP;
+    use windows_sys::Win32::System::Threading::{CREATE_BREAKAWAY_FROM_JOB, DETACHED_PROCESS};
+    let base = DETACHED_PROCESS;
     match job {
         JobState::AllowsBreakaway => base | CREATE_BREAKAWAY_FROM_JOB,
         JobState::NotInJob | JobState::ForbidsBreakaway | JobState::Unknown => base,
@@ -173,5 +171,19 @@ mod tests {
         use windows_sys::Win32::System::Threading::CREATE_BREAKAWAY_FROM_JOB;
         let flags = super::windows_creation_flags_for_job(super::JobState::NotInJob);
         assert_eq!(flags & CREATE_BREAKAWAY_FROM_JOB, 0);
+    }
+    #[cfg(windows)]
+    #[test]
+    fn windows_detached_flags_preserve_ctrl_c_for_descendants() {
+        use windows_sys::Win32::System::Threading::CREATE_NEW_PROCESS_GROUP;
+        for job in [
+            super::JobState::NotInJob,
+            super::JobState::AllowsBreakaway,
+            super::JobState::ForbidsBreakaway,
+            super::JobState::Unknown,
+        ] {
+            let flags = super::windows_creation_flags_for_job(job);
+            assert_eq!(flags & CREATE_NEW_PROCESS_GROUP, 0);
+        }
     }
 }

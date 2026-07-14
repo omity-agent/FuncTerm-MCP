@@ -1,3 +1,4 @@
+use clap::Parser as _;
 use serde::Deserialize;
 #[derive(Deserialize)]
 struct WrittenDone {
@@ -30,4 +31,24 @@ fn internal_done_writer_serializes_json_strings() {
     assert_eq!(written.time_consumption, "123.456ms");
     assert_eq!(written.cwd, "cwd\nwith\\chars");
     std::fs::remove_dir_all(directory).unwrap();
+}
+#[test]
+fn internal_done_writer_accepts_interrupted_process_exit_code() {
+    let arguments = super::Args::try_parse_from([
+        "functerm",
+        "internal-write-done",
+        "--command-id",
+        "command",
+        "--exit-code",
+        "-1",
+        "--time-consumption",
+        "1s",
+        "--cwd",
+        "F:\\workspace",
+        "--directory",
+        "F:\\command",
+    ]);
+    if let Err(error) = arguments {
+        panic!("negative native process exit code should be accepted: {error}");
+    }
 }

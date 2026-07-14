@@ -164,8 +164,7 @@ fn apply_env(command: &mut Command, env: &[(String, String)]) {
 fn apply_daemon_flags(command: &mut Command) {
     use std::os::windows::process::CommandExt as _;
     const DETACHED_PROCESS: u32 = 0x0000_0008;
-    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-    command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
+    command.creation_flags(DETACHED_PROCESS);
 }
 #[cfg(not(windows))]
 fn apply_daemon_flags(_command: &mut Command) {}

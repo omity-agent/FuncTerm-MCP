@@ -1,3 +1,6 @@
+#[cfg(windows)]
+#[path = "cli/cases/control_signal.rs"]
+mod control_signal;
 #[path = "cli/cases/failure.rs"]
 mod failure;
 #[path = "cli/cases/history.rs"]
@@ -102,33 +105,6 @@ mod tests {
         );
         let completed = parse_command_result(&run_cli(&["view", &command_id, "--waiting", "5"]));
         assert!(completed.stdout.contains(marker));
-    }
-    #[test]
-    fn cli_manual_write_ctrl_c_keeps_command_reserved_until_completion() {
-        let _guard = locked();
-        let cwd = temp_root();
-        let created = create_tab(&cwd, "powershell");
-        let accepted = super::support::send_command(
-            &created.tab_id,
-            "while ($true) { Start-Sleep -Milliseconds 200 }",
-            0.0,
-        );
-        let pending = parse_command_result(&accepted);
-        assert!(
-            !pending.finished,
-            "command should keep running before Ctrl+C"
-        );
-        let written = manual_write(&created.tab_id, &[3], 0.0);
-        assert!(
-            written.status.success(),
-            "stdout: {}\nstderr: {}",
-            String::from_utf8_lossy(&written.stdout),
-            String::from_utf8_lossy(&written.stderr)
-        );
-        assert!(
-            String::from_utf8_lossy(&written.stdout).contains("<IDLE>\nfalse\n</IDLE>"),
-            "requesting Ctrl+C must not release the running command"
-        );
     }
     #[test]
     fn cli_waiting_command_does_not_block_other_requests() {
