@@ -1,4 +1,5 @@
 use core::time::Duration;
+use kill_tree::{Config, blocking::kill_tree_with_config};
 #[cfg(windows)]
 use std::io::Read;
 use std::process::{Child, ExitStatus, Output};
@@ -15,7 +16,11 @@ impl ChildGuard {
     }
     pub(crate) fn terminate(&mut self) {
         if self.child.try_wait().unwrap().is_none() {
-            self.child.kill().unwrap();
+            let config = Config {
+                signal: "SIGKILL".to_owned(),
+                ..Default::default()
+            };
+            kill_tree_with_config(self.child.id(), &config).unwrap();
         }
         self.child.wait().unwrap();
     }
