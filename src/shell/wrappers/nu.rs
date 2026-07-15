@@ -48,7 +48,7 @@ const TEMPLATE : & str = "def @FUNCTION@ [command_id: string, directory: path, w
             '$env.config.history.max_size = 0'
             '$env.config.history.sync_on_enter = false'
             'if not ($env.FUNCTERM_SHIM_DIR? | is-empty) { $env.PATH = ($env.PATH | where {|entry| $entry != $env.FUNCTERM_SHIM_DIR } | prepend $env.FUNCTERM_SHIM_DIR) }'
-            $'$env.config.hooks.env_change.PWD = [{|before, after| $after | save --force --raw ($cwd_file | to nuon) }]'
+            $'$env.config.hooks.display_output = { $env.PWD | save --force --raw ($cwd_file | to nuon); $in | table }'
         ] | str join (char newline) | save --force --raw $config_file
         let command = $'source ($script_file | to nuon)'
         let nushell = $env.FUNCTERM_REAL_NUSHELL?
