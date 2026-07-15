@@ -33,6 +33,11 @@ impl DaemonSlot {
                 .wait(active)
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
         }
+        if active.active == 0 {
+            reset_test_directory().unwrap_or_else(|error| {
+                panic!("failed to reset FuncTerm test directory before tests: {error}")
+            });
+        }
         active.active += 1;
         Self
     }
@@ -44,6 +49,11 @@ impl Drop for DaemonSlot {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             active.active -= 1;
+            if active.active == 0
+                && let Err(error) = clear_test_directory()
+            {
+                eprintln!("failed to clear FuncTerm test directory after tests: {error}");
+            }
         }
         DAEMON_SLOT_AVAILABLE.notify_one();
     }
@@ -108,6 +118,21 @@ fn unique_service_name() -> String {
 fn temp_environment() -> Vec<(String, String)> {
     let text = temp::temp_root().to_string_lossy().into_owned();
     platform_temp_environment(text)
+}
+fn reset_test_directory() -> std::io::Result<()> {
+    let root = temp::temp_root();
+    remove_directory_if_present(&root)?;
+    std::fs::create_dir_all(root)
+}
+fn clear_test_directory() -> std::io::Result<()> {
+    remove_directory_if_present(&temp::temp_root())
+}
+fn remove_directory_if_present(path: &std::path::Path) -> std::io::Result<()> {
+    match std::fs::remove_dir_all(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
 }
 #[cfg(windows)]
 fn platform_temp_environment(text: String) -> Vec<(String, String)> {
