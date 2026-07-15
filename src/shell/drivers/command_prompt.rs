@@ -1,4 +1,7 @@
-use super::{DriverStartup, InvocationContext, ShellDriver, StartupContext, os_strings_lower};
+use super::{
+    DriverStartup, InvocationContext, InvocationTerminator, ShellDriver, ShellInvocation,
+    StartupContext, os_strings_lower,
+};
 use crate::runtime::config::Settings;
 use crate::shell::ShellChoice;
 use crate::shell::quote;
@@ -41,13 +44,16 @@ impl ShellDriver for CmdDriver {
             env: Vec::new(),
         })
     }
-    fn invocation(&self, context: InvocationContext<'_>) -> Result<String> {
-        Ok(format!(
-            "call \"%FUNCTERM_SESSION_ROOT%\\startup\\cmd_run.bat\" {} {} {}\r\n",
-            quote::cmd_string(context.command_id),
-            quote::cmd_string(&quote::native_path(context.directory)?),
-            quote::cmd_string(&quote::native_path(context.cwd)?)
-        ))
+    fn invocation(&self, context: InvocationContext<'_>) -> Result<ShellInvocation> {
+        ShellInvocation::new(
+            format!(
+                "call \"%FUNCTERM_SESSION_ROOT%\\startup\\cmd_run.bat\" {} {} {}",
+                quote::cmd_string(context.command_id),
+                quote::cmd_string(&quote::native_path(context.directory)?),
+                quote::cmd_string(&quote::native_path(context.cwd)?)
+            ),
+            InvocationTerminator::CarriageReturnLineFeed,
+        )
     }
     fn interactive_arguments(&self, arguments: &[std::ffi::OsString]) -> bool {
         let Some(values) = os_strings_lower(arguments) else {
@@ -64,4 +70,22 @@ fn initialization_script(context: StartupContext<'_>) -> Result<String> {
         quote::cmd_string(&quote::native_path(context.cwd)?),
         quote::cmd_string(&quote::native_path(context.ready_file)?)
     ))
+}
+#[cfg(test)]
+mod tests {
+    use super::CmdDriver;
+    use crate::shell::drivers::{InvocationContext, ShellDriver as _};
+    use std::path::Path;
+    #[test]
+    fn invocation_uses_windows_line_ending() {
+        let bytes = CmdDriver
+            .invocation(InvocationContext {
+                command_id: "command",
+                directory: Path::new("F:\\directory"),
+                cwd: Path::new("F:\\cwd"),
+            })
+            .unwrap()
+            .into_bytes();
+        assert!(bytes.ends_with(b"\r\n"));
+    }
 }

@@ -18,5 +18,8 @@ pub(crate) use command::{
 pub(crate) use daemon::locked;
 pub(crate) use daemon::{TestGuard, locked_with_env};
 pub(crate) use parse::CommandResult;
-pub(crate) use parse::{TabView, parse_command_id, parse_command_result, parse_tab_view};
+pub(crate) use parse::{
+    TabView, assert_powershell_primary_prompt, parse_command_id, parse_command_result,
+    parse_tab_view,
+};
 pub(crate) use temp::{temp_dir, temp_root};

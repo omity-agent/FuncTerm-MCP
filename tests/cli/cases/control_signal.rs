@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
     use crate::support::{
-        create_tab, locked, manual_write, parse_command_id, parse_command_result, run_cli,
-        send_command, temp_root,
+        assert_powershell_primary_prompt, create_tab, locked, manual_write, parse_command_id,
+        parse_command_result, parse_tab_view, run_cli, send_command, temp_root,
     };
     use core::time::Duration;
     use functerm::shell::quote;
@@ -45,6 +45,8 @@ mod tests {
         assert!(follow_up.finished, "follow-up command should finish");
         assert_eq!(follow_up.exit_code, Some(0_i32));
         assert!(follow_up.stdout.contains("FUNCTERM_CTRL_C_RECOVERED"));
+        let query = parse_tab_view(&run_cli(&["view", &tab.tab_id]));
+        assert_powershell_primary_prompt(&query);
     }
     #[test]
     fn native_ctrl_c_probe() {

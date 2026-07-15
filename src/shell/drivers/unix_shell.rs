@@ -1,4 +1,7 @@
-use super::{DriverStartup, InvocationContext, ShellDriver, StartupContext, os_strings_lower};
+use super::{
+    DriverStartup, InvocationContext, InvocationTerminator, ShellDriver, ShellInvocation,
+    StartupContext, os_strings_lower,
+};
 use crate::contract::POSIX_COMMAND_FUNCTION;
 use crate::runtime::config::Settings;
 use crate::shell::ShellChoice;
@@ -69,13 +72,16 @@ impl ShellDriver for PosixDriver {
             PosixKind::Zsh => zsh_startup(context),
         }
     }
-    fn invocation(&self, context: InvocationContext<'_>) -> Result<String> {
-        Ok(format!(
-            "{POSIX_COMMAND_FUNCTION} {} {} {}\n",
-            quote::posix_string(context.command_id),
-            quote::posix_string(&quote::native_path(context.directory)?),
-            quote::posix_string(&quote::native_path(context.cwd)?)
-        ))
+    fn invocation(&self, context: InvocationContext<'_>) -> Result<ShellInvocation> {
+        ShellInvocation::new(
+            format!(
+                "{POSIX_COMMAND_FUNCTION} {} {} {}",
+                quote::posix_string(context.command_id),
+                quote::posix_string(&quote::native_path(context.directory)?),
+                quote::posix_string(&quote::native_path(context.cwd)?)
+            ),
+            InvocationTerminator::LineFeed,
+        )
     }
     fn interactive_arguments(&self, arguments: &[std::ffi::OsString]) -> bool {
         let Some(values) = os_strings_lower(arguments) else {
@@ -123,4 +129,25 @@ fn initialization_script(
         quote::posix_string(&quote::native_path(context.cwd)?),
         quote::posix_string(&quote::native_path(context.ready_file)?)
     ))
+}
+#[cfg(test)]
+mod tests {
+    use super::PosixDriver;
+    use crate::shell::drivers::{InvocationContext, ShellDriver as _};
+    use std::path::Path;
+    #[test]
+    fn invocation_uses_line_feed() {
+        for driver in [PosixDriver::bash(), PosixDriver::zsh()] {
+            let bytes = driver
+                .invocation(InvocationContext {
+                    command_id: "command",
+                    directory: Path::new("/directory"),
+                    cwd: Path::new("/cwd"),
+                })
+                .unwrap()
+                .into_bytes();
+            assert!(bytes.ends_with(b"\n"));
+            assert!(!bytes.ends_with(b"\r\n"));
+        }
+    }
 }

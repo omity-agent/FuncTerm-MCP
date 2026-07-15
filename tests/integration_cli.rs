@@ -24,8 +24,8 @@ mod windows_io;
 #[cfg(test)]
 mod tests {
     use super::support::{
-        create_tab, locked, manual_write, parse_command_id, parse_command_result, run_cli,
-        send_command_with_env, temp_root,
+        assert_powershell_primary_prompt, create_tab, locked, manual_write, parse_command_id,
+        parse_command_result, run_cli, send_command_with_env, temp_root,
     };
     use core::time::Duration;
     use std::thread;
@@ -72,6 +72,21 @@ mod tests {
         );
         let query = super::support::parse_tab_view(&run_cli(&["view", &created.tab_id]));
         assert!(query.alive, "rejected manual_write should keep tab alive");
+    }
+    #[test]
+    fn cli_powershell_command_returns_to_primary_prompt() {
+        let _guard = locked();
+        let cwd = temp_root();
+        let created = create_tab(&cwd, "powershell");
+        let completed = parse_command_result(&super::support::send_command(
+            &created.tab_id,
+            "Write-Output 'FUNCTERM_PRIMARY_PROMPT'",
+            5.0,
+        ));
+        assert!(completed.finished, "command should finish");
+        assert_eq!(completed.exit_code, Some(0_i32));
+        let query = super::support::parse_tab_view(&run_cli(&["view", &created.tab_id]));
+        assert_powershell_primary_prompt(&query);
     }
     #[test]
     fn cli_manual_write_feeds_running_powershell_command() {

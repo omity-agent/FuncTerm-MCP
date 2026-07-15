@@ -78,7 +78,7 @@ impl ShellChoice {
         command_id: &str,
         directory: &Path,
         cwd: &Path,
-    ) -> Result<String> {
+    ) -> Result<drivers::ShellInvocation> {
         self.driver().invocation(drivers::InvocationContext {
             command_id,
             directory,

@@ -104,7 +104,7 @@ fn keyboard_text_uses_active_shell_normalization() {
             core::time::Duration::ZERO,
         )
         .unwrap();
-    assert_eq!(*written.lock().unwrap(), b"line\r\n");
+    assert_eq!(*written.lock().unwrap(), b"line\r");
 }
 #[test]
 fn output_wait_does_not_hold_the_busy_state_lock() {

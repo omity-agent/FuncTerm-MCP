@@ -140,14 +140,15 @@ impl ShellSession {
     ) -> Result<()> {
         std::fs::write(&record.command, command).context("failed to write command")?;
         std::fs::write(&record.script, command).context("failed to write command script")?;
-        let line = self.current_choice()?.invocation(
+        let invocation = self.current_choice()?.invocation(
             command_id,
             &record.directory,
             &record.initial_cwd,
         )?;
+        let invocation_bytes = invocation.into_bytes();
         let mut writer = lock_mutex(&self.writer, "writer")?;
         writer
-            .write_all(line.as_bytes())
+            .write_all(&invocation_bytes)
             .context("failed to write command invocation")?;
         writer.flush().context("failed to flush command invocation")
     }

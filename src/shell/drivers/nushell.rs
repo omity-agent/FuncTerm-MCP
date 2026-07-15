@@ -1,4 +1,7 @@
-use super::{DriverStartup, InvocationContext, ShellDriver, StartupContext, os_strings_lower};
+use super::{
+    DriverStartup, InvocationContext, InvocationTerminator, ShellDriver, ShellInvocation,
+    StartupContext, os_strings_lower,
+};
 use crate::contract::POSIX_COMMAND_FUNCTION;
 use crate::runtime::config::Settings;
 use crate::shell::ShellChoice;
@@ -37,14 +40,16 @@ impl ShellDriver for NuShellDriver {
             env: Vec::new(),
         })
     }
-    fn invocation(&self, context: InvocationContext<'_>) -> Result<String> {
-        Ok(format!(
-            "{POSIX_COMMAND_FUNCTION} {} {} {}{}",
-            quote::nushell_string(context.command_id),
-            quote::nushell_path(context.directory)?,
-            quote::nushell_path(context.cwd)?,
-            invocation_line_ending()
-        ))
+    fn invocation(&self, context: InvocationContext<'_>) -> Result<ShellInvocation> {
+        ShellInvocation::new(
+            format!(
+                "{POSIX_COMMAND_FUNCTION} {} {} {}",
+                quote::nushell_string(context.command_id),
+                quote::nushell_path(context.directory)?,
+                quote::nushell_path(context.cwd)?
+            ),
+            invocation_terminator(),
+        )
     }
     fn interactive_arguments(&self, arguments: &[std::ffi::OsString]) -> bool {
         let Some(values) = os_strings_lower(arguments) else {
@@ -59,12 +64,12 @@ impl ShellDriver for NuShellDriver {
     }
 }
 #[cfg(windows)]
-const fn invocation_line_ending() -> &'static str {
-    "\r\n"
+const fn invocation_terminator() -> InvocationTerminator {
+    InvocationTerminator::CarriageReturnLineFeed
 }
 #[cfg(not(windows))]
-const fn invocation_line_ending() -> &'static str {
-    "\n"
+const fn invocation_terminator() -> InvocationTerminator {
+    InvocationTerminator::LineFeed
 }
 fn initialization_script(context: StartupContext<'_>) -> Result<String> {
     Ok(format!(
@@ -73,4 +78,25 @@ fn initialization_script(context: StartupContext<'_>) -> Result<String> {
         quote::nushell_path(context.cwd)?,
         quote::nushell_path(context.ready_file)?
     ))
+}
+#[cfg(test)]
+mod tests {
+    use super::NuShellDriver;
+    use crate::shell::drivers::{InvocationContext, ShellDriver as _};
+    use std::path::Path;
+    #[test]
+    fn invocation_uses_platform_line_ending() {
+        let bytes = NuShellDriver
+            .invocation(InvocationContext {
+                command_id: "command",
+                directory: Path::new("F:\\directory"),
+                cwd: Path::new("F:\\cwd"),
+            })
+            .unwrap()
+            .into_bytes();
+        #[cfg(windows)]
+        assert!(bytes.ends_with(b"\r\n"));
+        #[cfg(not(windows))]
+        assert!(bytes.ends_with(b"\n"));
+    }
 }

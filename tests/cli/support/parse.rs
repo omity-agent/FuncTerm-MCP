@@ -42,6 +42,19 @@ pub(crate) fn parse_tab_view(output: &Output) -> TabView {
         screen: element(&text, "SCREEN"),
     }
 }
+pub(crate) fn assert_powershell_primary_prompt(view: &TabView) {
+    assert!(
+        !view.screen.lines().any(|line| line.trim() == ">>"),
+        "PowerShell should not enter a continuation prompt:\n{}",
+        view.screen
+    );
+    let final_line = view.screen.lines().next_back().unwrap_or_default();
+    assert!(
+        final_line.starts_with("PS ") && final_line.ends_with("> "),
+        "PowerShell should finish at its primary prompt:\n{}",
+        view.screen
+    );
+}
 pub(super) fn parse_tab_created(output: &Output) -> TabCreated {
     let text = checked_stdout(output);
     TabCreated {

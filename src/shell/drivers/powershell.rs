@@ -1,4 +1,7 @@
-use super::{DriverStartup, InvocationContext, ShellDriver, StartupContext, os_strings_lower};
+use super::{
+    DriverStartup, InvocationContext, InvocationTerminator, ShellDriver, ShellInvocation,
+    StartupContext, os_strings_lower,
+};
 use crate::contract::POWERSHELL_COMMAND_FUNCTION;
 use crate::runtime::config::Settings;
 use crate::shell::ShellChoice;
@@ -50,13 +53,16 @@ impl ShellDriver for PowerShellDriver {
             env: Vec::new(),
         })
     }
-    fn invocation(&self, context: InvocationContext<'_>) -> Result<String> {
+    fn invocation(&self, context: InvocationContext<'_>) -> Result<ShellInvocation> {
         let quoted_directory = quote::powershell_path(context.directory)?;
         let quoted_cwd = quote::powershell_path(context.cwd)?;
         let quoted_command_id = quote::powershell_string(context.command_id);
-        Ok(format!(
-            "{POWERSHELL_COMMAND_FUNCTION} -CommandId {quoted_command_id} -Directory {quoted_directory} -WorkingDirectory {quoted_cwd}\r\n"
-        ))
+        ShellInvocation::new(
+            format!(
+                "{POWERSHELL_COMMAND_FUNCTION} -CommandId {quoted_command_id} -Directory {quoted_directory} -WorkingDirectory {quoted_cwd}"
+            ),
+            InvocationTerminator::CarriageReturn,
+        )
     }
     fn keyboard_bytes<'bytes>(&self, bytes: &'bytes [u8]) -> Cow<'bytes, [u8]> {
         keyboard_bytes(bytes)
@@ -83,10 +89,13 @@ fn keyboard_bytes(bytes: &[u8]) -> Cow<'_, [u8]> {
     let mut normalized = Vec::with_capacity(bytes.len());
     let mut previous = None;
     for byte in bytes {
-        if *byte == b'\n' && previous != Some(b'\r') {
-            normalized.push(b'\r');
+        if *byte == b'\n' {
+            if previous != Some(b'\r') {
+                normalized.push(b'\r');
+            }
+        } else {
+            normalized.push(*byte);
         }
-        normalized.push(*byte);
         previous = Some(*byte);
     }
     Cow::Owned(normalized)
@@ -131,7 +140,7 @@ mod tests {
     }
     #[test]
     fn invocation_passes_command_directory() {
-        let line = crate::shell::drivers::ShellDriver::invocation(
+        let invocation = crate::shell::drivers::ShellDriver::invocation(
             &PowerShellDriver,
             crate::shell::drivers::InvocationContext {
                 command_id: "command",
@@ -140,18 +149,22 @@ mod tests {
             },
         )
         .unwrap();
+        let bytes = invocation.into_bytes();
+        let line = String::from_utf8(bytes.clone()).unwrap();
         assert!(!line.contains("-Payload"));
         assert!(line.contains("-Directory ([Text.Encoding]::UTF8.GetString"));
+        assert!(bytes.ends_with(b"\r"));
+        assert!(!bytes.ends_with(b"\r\n"));
     }
     #[test]
-    fn keyboard_input_submits_lone_line_feeds_as_enter() {
+    fn keyboard_input_encodes_each_line_break_as_one_enter() {
         assert_eq!(
             super::keyboard_bytes(b"exit\n").as_ref(),
-            b"exit\r\n".as_slice()
+            b"exit\r".as_slice()
         );
         assert_eq!(
             super::keyboard_bytes(b"exit\r\n").as_ref(),
-            b"exit\r\n".as_slice()
+            b"exit\r".as_slice()
         );
     }
 }
