@@ -50,7 +50,7 @@ const TEMPLATE : & str = "def @FUNCTION@ [command_id: string, directory: path, w
             'if not ($env.FUNCTERM_SHIM_DIR? | is-empty) { $env.PATH = ($env.PATH | where {|entry| $entry != $env.FUNCTERM_SHIM_DIR } | prepend $env.FUNCTERM_SHIM_DIR) }'
             $'$env.config.hooks.env_change.PWD = [{|before, after| $after | save --force --raw ($cwd_file | to nuon) }]'
         ] | str join (char newline) | save --force --raw $config_file
-        let command = $'source ($script_file | to nuon); let functerm_exit_code = (if ($env.LAST_EXIT_CODE? | is-empty) { 0 } else { $env.LAST_EXIT_CODE }); $env.PWD | save --force --raw ($cwd_file | to nuon); exit $functerm_exit_code'
+        let command = $'source ($script_file | to nuon)'
         let nushell = $env.FUNCTERM_REAL_NUSHELL?
         if ($nushell | is-empty) {
             error make {msg: 'FUNCTERM_REAL_NUSHELL is not set'}
