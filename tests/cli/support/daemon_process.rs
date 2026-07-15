@@ -34,8 +34,8 @@ impl DaemonSlot {
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
         }
         if active.active == 0 {
-            reset_test_directory().unwrap_or_else(|error| {
-                panic!("failed to reset FuncTerm test directory before tests: {error}")
+            reset_runtime_directory().unwrap_or_else(|error| {
+                panic!("failed to reset FuncTerm test runtime before tests: {error}")
             });
         }
         active.active += 1;
@@ -50,9 +50,9 @@ impl Drop for DaemonSlot {
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             active.active -= 1;
             if active.active == 0
-                && let Err(error) = clear_test_directory()
+                && let Err(error) = clear_runtime_directory()
             {
-                eprintln!("failed to clear FuncTerm test directory after tests: {error}");
+                eprintln!("failed to clear FuncTerm test runtime after tests: {error}");
             }
         }
         DAEMON_SLOT_AVAILABLE.notify_one();
@@ -119,13 +119,13 @@ fn temp_environment() -> Vec<(String, String)> {
     let text = temp::temp_root().to_string_lossy().into_owned();
     platform_temp_environment(text)
 }
-fn reset_test_directory() -> std::io::Result<()> {
-    let root = temp::temp_root();
+fn reset_runtime_directory() -> std::io::Result<()> {
+    let root = temp::temp_root().join(temp::FUNCTERM_DIRECTORY);
     remove_directory_if_present(&root)?;
     std::fs::create_dir_all(root)
 }
-fn clear_test_directory() -> std::io::Result<()> {
-    remove_directory_if_present(&temp::temp_root())
+fn clear_runtime_directory() -> std::io::Result<()> {
+    remove_directory_if_present(&temp::temp_root().join(temp::FUNCTERM_DIRECTORY))
 }
 fn remove_directory_if_present(path: &std::path::Path) -> std::io::Result<()> {
     match std::fs::remove_dir_all(path) {

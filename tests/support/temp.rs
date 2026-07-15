@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-const FUNCTERM_DIRECTORY: &str = "functerm";
+pub(crate) const FUNCTERM_DIRECTORY: &str = "functerm";
 const TEST_DIRECTORY: &str = "tests";
 pub(crate) fn temp_root() -> PathBuf {
     let root = std::env::temp_dir()
