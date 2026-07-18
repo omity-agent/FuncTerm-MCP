@@ -43,6 +43,36 @@ fn empty_command_output_does_not_insert_blank_line() {
     assert!(!text.contains("<NOTE>\n\n</NOTE>"));
 }
 #[test]
+fn command_output_does_not_duplicate_existing_line_ending() {
+    for (line_ending, expected_stdout, expected_stderr) in [
+        (
+            "\n",
+            "<STDOUT>\nstdout\n</STDOUT>",
+            "<STDERR>\nstderr\n</STDERR>",
+        ),
+        (
+            "\r\n",
+            "<STDOUT>\nstdout\r\n</STDOUT>",
+            "<STDERR>\nstderr\r\n</STDERR>",
+        ),
+    ] {
+        let text = ViewResult::Command {
+            shell: shell(true),
+            command: CommandView {
+                stdout: format!("stdout{line_ending}"),
+                stderr: format!("stderr{line_ending}"),
+                exit_code: Some(0_i32),
+                time_consumption: Duration::from_secs(1),
+                finished: true,
+            },
+            note: String::new(),
+        }
+        .into_plain_text();
+        assert!(text.contains(expected_stdout));
+        assert!(text.contains(expected_stderr));
+    }
+}
+#[test]
 fn tab_output_reports_shell_state() {
     let text = ViewResult::Tab {
         shell: shell(true),

@@ -126,16 +126,16 @@ fn append_element(text: &mut String, tag: &str, content: &str) {
     text.push_str(">\n");
     if !content.is_empty() {
         text.push_str(content);
-        text.push('\n');
+        if !content.ends_with('\n') {
+            text.push('\n');
+        }
     }
     text.push_str("</");
     text.push_str(tag);
     text.push('>');
 }
 fn element(tag: &str, content: &str) -> String {
-    if content.is_empty() {
-        format!("<{tag}>\n</{tag}>")
-    } else {
-        format!("<{tag}>\n{content}\n</{tag}>")
-    }
+    let mut text = String::new();
+    append_element(&mut text, tag, content);
+    text
 }
