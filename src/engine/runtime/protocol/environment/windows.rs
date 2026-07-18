@@ -4,37 +4,30 @@ use core::ffi::c_void;
 use std::ffi::OsString;
 use std::os::windows::ffi::OsStringExt as _;
 use std::os::windows::io::{AsRawHandle as _, FromRawHandle as _, OwnedHandle};
-use windows_sys::Win32::Foundation::HANDLE;
-use windows_sys::Win32::Security::{TOKEN_DUPLICATE, TOKEN_QUERY};
-use windows_sys::Win32::System::Environment::{CreateEnvironmentBlock, DestroyEnvironmentBlock};
-use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+use windows::Win32::Foundation::HANDLE;
+use windows::Win32::Security::{TOKEN_DUPLICATE, TOKEN_QUERY};
+use windows::Win32::System::Environment::{CreateEnvironmentBlock, DestroyEnvironmentBlock};
+use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 pub(super) fn capture_user_environment() -> Result<EnvironmentSnapshot> {
     let token = current_process_token()?;
     let mut block = core::ptr::null_mut();
-    let created = unsafe { CreateEnvironmentBlock(&raw mut block, token.as_raw_handle(), 0_i32) };
-    if created == 0_i32 {
-        return Err(std::io::Error::last_os_error())
-            .context("CreateEnvironmentBlock failed without inheritance");
-    }
+    let token_handle = HANDLE(token.as_raw_handle());
+    unsafe { CreateEnvironmentBlock(&raw mut block, Some(token_handle), false) }
+        .context("CreateEnvironmentBlock failed without inheritance")?;
     if block.is_null() {
         bail!("CreateEnvironmentBlock returned a null environment block");
     }
     let decoded = decode_environment_block(block.cast_const());
-    let destroyed = unsafe { DestroyEnvironmentBlock(block.cast_const()) };
-    if destroyed == 0_i32 {
-        return Err(std::io::Error::last_os_error()).context("DestroyEnvironmentBlock failed");
-    }
+    unsafe { DestroyEnvironmentBlock(block.cast_const()) }
+        .context("DestroyEnvironmentBlock failed")?;
     Ok(EnvironmentSnapshot::from_variables(decoded?))
 }
 fn current_process_token() -> Result<OwnedHandle> {
-    let mut token: HANDLE = core::ptr::null_mut();
+    let mut token = HANDLE::default();
     let process = unsafe { GetCurrentProcess() };
-    let opened =
-        unsafe { OpenProcessToken(process, TOKEN_QUERY | TOKEN_DUPLICATE, &raw mut token) };
-    if opened == 0_i32 {
-        return Err(std::io::Error::last_os_error()).context("OpenProcessToken failed");
-    }
-    let owned = unsafe { OwnedHandle::from_raw_handle(token) };
+    unsafe { OpenProcessToken(process, TOKEN_QUERY | TOKEN_DUPLICATE, &raw mut token) }
+        .context("OpenProcessToken failed")?;
+    let owned = unsafe { OwnedHandle::from_raw_handle(token.0) };
     Ok(owned)
 }
 fn decode_environment_block(block: *const c_void) -> Result<Vec<(OsString, OsString)>> {

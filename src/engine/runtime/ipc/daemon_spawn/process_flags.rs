@@ -25,10 +25,10 @@ const fn windows_creation_flags(job: JobState) -> u32 {
 }
 #[cfg(windows)]
 const fn windows_creation_flags_for_job(job: JobState) -> u32 {
-    use windows_sys::Win32::System::Threading::{CREATE_BREAKAWAY_FROM_JOB, DETACHED_PROCESS};
-    let base = DETACHED_PROCESS;
+    use windows::Win32::System::Threading::{CREATE_BREAKAWAY_FROM_JOB, DETACHED_PROCESS};
+    let base = DETACHED_PROCESS.0;
     match job {
-        JobState::AllowsBreakaway => base | CREATE_BREAKAWAY_FROM_JOB,
+        JobState::AllowsBreakaway => base | CREATE_BREAKAWAY_FROM_JOB.0,
         JobState::NotInJob | JobState::ForbidsBreakaway | JobState::Unknown => base,
     }
 }
@@ -65,40 +65,42 @@ enum JobState {
 }
 #[cfg(windows)]
 fn current_job_state() -> JobState {
-    use windows_sys::Win32::Foundation::TRUE;
-    use windows_sys::Win32::System::JobObjects::{
+    use windows::Win32::System::JobObjects::{
         IsProcessInJob, JOB_OBJECT_LIMIT_BREAKAWAY_OK, JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK,
         JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
         QueryInformationJobObject,
     };
-    use windows_sys::Win32::System::Threading::GetCurrentProcess;
-    let mut in_job = 0_i32;
+    use windows::Win32::System::Threading::GetCurrentProcess;
+    use windows::core::BOOL;
+    let mut in_job = BOOL::default();
     let process = unsafe { GetCurrentProcess() };
-    if unsafe { IsProcessInJob(process, core::ptr::null_mut(), &raw mut in_job) } != TRUE {
+    if unsafe { IsProcessInJob(process, None, &raw mut in_job) }.is_err() {
         return JobState::Unknown;
     }
-    if in_job != TRUE {
+    if !in_job.as_bool() {
         return JobState::NotInJob;
     }
-    let mut limits = unsafe { core::mem::zeroed::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() };
+    let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
     let Ok(size) = u32::try_from(core::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>())
     else {
         return JobState::Unknown;
     };
     if unsafe {
         QueryInformationJobObject(
-            core::ptr::null_mut(),
+            None,
             JobObjectExtendedLimitInformation,
             core::ptr::from_mut(&mut limits).cast(),
             size,
-            core::ptr::null_mut(),
+            None,
         )
-    } != TRUE
+    }
+    .is_err()
     {
         return JobState::Unknown;
     }
     let limit_flags = limits.BasicLimitInformation.LimitFlags;
-    if limit_flags & (JOB_OBJECT_LIMIT_BREAKAWAY_OK | JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK) == 0 {
+    if (limit_flags & (JOB_OBJECT_LIMIT_BREAKAWAY_OK | JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK)).0 == 0
+    {
         JobState::ForbidsBreakaway
     } else {
         JobState::AllowsBreakaway
@@ -108,26 +110,26 @@ fn current_job_state() -> JobState {
 pub(super) fn spawn_with_shell_parent(mut command: Command) -> Result<std::process::Child> {
     use std::os::windows::io::{AsRawHandle as _, FromRawHandle as _, OwnedHandle};
     use std::os::windows::process::{CommandExt as _, ProcThreadAttributeList};
-    use windows_sys::Win32::System::Threading::{
+    use windows::Win32::System::Threading::{
         OpenProcess, PROC_THREAD_ATTRIBUTE_PARENT_PROCESS, PROCESS_CREATE_PROCESS,
     };
-    use windows_sys::Win32::UI::WindowsAndMessaging::{GetShellWindow, GetWindowThreadProcessId};
+    use windows::Win32::UI::WindowsAndMessaging::{GetShellWindow, GetWindowThreadProcessId};
     let shell_window = unsafe { GetShellWindow() };
     anyhow::ensure!(
-        !shell_window.is_null(),
+        !shell_window.is_invalid(),
         "Windows shell window was not found"
     );
     let mut shell_process_id = 0_u32;
     unsafe {
-        GetWindowThreadProcessId(shell_window, &raw mut shell_process_id);
+        GetWindowThreadProcessId(shell_window, Some(&raw mut shell_process_id));
     }
     anyhow::ensure!(
         shell_process_id != 0,
         "Windows shell process id was not found"
     );
-    let process = unsafe { OpenProcess(PROCESS_CREATE_PROCESS, 0, shell_process_id) };
-    anyhow::ensure!(!process.is_null(), "failed to open Windows shell process");
-    let shell_process = unsafe { OwnedHandle::from_raw_handle(process) };
+    let process = unsafe { OpenProcess(PROCESS_CREATE_PROCESS, false, shell_process_id) }
+        .context("failed to open Windows shell process")?;
+    let shell_process = unsafe { OwnedHandle::from_raw_handle(process.0) };
     let parent = shell_process.as_raw_handle();
     let parent_attribute = usize::try_from(PROC_THREAD_ATTRIBUTE_PARENT_PROCESS)
         .context("parent process attribute does not fit usize")?;
@@ -154,28 +156,28 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn windows_detached_flags_break_away_from_parent_job() {
-        use windows_sys::Win32::System::Threading::CREATE_BREAKAWAY_FROM_JOB;
+        use windows::Win32::System::Threading::CREATE_BREAKAWAY_FROM_JOB;
         let flags = super::windows_creation_flags_for_job(super::JobState::AllowsBreakaway);
-        assert_ne!(flags & CREATE_BREAKAWAY_FROM_JOB, 0);
+        assert_ne!(flags & CREATE_BREAKAWAY_FROM_JOB.0, 0);
     }
     #[cfg(windows)]
     #[test]
     fn windows_detached_flags_avoid_forbidden_breakaway() {
-        use windows_sys::Win32::System::Threading::CREATE_BREAKAWAY_FROM_JOB;
+        use windows::Win32::System::Threading::CREATE_BREAKAWAY_FROM_JOB;
         let flags = super::windows_creation_flags_for_job(super::JobState::ForbidsBreakaway);
-        assert_eq!(flags & CREATE_BREAKAWAY_FROM_JOB, 0);
+        assert_eq!(flags & CREATE_BREAKAWAY_FROM_JOB.0, 0);
     }
     #[cfg(windows)]
     #[test]
     fn windows_detached_flags_do_not_break_away_outside_jobs() {
-        use windows_sys::Win32::System::Threading::CREATE_BREAKAWAY_FROM_JOB;
+        use windows::Win32::System::Threading::CREATE_BREAKAWAY_FROM_JOB;
         let flags = super::windows_creation_flags_for_job(super::JobState::NotInJob);
-        assert_eq!(flags & CREATE_BREAKAWAY_FROM_JOB, 0);
+        assert_eq!(flags & CREATE_BREAKAWAY_FROM_JOB.0, 0);
     }
     #[cfg(windows)]
     #[test]
     fn windows_detached_flags_preserve_ctrl_c_for_descendants() {
-        use windows_sys::Win32::System::Threading::CREATE_NEW_PROCESS_GROUP;
+        use windows::Win32::System::Threading::CREATE_NEW_PROCESS_GROUP;
         for job in [
             super::JobState::NotInJob,
             super::JobState::AllowsBreakaway,
@@ -183,7 +185,7 @@ mod tests {
             super::JobState::Unknown,
         ] {
             let flags = super::windows_creation_flags_for_job(job);
-            assert_eq!(flags & CREATE_NEW_PROCESS_GROUP, 0);
+            assert_eq!(flags & CREATE_NEW_PROCESS_GROUP.0, 0);
         }
     }
 }

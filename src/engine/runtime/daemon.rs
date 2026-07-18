@@ -79,16 +79,22 @@ fn recoverable_accept_error(error: &io::Error) -> bool {
 }
 #[cfg(windows)]
 fn recoverable_platform_accept_error(error: &io::Error) -> bool {
-    use windows_sys::Win32::Foundation::{
+    use windows::Win32::Foundation::{
         ERROR_BROKEN_PIPE, ERROR_NO_DATA, ERROR_OPERATION_ABORTED, ERROR_PIPE_NOT_CONNECTED,
     };
     let Some(code) = error.raw_os_error() else {
         return false;
     };
-    matches!(
-        u32::try_from(code),
-        Ok(ERROR_BROKEN_PIPE | ERROR_NO_DATA | ERROR_OPERATION_ABORTED | ERROR_PIPE_NOT_CONNECTED)
-    )
+    let Ok(unsigned_code) = u32::try_from(code) else {
+        return false;
+    };
+    [
+        ERROR_BROKEN_PIPE.0,
+        ERROR_NO_DATA.0,
+        ERROR_OPERATION_ABORTED.0,
+        ERROR_PIPE_NOT_CONNECTED.0,
+    ]
+    .contains(&unsigned_code)
 }
 #[cfg(not(windows))]
 fn recoverable_platform_accept_error(_error: &io::Error) -> bool {
@@ -173,7 +179,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn abandoned_named_pipe_accept_error_is_recoverable() {
-        let code = i32::try_from(windows_sys::Win32::Foundation::ERROR_OPERATION_ABORTED).unwrap();
+        let code = i32::try_from(windows::Win32::Foundation::ERROR_OPERATION_ABORTED.0).unwrap();
         let error = io::Error::from_raw_os_error(code);
         assert!(super::recoverable_accept_error(&error));
     }

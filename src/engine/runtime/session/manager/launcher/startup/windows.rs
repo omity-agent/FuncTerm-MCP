@@ -4,10 +4,10 @@ use portable_pty::Child;
 use std::os::windows::io::{AsRawHandle as _, FromRawHandle as _, OwnedHandle, RawHandle};
 use std::sync::mpsc;
 use std::thread;
-use windows_sys::Win32::Foundation::{
+use windows::Win32::Foundation::{
     DUPLICATE_SAME_ACCESS, DuplicateHandle, HANDLE, WAIT_FAILED, WAIT_OBJECT_0,
 };
-use windows_sys::Win32::System::Threading::{GetCurrentProcess, INFINITE, WaitForSingleObject};
+use windows::Win32::System::Threading::{GetCurrentProcess, INFINITE, WaitForSingleObject};
 pub(super) fn monitor_child(
     child: &(dyn Child + Send + Sync),
     sender: mpsc::Sender<StartupEvent>,
@@ -29,32 +29,32 @@ pub(super) fn monitor_child(
 }
 fn duplicate_handle(raw_handle: RawHandle) -> Result<OwnedHandle> {
     let current_process = unsafe { GetCurrentProcess() };
-    let mut duplicate: HANDLE = core::ptr::null_mut();
-    let succeeded = unsafe {
+    let source_handle = HANDLE(raw_handle);
+    let mut duplicate = HANDLE::default();
+    unsafe {
         DuplicateHandle(
             current_process,
-            raw_handle,
+            source_handle,
             current_process,
             &raw mut duplicate,
             0,
-            0,
+            false,
             DUPLICATE_SAME_ACCESS,
         )
-    };
-    if succeeded == 0_i32 {
-        return Err(std::io::Error::last_os_error()).context("failed to duplicate shell handle");
     }
-    Ok(unsafe { OwnedHandle::from_raw_handle(duplicate) })
+    .context("failed to duplicate shell handle")?;
+    Ok(unsafe { OwnedHandle::from_raw_handle(duplicate.0) })
 }
 fn wait_for_process(handle: OwnedHandle) -> Result<()> {
-    let wait_result = unsafe { WaitForSingleObject(handle.as_raw_handle(), INFINITE) };
+    let windows_handle = HANDLE(handle.as_raw_handle());
+    let wait_result = unsafe { WaitForSingleObject(windows_handle, INFINITE) };
     drop(handle);
     match wait_result {
         WAIT_OBJECT_0 => Ok(()),
         WAIT_FAILED => {
             Err(std::io::Error::last_os_error()).context("failed to wait for shell process")
         }
-        unexpected => bail!("unexpected shell process wait result {unexpected}"),
+        unexpected => bail!("unexpected shell process wait result {unexpected:?}"),
     }
 }
 #[cfg(test)]

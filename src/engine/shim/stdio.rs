@@ -47,18 +47,16 @@ pub(super) fn terminal_output() -> Result<fs::File> {
 #[cfg(windows)]
 fn enable_virtual_terminal_output(output: &fs::File) -> Result<()> {
     use std::os::windows::io::AsRawHandle as _;
-    use windows_sys::Win32::System::Console::{
-        ENABLE_VIRTUAL_TERMINAL_PROCESSING, GetConsoleMode, SetConsoleMode,
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::System::Console::{
+        CONSOLE_MODE, ENABLE_VIRTUAL_TERMINAL_PROCESSING, GetConsoleMode, SetConsoleMode,
     };
-    let handle = output.as_raw_handle();
-    let mut mode = 0_u32;
-    if unsafe { GetConsoleMode(handle, &raw mut mode) } == 0_i32 {
-        return Err(std::io::Error::last_os_error()).context("failed to read console output mode");
-    }
-    if unsafe { SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING) } == 0_i32 {
-        return Err(std::io::Error::last_os_error())
-            .context("failed to enable virtual terminal output");
-    }
+    let handle = HANDLE(output.as_raw_handle());
+    let mut mode = CONSOLE_MODE::default();
+    unsafe { GetConsoleMode(handle, &raw mut mode) }
+        .context("failed to read console output mode")?;
+    unsafe { SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING) }
+        .context("failed to enable virtual terminal output")?;
     Ok(())
 }
 #[cfg(not(any(unix, windows)))]
