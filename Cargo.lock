@@ -474,6 +474,7 @@ dependencies = [
  "serde",
  "shell-words",
  "sonic-rs",
+ "sugar_path",
  "tastty-core",
  "tokio",
  "toml",
@@ -1523,6 +1524,16 @@ name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
+
+[[package]]
+name = "sugar_path"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b75b52e25042df94d848c33b7048a6726e728fa649c561c7510784ed11c1ffd2"
+dependencies = [
+ "memchr",
+ "smallvec",
+]
 
 [[package]]
 name = "syn"

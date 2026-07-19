@@ -16,7 +16,7 @@ fn command_output_uses_uppercase_tags_without_escaping_content() {
         note: String::new(),
     }
     .into_plain_text();
-    assert!(text.contains("<CWD>\nF:\\workspace\\A&B\n</CWD>"));
+    assert!(text.contains("<CWD>\nF:/workspace/A&B\n</CWD>"));
     assert!(text.contains("<STDOUT>\nleft < right\n</STDOUT>"));
     assert!(text.contains("<STDERR>\nraw </STDERR> allowed\n</STDERR>"));
     assert!(!text.contains("<STDOUT>left < right"));
@@ -131,6 +131,21 @@ fn structured_command_time_always_uses_milliseconds() {
         finished: true,
     };
     assert_eq!(command.presentation(None).time_consumption, "90250ms");
+}
+#[test]
+fn cwd_is_lexically_normalized_with_forward_slashes() {
+    let shell = ShellView {
+        #[cfg(windows)]
+        cwd: r"F:\\workspace\.\source\..\target\\".to_owned(),
+        #[cfg(unix)]
+        cwd: "/workspace//./source/../target//".to_owned(),
+        ..shell(true)
+    };
+    #[cfg(windows)]
+    let expected = "F:/workspace/target/";
+    #[cfg(unix)]
+    let expected = "/workspace/target/";
+    assert_eq!(shell.presentation(true).cwd, expected);
 }
 #[test]
 fn manual_write_request_round_trip_preserves_input_kind_and_waiting() {

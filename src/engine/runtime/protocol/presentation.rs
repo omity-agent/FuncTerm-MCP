@@ -1,5 +1,7 @@
 use super::{CommandView, ShellView};
 use serde::Serialize;
+use std::path::Path;
+use sugar_path::SugarPath as _;
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
 pub(crate) struct ShellPresentation<'view> {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -7,7 +9,7 @@ pub(crate) struct ShellPresentation<'view> {
     pub(crate) title: &'view str,
     #[serde(rename = "type")]
     pub(crate) shell_type: &'static str,
-    pub(crate) cwd: &'view str,
+    pub(crate) cwd: String,
     pub(crate) idle: bool,
 }
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
@@ -26,7 +28,7 @@ impl ShellView {
             alive: include_alive.then_some(self.alive),
             title: &self.title,
             shell_type: self.shell_type.display_name(),
-            cwd: &self.cwd,
+            cwd: Path::new(&self.cwd).normalize().to_slash().into_owned(),
             idle: self.idle,
         }
     }

@@ -92,7 +92,7 @@ fn shell_text(shell: &ShellView, include_alive: bool) -> String {
     }
     append_element(&mut text, "TITLE", presentation.title);
     append_element(&mut text, "TYPE", presentation.shell_type);
-    append_element(&mut text, "CWD", presentation.cwd);
+    append_element(&mut text, "CWD", &presentation.cwd);
     append_element(&mut text, "IDLE", &presentation.idle.to_string());
     text
 }
