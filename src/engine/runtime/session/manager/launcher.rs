@@ -4,6 +4,7 @@ use super::{
     process_tree,
     shell_session::{ShellSession, ShellSessionParts},
 };
+use crate::contract::DISPATCH_FILE;
 use crate::runtime::config::Settings;
 use crate::runtime::protocol::EnvironmentSnapshot;
 use crate::runtime::session::terminal::{Terminal, start_reader};
@@ -144,6 +145,7 @@ impl ShellLauncher {
             screen,
             busy: None,
             command_root,
+            dispatch_file: tab_state.join(DISPATCH_FILE),
             active_shell_file,
             command_start_timeout: startup_timeout,
             process_tree,

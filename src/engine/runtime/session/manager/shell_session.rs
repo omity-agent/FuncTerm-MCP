@@ -20,6 +20,7 @@ pub(super) struct ShellSession {
     screen: Arc<Terminal>,
     busy: Mutex<Option<String>>,
     command_root: PathBuf,
+    dispatch_file: PathBuf,
     active_shell_file: PathBuf,
     command_start_timeout: Duration,
     process_tree: process_tree::ProcessTree,
@@ -39,6 +40,7 @@ pub(super) struct ShellSessionParts {
     pub(super) screen: Arc<Terminal>,
     pub(super) busy: Option<String>,
     pub(super) command_root: PathBuf,
+    pub(super) dispatch_file: PathBuf,
     pub(super) active_shell_file: PathBuf,
     pub(super) command_start_timeout: Duration,
     pub(super) process_tree: process_tree::ProcessTree,
@@ -55,6 +57,7 @@ impl ShellSession {
             screen: parts.screen,
             busy: Mutex::new(parts.busy),
             command_root: parts.command_root,
+            dispatch_file: parts.dispatch_file,
             active_shell_file: parts.active_shell_file,
             command_start_timeout: parts.command_start_timeout,
             process_tree: parts.process_tree,
@@ -140,11 +143,9 @@ impl ShellSession {
     ) -> Result<()> {
         std::fs::write(&record.command, command).context("failed to write command")?;
         std::fs::write(&record.script, command).context("failed to write command script")?;
-        let invocation = self.current_choice()?.invocation(
-            command_id,
-            &record.directory,
-            &record.initial_cwd,
-        )?;
+        crate::file_publish::write_replace(&self.dispatch_file, command_id)
+            .context("failed to publish command dispatch")?;
+        let invocation = self.current_choice()?.invocation()?;
         let invocation_bytes = invocation.into_bytes();
         let mut writer = lock_mutex(&self.writer, "writer")?;
         writer

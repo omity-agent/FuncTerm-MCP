@@ -1,3 +1,4 @@
+use crate::contract::{SESSION_COMMANDS_DIRECTORY, SESSION_STATE_DIRECTORY};
 use anyhow::{Context as _, Result};
 use std::path::PathBuf;
 const DAEMON_ROOT: &str = "functerm";
@@ -5,8 +6,6 @@ const GENERATIONS_DIRECTORY: &str = "generations";
 const SERVICE_HASH_LENGTH: usize = 12;
 const SERVICES_DIRECTORY: &str = "services";
 const SHIMS_DIRECTORY: &str = "shims";
-const TAB_COMMANDS_DIRECTORY: &str = "commands";
-const TAB_STATE_DIRECTORY: &str = "state";
 const TABS_DIRECTORY: &str = "tabs";
 pub(crate) fn daemon_root() -> Result<PathBuf> {
     create_root(&daemon_root_name())
@@ -24,13 +23,13 @@ pub(crate) fn shim_directory(generation_root: &std::path::Path) -> PathBuf {
     generation_root.join(SHIMS_DIRECTORY)
 }
 pub(crate) fn tab_commands_directory(tab_root: &std::path::Path) -> PathBuf {
-    tab_root.join(TAB_COMMANDS_DIRECTORY)
+    tab_root.join(SESSION_COMMANDS_DIRECTORY)
 }
 pub(crate) fn tab_root(generation_root: &std::path::Path, tab_id: &str) -> PathBuf {
     generation_root.join(TABS_DIRECTORY).join(tab_id)
 }
 pub(crate) fn tab_state_directory(tab_root: &std::path::Path) -> PathBuf {
-    tab_root.join(TAB_STATE_DIRECTORY)
+    tab_root.join(SESSION_STATE_DIRECTORY)
 }
 pub(crate) fn remove_stale_service_runtime(root: &std::path::Path, service_name: &str) {
     if let Err(error) = remove_directory_if_present(&service_root(root, service_name)) {

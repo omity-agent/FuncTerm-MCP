@@ -73,17 +73,8 @@ impl ShellChoice {
             ready_file,
         })
     }
-    pub(crate) fn invocation(
-        self,
-        command_id: &str,
-        directory: &Path,
-        cwd: &Path,
-    ) -> Result<drivers::ShellInvocation> {
-        self.driver().invocation(drivers::InvocationContext {
-            command_id,
-            directory,
-            cwd,
-        })
+    pub(crate) fn invocation(self) -> Result<drivers::ShellInvocation> {
+        self.driver().invocation()
     }
     pub(crate) fn keyboard_bytes(self, bytes: &[u8]) -> Cow<'_, [u8]> {
         self.driver().keyboard_bytes(bytes)

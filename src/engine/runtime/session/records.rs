@@ -1,6 +1,7 @@
 use crate::contract::{
     COMMAND_FILE, COMMAND_INPUT_DIRECTORY, COMMAND_OUTPUT_DIRECTORY, COMMAND_SCRIPT_FILE,
-    COMMAND_STATE_DIRECTORY, DONE_FILE, STARTED_FILE, STDERR_FILE, STDOUT_FILE,
+    COMMAND_STATE_DIRECTORY, COMMAND_WORKING_DIRECTORY_FILE, DONE_FILE, STARTED_FILE, STDERR_FILE,
+    STDOUT_FILE,
 };
 use crate::runtime::protocol::{CommandSnapshot, CommandView};
 mod wait;
@@ -47,6 +48,12 @@ pub(super) fn create_record(
     fs::create_dir_all(&input_dir).context("failed to create command input directory")?;
     fs::create_dir_all(&output_dir).context("failed to create command output directory")?;
     fs::create_dir_all(&state_dir).context("failed to create command state directory")?;
+    let working_directory = input_dir.join(COMMAND_WORKING_DIRECTORY_FILE);
+    fs::write(
+        &working_directory,
+        crate::text::path_text(initial_cwd, "command working directory")?,
+    )
+    .context("failed to write command working directory")?;
     Ok(CommandRecord {
         directory: command_dir,
         initial_cwd: initial_cwd.to_path_buf(),

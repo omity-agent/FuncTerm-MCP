@@ -1,8 +1,4 @@
-use super::{
-    DriverStartup, InvocationContext, InvocationTerminator, ShellDriver, ShellInvocation,
-    StartupContext, os_strings_lower,
-};
-use crate::contract::POSIX_COMMAND_FUNCTION;
+use super::{DriverStartup, InvocationTerminator, ShellDriver, StartupContext, os_strings_lower};
 use crate::runtime::config::Settings;
 use crate::shell::ShellChoice;
 use crate::shell::quote;
@@ -40,16 +36,8 @@ impl ShellDriver for NuShellDriver {
             env: Vec::new(),
         })
     }
-    fn invocation(&self, context: InvocationContext<'_>) -> Result<ShellInvocation> {
-        ShellInvocation::new(
-            format!(
-                "{POSIX_COMMAND_FUNCTION} {} {} {}",
-                quote::nushell_string(context.command_id),
-                quote::nushell_path(context.directory)?,
-                quote::nushell_path(context.cwd)?
-            ),
-            invocation_terminator(),
-        )
+    fn invocation_terminator(&self) -> InvocationTerminator {
+        invocation_terminator()
     }
     fn interactive_arguments(&self, arguments: &[std::ffi::OsString]) -> bool {
         let Some(values) = os_strings_lower(arguments) else {
@@ -82,21 +70,13 @@ fn initialization_script(context: StartupContext<'_>) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::NuShellDriver;
-    use crate::shell::drivers::{InvocationContext, ShellDriver as _};
-    use std::path::Path;
+    use crate::shell::drivers::ShellDriver as _;
     #[test]
     fn invocation_uses_platform_line_ending() {
-        let bytes = NuShellDriver
-            .invocation(InvocationContext {
-                command_id: "command",
-                directory: Path::new("F:\\directory"),
-                cwd: Path::new("F:\\cwd"),
-            })
-            .unwrap()
-            .into_bytes();
+        let bytes = NuShellDriver.invocation().unwrap().into_bytes();
         #[cfg(windows)]
-        assert!(bytes.ends_with(b"\r\n"));
+        assert_eq!(bytes, b"f\r\n");
         #[cfg(not(windows))]
-        assert!(bytes.ends_with(b"\n"));
+        assert_eq!(bytes, b"f\n");
     }
 }

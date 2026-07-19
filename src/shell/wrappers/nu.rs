@@ -1,7 +1,8 @@
 use super::template;
 use crate::contract::POSIX_COMMAND_FUNCTION;
 pub(in crate::shell) fn wrapper() -> String {
-    template::render_command_function(TEMPLATE, POSIX_COMMAND_FUNCTION)
+    let runner = template::render_command_function(TEMPLATE, POSIX_COMMAND_FUNCTION);
+    format!("{runner}\n{}", super::template::nushell_dispatcher())
 }
 const TEMPLATE : & str = "def @FUNCTION@ [command_id: string, directory: path, working_directory: path] {
     let input_dir = ($directory | path join '@INPUT_DIR@')

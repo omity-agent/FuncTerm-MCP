@@ -10,6 +10,7 @@ pub(super) use batch::wrapper as cmd_wrapper;
 pub(super) use nu::wrapper as nushell_wrapper;
 pub(super) use posix_function::{bash_wrapper, zsh_wrapper};
 pub(super) use pwsh::wrapper as powershell_wrapper;
+pub(super) use template::cmd_dispatcher;
 #[cfg(test)]
 mod tests {
     use crate::contract::{
@@ -42,6 +43,27 @@ mod tests {
                 assert!(
                     wrapper.contains(required),
                     "{name} wrapper is missing command contract value {required}"
+                );
+            }
+        }
+    }
+    #[test]
+    fn every_wrapper_defines_the_short_dispatcher() {
+        for (name, wrapper) in [
+            ("cmd", super::cmd_dispatcher()),
+            ("nushell", super::nushell_wrapper()),
+            ("bash", super::bash_wrapper()),
+            ("zsh", super::zsh_wrapper()),
+            ("powershell", super::powershell_wrapper()),
+        ] {
+            for required in [
+                crate::contract::DISPATCH_FILE,
+                crate::contract::COMMAND_WORKING_DIRECTORY_FILE,
+                crate::contract::SESSION_COMMANDS_DIRECTORY,
+            ] {
+                assert!(
+                    wrapper.contains(required),
+                    "{name} dispatcher is missing command contract value {required}"
                 );
             }
         }

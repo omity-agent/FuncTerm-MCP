@@ -1,7 +1,11 @@
 use super::template;
 use crate::contract::POWERSHELL_COMMAND_FUNCTION;
 pub(in crate::shell) fn wrapper() -> String {
-    let script = format!("{}\n{TEMPLATE}", super::start::POWERSHELL);
+    let script = format!(
+        "{}\n{TEMPLATE}\n{}",
+        super::start::POWERSHELL,
+        super::template::powershell_dispatcher()
+    );
     template::render_command_function(&script, POWERSHELL_COMMAND_FUNCTION)
 }
 const TEMPLATE : & str = "function Set-FuncTermShimPath {

@@ -3,6 +3,7 @@ mod nushell;
 mod powershell;
 mod unix_shell;
 use super::ShellChoice;
+use crate::contract::DISPATCHER_COMMAND;
 use crate::runtime::config::Settings;
 use alloc::borrow::Cow;
 use anyhow::{Result, bail};
@@ -13,11 +14,6 @@ pub(crate) struct StartupContext<'value> {
     pub(crate) cwd: &'value Path,
     pub(crate) startup_directory: &'value Path,
     pub(crate) ready_file: &'value Path,
-}
-pub(crate) struct InvocationContext<'value> {
-    pub(crate) command_id: &'value str,
-    pub(crate) directory: &'value Path,
-    pub(crate) cwd: &'value Path,
 }
 pub(crate) struct ShellInvocation {
     line: String,
@@ -62,7 +58,10 @@ pub(crate) trait ShellDriver {
     fn shim_env_name(&self) -> &'static str;
     fn executable_candidates(&self, settings: &Settings) -> Result<Vec<String>>;
     fn startup(&self, context: StartupContext<'_>) -> Result<DriverStartup>;
-    fn invocation(&self, context: InvocationContext<'_>) -> Result<ShellInvocation>;
+    fn invocation_terminator(&self) -> InvocationTerminator;
+    fn invocation(&self) -> Result<ShellInvocation> {
+        ShellInvocation::new(DISPATCHER_COMMAND.to_owned(), self.invocation_terminator())
+    }
     fn keyboard_bytes<'bytes>(&self, bytes: &'bytes [u8]) -> Cow<'bytes, [u8]> {
         Cow::Borrowed(bytes)
     }

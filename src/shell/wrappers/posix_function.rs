@@ -15,10 +15,12 @@ history -c
 {path}
 {shim_path}
 {command}
+{dispatcher}
 ",
         path = path_function(false),
         shim_path = shim_path_function(false),
-        command = command_function(PosixDialect::Bash)
+        command = command_function(PosixDialect::Bash),
+        dispatcher = super::template::posix_dispatcher()
     )
 }
 pub(in crate::shell) fn zsh_wrapper() -> String {
@@ -34,10 +36,12 @@ unset HISTFILE
 {path}
 {shim_path}
 {command}
+{dispatcher}
 ",
         path = path_function(true),
         shim_path = shim_path_function(true),
-        command = command_function(PosixDialect::Zsh)
+        command = command_function(PosixDialect::Zsh),
+        dispatcher = super::template::posix_dispatcher()
     )
 }
 fn command_function(dialect: PosixDialect) -> String {

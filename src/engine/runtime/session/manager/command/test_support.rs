@@ -47,6 +47,7 @@ fn build_shell(
         screen: Arc::clone(&terminal),
         busy: busy.map(str::to_owned),
         command_root: crate::test_fs::temp_dir("command-manager"),
+        dispatch_file: crate::test_fs::temp_dir("command-manager-dispatch").join("dispatch"),
         active_shell_file: crate::test_fs::temp_dir("command-manager-active")
             .join("active-shell.txt"),
         command_start_timeout: core::time::Duration::from_secs(1),

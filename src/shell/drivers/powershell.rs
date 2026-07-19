@@ -1,8 +1,4 @@
-use super::{
-    DriverStartup, InvocationContext, InvocationTerminator, ShellDriver, ShellInvocation,
-    StartupContext, os_strings_lower,
-};
-use crate::contract::POWERSHELL_COMMAND_FUNCTION;
+use super::{DriverStartup, InvocationTerminator, ShellDriver, StartupContext, os_strings_lower};
 use crate::runtime::config::Settings;
 use crate::shell::ShellChoice;
 use crate::shell::quote;
@@ -53,16 +49,8 @@ impl ShellDriver for PowerShellDriver {
             env: Vec::new(),
         })
     }
-    fn invocation(&self, context: InvocationContext<'_>) -> Result<ShellInvocation> {
-        let quoted_directory = quote::powershell_path(context.directory)?;
-        let quoted_cwd = quote::powershell_path(context.cwd)?;
-        let quoted_command_id = quote::powershell_string(context.command_id);
-        ShellInvocation::new(
-            format!(
-                "{POWERSHELL_COMMAND_FUNCTION} -CommandId {quoted_command_id} -Directory {quoted_directory} -WorkingDirectory {quoted_cwd}"
-            ),
-            InvocationTerminator::CarriageReturn,
-        )
+    fn invocation_terminator(&self) -> InvocationTerminator {
+        InvocationTerminator::CarriageReturn
     }
     fn keyboard_bytes<'bytes>(&self, bytes: &'bytes [u8]) -> Cow<'bytes, [u8]> {
         keyboard_bytes(bytes)
@@ -134,27 +122,15 @@ mod tests {
             ready_file: Path::new("F:\\ready'file"),
         })
         .unwrap();
-        assert!(script.contains("Invoke-FuncTermCommand"));
+        assert!(script.contains("function f"));
         assert!(script.contains("Set-Location -LiteralPath ([Text.Encoding]::UTF8.GetString"));
         assert!(script.contains("Set-Content -LiteralPath ([Text.Encoding]::UTF8.GetString"));
     }
     #[test]
-    fn invocation_passes_command_directory() {
-        let invocation = crate::shell::drivers::ShellDriver::invocation(
-            &PowerShellDriver,
-            crate::shell::drivers::InvocationContext {
-                command_id: "command",
-                directory: Path::new("F:\\dir with ' quote"),
-                cwd: Path::new("F:\\cwd"),
-            },
-        )
-        .unwrap();
+    fn invocation_is_short_dispatcher() {
+        let invocation = crate::shell::drivers::ShellDriver::invocation(&PowerShellDriver).unwrap();
         let bytes = invocation.into_bytes();
-        let line = String::from_utf8(bytes.clone()).unwrap();
-        assert!(!line.contains("-Payload"));
-        assert!(line.contains("-Directory ([Text.Encoding]::UTF8.GetString"));
-        assert!(bytes.ends_with(b"\r"));
-        assert!(!bytes.ends_with(b"\r\n"));
+        assert_eq!(bytes, b"f\r");
     }
     #[test]
     fn keyboard_input_encodes_each_line_break_as_one_enter() {

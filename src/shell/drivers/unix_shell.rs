@@ -1,8 +1,4 @@
-use super::{
-    DriverStartup, InvocationContext, InvocationTerminator, ShellDriver, ShellInvocation,
-    StartupContext, os_strings_lower,
-};
-use crate::contract::POSIX_COMMAND_FUNCTION;
+use super::{DriverStartup, InvocationTerminator, ShellDriver, StartupContext, os_strings_lower};
 use crate::runtime::config::Settings;
 use crate::shell::ShellChoice;
 use crate::shell::quote;
@@ -72,16 +68,8 @@ impl ShellDriver for PosixDriver {
             PosixKind::Zsh => zsh_startup(context),
         }
     }
-    fn invocation(&self, context: InvocationContext<'_>) -> Result<ShellInvocation> {
-        ShellInvocation::new(
-            format!(
-                "{POSIX_COMMAND_FUNCTION} {} {} {}",
-                quote::posix_string(context.command_id),
-                quote::posix_string(&quote::native_path(context.directory)?),
-                quote::posix_string(&quote::native_path(context.cwd)?)
-            ),
-            InvocationTerminator::LineFeed,
-        )
+    fn invocation_terminator(&self) -> InvocationTerminator {
+        InvocationTerminator::LineFeed
     }
     fn interactive_arguments(&self, arguments: &[std::ffi::OsString]) -> bool {
         let Some(values) = os_strings_lower(arguments) else {
@@ -133,21 +121,12 @@ fn initialization_script(
 #[cfg(test)]
 mod tests {
     use super::PosixDriver;
-    use crate::shell::drivers::{InvocationContext, ShellDriver as _};
-    use std::path::Path;
+    use crate::shell::drivers::ShellDriver as _;
     #[test]
     fn invocation_uses_line_feed() {
         for driver in [PosixDriver::bash(), PosixDriver::zsh()] {
-            let bytes = driver
-                .invocation(InvocationContext {
-                    command_id: "command",
-                    directory: Path::new("/directory"),
-                    cwd: Path::new("/cwd"),
-                })
-                .unwrap()
-                .into_bytes();
-            assert!(bytes.ends_with(b"\n"));
-            assert!(!bytes.ends_with(b"\r\n"));
+            let bytes = driver.invocation().unwrap().into_bytes();
+            assert_eq!(bytes, b"f\n");
         }
     }
 }

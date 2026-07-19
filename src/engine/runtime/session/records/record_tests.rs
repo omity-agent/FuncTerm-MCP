@@ -26,6 +26,10 @@ fn command_record_separates_input_output_and_state_files() {
         record.done,
         root.join("command-test").join("state").join("done.json")
     );
+    assert_eq!(
+        std::fs::read_to_string(root.join("command-test").join("input").join("cwd.txt")).unwrap(),
+        "F:\\cwd"
+    );
     std::fs::remove_dir_all(&root).unwrap();
 }
 #[test]
