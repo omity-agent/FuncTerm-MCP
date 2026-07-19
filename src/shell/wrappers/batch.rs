@@ -3,7 +3,6 @@ pub(in crate::shell) fn wrapper() -> String {
     template::render_script(TEMPLATE)
 }
 const TEMPLATE: &str = r#"@echo off
-setlocal DisableDelayedExpansion
 set "command_id=%~1"
 set "directory=%~2"
 set "working_directory=%~3"

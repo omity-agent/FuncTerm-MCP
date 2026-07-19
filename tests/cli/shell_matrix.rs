@@ -8,5 +8,8 @@ mod matrix;
 #[path = "shell_matrix/nested.rs"]
 mod nested;
 #[cfg(test)]
+#[path = "shell_matrix/state.rs"]
+mod state;
+#[cfg(test)]
 #[path = "shell_matrix/title.rs"]
 mod title;

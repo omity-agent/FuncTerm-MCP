@@ -2,6 +2,7 @@ use super::{
     create_record, read_and_clear_command_result, read_command_result, wait_for_done,
     write_failed_result,
 };
+use crate::shell::ShellChoice;
 use core::time::Duration;
 use std::path::Path;
 #[test]
@@ -21,6 +22,14 @@ fn command_record_separates_input_output_and_state_files() {
     assert_eq!(
         record.stdout,
         root.join("command-test").join("output").join("stdout.txt")
+    );
+    assert_eq!(
+        record.script_for(ShellChoice::Cmd),
+        root.join("command-test").join("input").join("command.cmd")
+    );
+    assert_eq!(
+        record.script_for(ShellChoice::PowerShell),
+        root.join("command-test").join("input").join("command.ps1")
     );
     assert_eq!(
         record.done,

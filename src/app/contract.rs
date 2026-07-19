@@ -5,6 +5,7 @@ pub(crate) const COMMAND_FILE: &str = "command.txt";
 pub(crate) const COMMAND_SCRIPT_FILE: &str = "command.cmd";
 pub(crate) const COMMAND_WORKING_DIRECTORY_FILE: &str = "cwd.txt";
 pub(crate) const COMMAND_OUTPUT_DIRECTORY: &str = "output";
+pub(crate) const COMMAND_POWERSHELL_SCRIPT_FILE: &str = "command.ps1";
 pub(crate) const COMMAND_STATE_DIRECTORY: &str = "state";
 pub(crate) const DISPATCH_FILE: &str = "dispatch";
 pub(crate) const DISPATCHER_COMMAND: &str = "f";

@@ -76,6 +76,9 @@ impl ShellChoice {
     pub(crate) fn invocation(self) -> Result<drivers::ShellInvocation> {
         self.driver().invocation()
     }
+    pub(crate) fn command_script(self, command: &str) -> String {
+        self.driver().command_script(command)
+    }
     pub(crate) fn keyboard_bytes(self, bytes: &[u8]) -> Cow<'_, [u8]> {
         self.driver().keyboard_bytes(bytes)
     }

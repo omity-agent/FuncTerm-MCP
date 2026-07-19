@@ -52,6 +52,12 @@ impl ShellDriver for PowerShellDriver {
     fn invocation_terminator(&self) -> InvocationTerminator {
         InvocationTerminator::CarriageReturn
     }
+    fn command_script(&self, command: &str) -> String {
+        format!(
+            "$script:FuncTermCommandScript = [scriptblock]::Create({})",
+            quote::powershell_string(command)
+        )
+    }
     fn keyboard_bytes<'bytes>(&self, bytes: &'bytes [u8]) -> Cow<'bytes, [u8]> {
         keyboard_bytes(bytes)
     }

@@ -1,9 +1,10 @@
 use crate::contract::{
-    COMMAND_FILE, COMMAND_INPUT_DIRECTORY, COMMAND_OUTPUT_DIRECTORY, COMMAND_SCRIPT_FILE,
-    COMMAND_STATE_DIRECTORY, COMMAND_WORKING_DIRECTORY_FILE, DONE_FILE, STARTED_FILE, STDERR_FILE,
-    STDOUT_FILE,
+    COMMAND_FILE, COMMAND_INPUT_DIRECTORY, COMMAND_OUTPUT_DIRECTORY,
+    COMMAND_POWERSHELL_SCRIPT_FILE, COMMAND_SCRIPT_FILE, COMMAND_STATE_DIRECTORY,
+    COMMAND_WORKING_DIRECTORY_FILE, DONE_FILE, STARTED_FILE, STDERR_FILE, STDOUT_FILE,
 };
 use crate::runtime::protocol::{CommandSnapshot, CommandView};
+use crate::shell::ShellChoice;
 mod wait;
 use anyhow::{Context as _, Result, bail};
 use core::time::Duration;
@@ -20,6 +21,7 @@ pub(super) struct CommandRecord {
     pub(super) stderr: PathBuf,
     pub(super) command: PathBuf,
     pub(super) script: PathBuf,
+    pub(super) powershell_script: PathBuf,
     pub(super) started: PathBuf,
     pub(super) done: PathBuf,
 }
@@ -61,9 +63,20 @@ pub(super) fn create_record(
         stderr: output_dir.join(STDERR_FILE),
         command: input_dir.join(COMMAND_FILE),
         script: input_dir.join(COMMAND_SCRIPT_FILE),
+        powershell_script: input_dir.join(COMMAND_POWERSHELL_SCRIPT_FILE),
         started: state_dir.join(STARTED_FILE),
         done: state_dir.join(DONE_FILE),
     })
+}
+impl CommandRecord {
+    pub(super) fn script_for(&self, choice: ShellChoice) -> &Path {
+        match choice {
+            ShellChoice::PowerShell => &self.powershell_script,
+            ShellChoice::Bash | ShellChoice::NuShell | ShellChoice::Zsh | ShellChoice::Cmd => {
+                &self.script
+            }
+        }
+    }
 }
 pub(super) fn read_command_result(
     record: &CommandRecord,

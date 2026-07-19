@@ -1,53 +1,13 @@
 use super::posix_dialect::PosixDialect;
-use super::posix_startup::{path_function, shim_path_function};
 use crate::contract::{
     COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, COMMAND_INPUT_DIRECTORY,
     COMMAND_OUTPUT_DIRECTORY, COMMAND_STATE_DIRECTORY, DONE_FILE, HELPER_EXECUTABLE_ENV,
     POSIX_COMMAND_FUNCTION, STDERR_FILE, STDOUT_FILE,
 };
-pub(in crate::shell) fn bash_wrapper() -> String {
-    format!(
-        "set +o history
-unset HISTFILE
-export HISTSIZE=0
-export HISTFILESIZE=0
-history -c
-{path}
-{shim_path}
-{command}
-{dispatcher}
-",
-        path = path_function(false),
-        shim_path = shim_path_function(false),
-        command = command_function(PosixDialect::Bash),
-        dispatcher = super::template::posix_dispatcher()
-    )
-}
-pub(in crate::shell) fn zsh_wrapper() -> String {
-    format!(
-        "unset HISTFILE
-HISTSIZE=0
-SAVEHIST=0
-setopt no_append_history
-setopt no_share_history
-setopt no_inc_append_history
-fc -p /dev/null 0 0 2> /dev/null || true
-unset HISTFILE
-{path}
-{shim_path}
-{command}
-{dispatcher}
-",
-        path = path_function(true),
-        shim_path = shim_path_function(true),
-        command = command_function(PosixDialect::Zsh),
-        dispatcher = super::template::posix_dispatcher()
-    )
-}
-fn command_function(dialect: PosixDialect) -> String {
+pub(super) fn command_function(dialect: PosixDialect) -> String {
     format!(
         r#"{name}() {{
-{emulate}    local command_id="$1"
+	    local command_id="$1"
     local native_directory="$2"
     local directory="$native_directory"
     local working_directory="$3"

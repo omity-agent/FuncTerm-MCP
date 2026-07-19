@@ -2,76 +2,18 @@ use super::template;
 use crate::contract::POWERSHELL_COMMAND_FUNCTION;
 pub(in crate::shell) fn wrapper() -> String {
     let script = format!(
-        "{}\n{TEMPLATE}\n{}",
+        "{}\n{}\n{COMMAND_TEMPLATE}\n{}",
         super::start::POWERSHELL,
+        super::start::POWERSHELL_SHIMS,
         super::template::powershell_dispatcher()
     );
-    template::render_command_function(&script, POWERSHELL_COMMAND_FUNCTION)
+    let rendered = template::render_command_function(&script, POWERSHELL_COMMAND_FUNCTION);
+    template::render_powershell(&rendered.replace(
+        "@POWERSHELL_STATE_PROMOTION@",
+        template::POWERSHELL_STATE_PROMOTION,
+    ))
 }
-const TEMPLATE : & str = "function Set-FuncTermShimPath {
-    if ([string]::IsNullOrEmpty($env:FUNCTERM_SHIM_DIR)) {
-        return
-    }
-    $separator = [string][IO.Path]::PathSeparator
-    $entries = $env:PATH -split [Regex]::Escape($separator)
-    $remaining = $entries | Where-Object {
-        -not [string]::Equals($_, $env:FUNCTERM_SHIM_DIR, [StringComparison]::OrdinalIgnoreCase)
-    }
-    $env:PATH = (@($env:FUNCTERM_SHIM_DIR) + @($remaining)) -join $separator
-}
-Set-FuncTermShimPath
-function Ensure-FuncTermShims {
-    if ([string]::IsNullOrEmpty($env:FUNCTERM_SHIM_DIR)) {
-        return
-    }
-    if ([string]::IsNullOrEmpty($env:@HELPER_ENV@)) {
-        throw '@HELPER_ENV@ is not set'
-    }
-    $shimStart = [Diagnostics.ProcessStartInfo]::new($env:@HELPER_ENV@)
-    $shimStart.UseShellExecute = $false
-    $shimStart.RedirectStandardOutput = $true
-    $shimStart.RedirectStandardError = $true
-    $shimStart.ArgumentList.Add('internal-ensure-shims')
-    $shimStart.ArgumentList.Add('--directory')
-    $shimStart.ArgumentList.Add($env:FUNCTERM_SHIM_DIR)
-    try {
-        $shimProcess = [Diagnostics.Process]::Start($shimStart)
-    }
-    catch {
-        throw ('failed to start FuncTerm shell shim helper (helper: {0}; shim directory: {1}): {2}' -f $env:@HELPER_ENV@, $env:FUNCTERM_SHIM_DIR, $_.Exception.Message)
-    }
-    if ($null -eq $shimProcess) {
-        throw ('FuncTerm shell shim helper did not start a process (helper: {0}; shim directory: {1})' -f $env:@HELPER_ENV@, $env:FUNCTERM_SHIM_DIR)
-    }
-    try {
-        $shimStdoutRead = $shimProcess.StandardOutput.ReadToEndAsync()
-        $shimStderrRead = $shimProcess.StandardError.ReadToEndAsync()
-        $shimProcess.WaitForExit()
-        $shimStdout = $shimStdoutRead.GetAwaiter().GetResult().Trim()
-        $shimStderr = $shimStderrRead.GetAwaiter().GetResult().Trim()
-        $shimExitCode = $shimProcess.ExitCode
-    }
-    catch {
-        throw ('failed while waiting for FuncTerm shell shim helper (helper: {0}; shim directory: {1}): {2}' -f $env:@HELPER_ENV@, $env:FUNCTERM_SHIM_DIR, $_.Exception.Message)
-    }
-    finally {
-        $shimProcess.Dispose()
-    }
-    if ($shimExitCode -ne 0) {
-        $shimDetails = @()
-        if (-not [string]::IsNullOrEmpty($shimStderr)) {
-            $shimDetails += 'stderr: ' + $shimStderr
-        }
-        if (-not [string]::IsNullOrEmpty($shimStdout)) {
-            $shimDetails += 'stdout: ' + $shimStdout
-        }
-        if ($shimDetails.Count -eq 0) {
-            $shimDetails += 'no stdout or stderr output'
-        }
-        throw ('failed to ensure FuncTerm shell shims (helper: {0}; shim directory: {1}; exit code {2}): {3}' -f $env:@HELPER_ENV@, $env:FUNCTERM_SHIM_DIR, $shimExitCode, ($shimDetails -join [Environment]::NewLine))
-    }
-}
-if (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue) {
+const COMMAND_TEMPLATE : & str = "if (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue) {
     Set-PSReadLineOption -HistorySaveStyle SaveNothing
     $setPsReadLineOption = Get-Command Set-PSReadLineOption
     if ($setPsReadLineOption.Parameters.ContainsKey('AddToHistoryHandler')) {
@@ -94,7 +36,7 @@ function @FUNCTION@ {
     $stateDir = Join-Path $Directory '@STATE_DIR@'
     $stdoutFile = Join-Path $outputDir '@STDOUT@'
     $stderrFile = Join-Path $outputDir '@STDERR@'
-    $commandFile = Join-Path $inputDir '@COMMAND@'
+    $scriptFile = Join-Path $inputDir '@SCRIPT@'
     $doneFile = Join-Path $stateDir '@DONE@'
     $previousCommandId = $env:@COMMAND_ID_ENV@
     $previousCommandDirectory = $env:@COMMAND_DIR_ENV@
@@ -113,21 +55,42 @@ function @FUNCTION@ {
         Set-FuncTermShimPath
         Set-Location -LiteralPath $WorkingDirectory
         $global:LASTEXITCODE = $null
-        $script = Get-Content -LiteralPath $commandFile -Raw -Encoding utf8
         Publish-FuncTermStart -CommandId $CommandId -Directory $Directory
         $global:LASTEXITCODE = $null
+        $script:FuncTermCommandNativeExitCode = $null
+        $script:FuncTermCommandSucceeded = $false
+        $existingVariables = $null
+        $existingFunctions = $null
+        $existingAliases = $null
+        $commandTimer = $null
+        $variable = $null
+        $function = $null
+        $alias = $null
+        $existingVariables = (Get-Variable -Scope Local).Name
+        $existingFunctions = @{}
+        foreach ($function in Get-ChildItem Function:) {
+            $existingFunctions[$function.Name] = $function.ScriptBlock.ToString()
+        }
+        $existingAliases = @{}
+        foreach ($alias in Get-ChildItem Alias:) {
+            $existingAliases[$alias.Name] = $alias.Definition
+        }
         $commandTimer = [Diagnostics.Stopwatch]::StartNew()
-        & ([scriptblock]::Create($script)) 2> $stderrFile | Tee-Object -FilePath $stdoutFile
+        . $scriptFile
+        . $script:FuncTermCommandScript 2> $stderrFile | Tee-Object -FilePath $stdoutFile
+        $script:FuncTermCommandSucceeded = $?
+        $script:FuncTermCommandNativeExitCode = $global:LASTEXITCODE
         $commandTimer.Stop()
+@POWERSHELL_STATE_PROMOTION@
         $timeConsumption = [string]::Format(
             [Globalization.CultureInfo]::InvariantCulture,
             '{0}ms',
             $commandTimer.Elapsed.TotalMilliseconds
         )
-        if ($null -ne $global:LASTEXITCODE) {
-            $exitCode = [int]$global:LASTEXITCODE
+        if ($null -ne $script:FuncTermCommandNativeExitCode) {
+            $exitCode = [int]$script:FuncTermCommandNativeExitCode
         }
-        elseif ($?) {
+        elseif ($script:FuncTermCommandSucceeded) {
             $exitCode = 0
         }
         else {
@@ -186,15 +149,3 @@ function @FUNCTION@ {
     }
 }
 " ;
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn shim_helper_uses_process_exit_code_and_captures_output() {
-        let wrapper = super::wrapper();
-        assert!(wrapper.contains("[Diagnostics.ProcessStartInfo]::new"));
-        assert!(wrapper.contains("$shimStart.RedirectStandardOutput = $true"));
-        assert!(wrapper.contains("$shimStart.RedirectStandardError = $true"));
-        assert!(wrapper.contains("$shimExitCode = $shimProcess.ExitCode"));
-        assert!(wrapper.contains("helper: {0}; shim directory: {1}; exit code {2}"));
-    }
-}

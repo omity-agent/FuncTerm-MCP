@@ -8,7 +8,7 @@ mod start;
 mod template;
 pub(super) use batch::wrapper as cmd_wrapper;
 pub(super) use nu::wrapper as nushell_wrapper;
-pub(super) use posix_function::{bash_wrapper, zsh_wrapper};
+pub(super) use posix_startup::{bash_wrapper, zsh_wrapper};
 pub(super) use pwsh::wrapper as powershell_wrapper;
 pub(super) use template::cmd_dispatcher;
 #[cfg(test)]
@@ -66,6 +66,34 @@ mod tests {
                     "{name} dispatcher is missing command contract value {required}"
                 );
             }
+        }
+    }
+    #[test]
+    fn powershell_wrapper_captures_helper_failures_and_promotes_user_state() {
+        let wrapper = super::powershell_wrapper();
+        for required in [
+            "$shimStart.RedirectStandardOutput = $true",
+            "$shimStart.RedirectStandardError = $true",
+            "$shimExitCode = $shimProcess.ExitCode",
+            "Set-Variable -Scope Global",
+            "Function:\\global:",
+            "Set-Alias -Scope Global",
+        ] {
+            assert!(wrapper.contains(required));
+        }
+    }
+    #[test]
+    fn nushell_wrapper_persists_serializable_state() {
+        let wrapper = super::nushell_wrapper();
+        for required in [
+            "nushell-env.nuon",
+            "nushell-config.nuon",
+            "nushell-declarations.nu",
+            "to nuon",
+            "load-env",
+            "view source",
+        ] {
+            assert!(wrapper.contains(required));
         }
     }
 }

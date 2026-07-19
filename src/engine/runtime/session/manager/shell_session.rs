@@ -142,7 +142,9 @@ impl ShellSession {
         record: &CommandRecord,
     ) -> Result<()> {
         std::fs::write(&record.command, command).context("failed to write command")?;
-        std::fs::write(&record.script, command).context("failed to write command script")?;
+        let choice = self.current_choice()?;
+        std::fs::write(record.script_for(choice), choice.command_script(command))
+            .context("failed to write command script")?;
         crate::file_publish::write_replace(&self.dispatch_file, command_id)
             .context("failed to publish command dispatch")?;
         let invocation = self.current_choice()?.invocation()?;

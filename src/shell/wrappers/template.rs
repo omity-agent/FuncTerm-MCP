@@ -1,9 +1,9 @@
 use crate::contract::{
     COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, COMMAND_INPUT_DIRECTORY,
-    COMMAND_OUTPUT_DIRECTORY, COMMAND_SCRIPT_FILE, COMMAND_STATE_DIRECTORY,
-    COMMAND_WORKING_DIRECTORY_FILE, DISPATCH_FILE, DONE_FILE, HELPER_EXECUTABLE_ENV,
-    POSIX_COMMAND_FUNCTION, POWERSHELL_COMMAND_FUNCTION, SESSION_COMMANDS_DIRECTORY,
-    SESSION_STATE_DIRECTORY, STDERR_FILE, STDOUT_FILE,
+    COMMAND_OUTPUT_DIRECTORY, COMMAND_POWERSHELL_SCRIPT_FILE, COMMAND_SCRIPT_FILE,
+    COMMAND_STATE_DIRECTORY, COMMAND_WORKING_DIRECTORY_FILE, DISPATCH_FILE, DONE_FILE,
+    HELPER_EXECUTABLE_ENV, POSIX_COMMAND_FUNCTION, POWERSHELL_COMMAND_FUNCTION,
+    SESSION_COMMANDS_DIRECTORY, SESSION_STATE_DIRECTORY, STDERR_FILE, STDOUT_FILE,
 };
 use crate::shell::shims::SESSION_ROOT_ENV;
 const COMMON: [(&str, &str); 9] = [
@@ -25,6 +25,15 @@ pub(super) fn render_command_function(template: &str, function_name: &str) -> St
 }
 pub(super) fn render_script(template: &str) -> String {
     render(template, &[("@SCRIPT@", COMMAND_SCRIPT_FILE)])
+}
+pub(super) fn render_powershell(template: &str) -> String {
+    render(
+        template,
+        &[
+            ("@COMMAND@", COMMAND_FILE),
+            ("@SCRIPT@", COMMAND_POWERSHELL_SCRIPT_FILE),
+        ],
+    )
 }
 pub(in crate::shell) fn cmd_dispatcher() -> String {
     render(
@@ -99,7 +108,6 @@ fn render(template: &str, extra: &[(&str, &str)]) -> String {
     text
 }
 const CMD_DISPATCHER: &str = r#"@echo off
-setlocal DisableDelayedExpansion
 set "dispatch_file=%FUNCTERM_SESSION_ROOT%\@SESSION_STATE@\@DISPATCH@"
 set /p "command_id="<"%dispatch_file%" || exit /b 1
 del /q "%dispatch_file%" || exit /b 1
@@ -108,3 +116,27 @@ set /p "working_directory="<"%directory%\@INPUT_DIR@\@WORKING_DIRECTORY@" || exi
 call "%FUNCTERM_SESSION_ROOT%\startup\cmd_run.bat" "%command_id%" "%directory%" "%working_directory%"
 exit /b %ERRORLEVEL%
 "#;
+pub (super) const POWERSHELL_STATE_PROMOTION : & str = "        foreach ($variable in Get-Variable -Scope Local) {
+            if (
+                $variable.Name -notin $existingVariables -and
+                $variable.Options -notmatch 'ReadOnly|Constant'
+            ) {
+                Set-Variable -Scope Global -Name $variable.Name -Value $variable.Value
+            }
+        }
+        foreach ($function in Get-ChildItem Function:) {
+            if (
+                -not $existingFunctions.ContainsKey($function.Name) -or
+                $existingFunctions[$function.Name] -ne $function.ScriptBlock.ToString()
+            ) {
+                Set-Item -LiteralPath ('Function:\\global:' + $function.Name) -Value $function.ScriptBlock
+            }
+        }
+        foreach ($alias in Get-ChildItem Alias:) {
+            if (
+                -not $existingAliases.ContainsKey($alias.Name) -or
+                $existingAliases[$alias.Name] -ne $alias.Definition
+            ) {
+                Set-Alias -Scope Global -Name $alias.Name -Value $alias.Definition
+            }
+	        }" ;

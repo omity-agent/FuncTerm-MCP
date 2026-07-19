@@ -62,6 +62,9 @@ pub(crate) trait ShellDriver {
     fn invocation(&self) -> Result<ShellInvocation> {
         ShellInvocation::new(DISPATCHER_COMMAND.to_owned(), self.invocation_terminator())
     }
+    fn command_script(&self, command: &str) -> String {
+        command.to_owned()
+    }
     fn keyboard_bytes<'bytes>(&self, bytes: &'bytes [u8]) -> Cow<'bytes, [u8]> {
         Cow::Borrowed(bytes)
     }
