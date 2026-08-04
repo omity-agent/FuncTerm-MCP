@@ -5,7 +5,7 @@ use crate::runtime::config::Settings;
 use anyhow::Result;
 use rmcp::{
     ServerHandler, ServiceExt as _,
-    handler::server::{router::tool::ToolRouter, wrapper::Parameters},
+    handler::server::{router::tool::ToolRouter, tool::schema_for_output, wrapper::Parameters},
     model::CallToolResult,
     tool, tool_handler, tool_router,
 };
@@ -36,7 +36,7 @@ impl McpServer {
         client::ensure_daemon(&self.daemon_service_name)?;
         client::DaemonClient::connect(&self.daemon_service_name)?.call(request)
     }
-    # [tool (name = "new_tab" , description = "打开一个新的终端标签页。" , output_schema = output :: schema ::< output :: NewTabOutput < 'static > > ())]
+    # [tool (name = "new_tab" , description = "打开一个新的终端标签页。" , output_schema = schema_for_output ::< output :: NewTabOutput < 'static > > ())]
     async fn new_tab(
         &self,
         Parameters(request): Parameters<NewTabRequest>,
@@ -49,7 +49,7 @@ impl McpServer {
         .map_err(error_text)?;
         output::new_tab(payload)
     }
-    # [tool (name = "manual_write" , description = "手动写入键盘输入。该工具仅在 Shell 处于非空闲状态时可用，适用于使用 TUI 程序、点击快捷键等场景。调用时需在 text 和 bytes 中选择一个传入。" , output_schema = output :: schema ::< output :: ManualWriteOutput < 'static > > ())]
+    # [tool (name = "manual_write" , description = "手动写入键盘输入。该工具仅在 Shell 处于非空闲状态时可用，适用于使用 TUI 程序、点击快捷键等场景。调用时需在 text 和 bytes 中选择一个传入。" , output_schema = schema_for_output ::< output :: ManualWriteOutput < 'static > > ())]
     async fn manual_write(
         &self,
         Parameters(request): Parameters<ManualWriteRequest>,
@@ -64,7 +64,7 @@ impl McpServer {
         .map_err(error_text)?;
         output::manual_write(payload)
     }
-    # [tool (name = "send_command" , description = "执行命令。该工具会在等待时长结束或命令结束时输出。" , output_schema = output :: schema ::< output :: SendCommandOutput < 'static > > ())]
+    # [tool (name = "send_command" , description = "执行命令。该工具会在等待时长结束或命令结束时输出。" , output_schema = schema_for_output ::< output :: SendCommandOutput < 'static > > ())]
     async fn send_command(
         &self,
         Parameters(request): Parameters<SendCommandRequest>,
@@ -78,7 +78,7 @@ impl McpServer {
         .map_err(error_text)?;
         output::send_command(payload)
     }
-    # [tool (name = "view" , description = "查看状态。该工具会在等待时长结束或命令结束时输出。" , output_schema = output :: schema ::< output :: ViewOutput < 'static > > ())]
+    # [tool (name = "view" , description = "查看状态。该工具会在等待时长结束或命令结束时输出。" , output_schema = schema_for_output ::< output :: ViewOutput < 'static > > ())]
     async fn view(
         &self,
         Parameters(request): Parameters<ViewRequest>,

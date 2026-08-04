@@ -2,8 +2,7 @@ use crate::runtime::protocol::{
     CommandPresentation, Payload, ShellPresentation, ViewResult,
     format::{command_plain_text, tab_created_plain_text, tab_plain_text},
 };
-use alloc::sync::Arc;
-use rmcp::model::{CallToolResult, ContentBlock, JsonObject};
+use rmcp::model::{CallToolResult, ContentBlock};
 use serde::Serialize;
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
 pub(super) struct NewTabOutput<'payload> {
@@ -29,13 +28,6 @@ pub(super) struct ViewOutput<'payload> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) command: Option<CommandPresentation<'payload>>,
     pub(super) note: &'payload str,
-}
-pub(super) fn schema<T>() -> Arc<JsonObject>
-where
-    T: rmcp::schemars::JsonSchema + 'static,
-{
-    rmcp::handler::server::tool::schema_for_output::<T>()
-        .unwrap_or_else(|error| panic!("invalid MCP output schema: {error}"))
 }
 pub(super) fn new_tab(payload: Payload) -> Result<CallToolResult, String> {
     match payload {
