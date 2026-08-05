@@ -1,4 +1,5 @@
 #![cfg_attr(windows, feature(windows_process_extensions_raw_attribute))]
+#![cfg_attr(windows, feature(windows_process_extensions_inherit_handles))]
 mod app;
 mod engine;
 mod file_publish;

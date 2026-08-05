@@ -8,7 +8,9 @@ pub(super) fn spawn_detached(
 ) -> Result<std::process::Child> {
     use std::os::windows::process::CommandExt as _;
     let job = current_job_state();
-    command.creation_flags(windows_creation_flags(job));
+    command
+        .creation_flags(windows_creation_flags(job))
+        .inherit_handles(false);
     command.spawn().context("CreateProcessW failed")
 }
 #[cfg(windows)]
@@ -142,7 +144,9 @@ pub(super) fn spawn_with_shell_parent(mut command: Command) -> Result<std::proce
     }
     .finish()
     .context("failed to build launcher process attributes")?;
-    command.creation_flags(windows_creation_flags_for_job(JobState::NotInJob));
+    command
+        .creation_flags(windows_creation_flags_for_job(JobState::NotInJob))
+        .inherit_handles(false);
     command
         .spawn_with_attributes(&attributes)
         .context("failed to spawn process through Windows shell process")
