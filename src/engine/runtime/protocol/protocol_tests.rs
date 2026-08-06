@@ -99,9 +99,10 @@ fn manual_write_output_reports_screen() {
 #[test]
 fn plain_command_time_uses_milliseconds_seconds_and_minutes() {
     for (duration, expected) in [
-        (Duration::from_micros(750_500), "750.5ms"),
+        (Duration::from_micros(750_500), "750.50ms"),
+        (Duration::from_micros(12_345), "12.35ms"),
         (Duration::from_millis(1_250), "1.25s"),
-        (Duration::from_secs(90), "1.5min"),
+        (Duration::from_secs(90), "1.50min"),
     ] {
         let command = CommandView {
             stdout: String::new(),
@@ -127,10 +128,10 @@ fn structured_command_time_always_uses_milliseconds() {
         stdout: String::new(),
         stderr: String::new(),
         exit_code: Some(0_i32),
-        time_consumption: Duration::from_millis(90_250),
+        time_consumption: Duration::new(90, 250_125_000),
         finished: true,
     };
-    assert_eq!(command.presentation(None).time_consumption, "90250ms");
+    assert_eq!(command.presentation(None).time_consumption, "90250.13ms");
 }
 #[test]
 fn cwd_is_lexically_normalized_with_forward_slashes() {

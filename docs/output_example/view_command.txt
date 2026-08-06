@@ -25,7 +25,7 @@ partial output without escaping: <tag> & raw
 pending
 </EXIT_CODE>
 <TIME_CONSUMPTION>
-842ms
+842.00ms
 </TIME_CONSUMPTION>
 <FINISHED>
 false

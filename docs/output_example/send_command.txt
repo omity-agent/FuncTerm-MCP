@@ -26,7 +26,7 @@ warning: value </STDERR> is allowed in content
 0
 </EXIT_CODE>
 <TIME_CONSUMPTION>
-1.238s
+1.24s
 </TIME_CONSUMPTION>
 <FINISHED>
 true
