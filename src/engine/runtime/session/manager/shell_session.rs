@@ -173,10 +173,12 @@ impl ShellSession {
             self.command_start_timeout
         );
     }
-    pub(super) fn reserve(&self, command_id: &str) -> Result<()> {
+    pub(super) fn reserve(&self, tab_id: &str, command_id: &str) -> Result<()> {
         let mut busy = lock_mutex(&self.busy, "busy")?;
         if let Some(existing_id) = busy.as_deref() {
-            anyhow::bail!("The command was not executed because the shell is busy with `{existing_id}`");
+            anyhow::bail!(
+                "The command was not executed because `{tab_id}` is busy with `{existing_id}`"
+            );
         }
         *busy = Some(command_id.to_owned());
         drop(busy);

@@ -9,11 +9,10 @@ use support::{test_shell, test_shell_with_flush, test_shell_with_writer};
 #[test]
 fn busy_state_rejects_conflicting_reservation() {
     let shell = test_shell(Some("command-current"));
-    let error = shell.reserve("command-next").unwrap_err();
-    assert!(
-        error
-            .to_string()
-            .contains("The command was not executed because the shell is busy with `command-current`")
+    let error = shell.reserve("tab-current", "command-next").unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "The command was not executed because `tab-current` is busy with `command-current`"
     );
     assert_eq!(
         shell.busy_command_id().unwrap().as_deref(),
@@ -41,7 +40,9 @@ fn busy_state_allows_only_one_concurrent_reservation() {
         workers.push(thread::spawn(move || {
             let command_id = format!("command-{index}");
             worker_barrier.wait();
-            worker_shell.reserve(&command_id).map(|()| command_id)
+            worker_shell
+                .reserve("tab-current", &command_id)
+                .map(|()| command_id)
         }));
     }
     let mut reserved_ids = Vec::new();
@@ -50,7 +51,7 @@ fn busy_state_allows_only_one_concurrent_reservation() {
         match worker.join().unwrap() {
             Ok(command_id) => reserved_ids.push(command_id),
             Err(error) => {
-                assert!(error.to_string().contains("shell is busy"));
+                assert!(error.to_string().contains("`tab-current` is busy"));
                 conflict_count += 1;
             }
         }

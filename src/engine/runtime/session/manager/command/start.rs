@@ -30,7 +30,7 @@ impl Tab {
         }
         session.refresh_choice()?;
         self.remember(&session)?;
-        let reservation = ShellReservation::new(&session, &command_id)?;
+        let reservation = ShellReservation::new(&session, self.id(), &command_id)?;
         let initial_cwd = session.cwd()?;
         let record = create_record(session.command_root(), &command_id, &initial_cwd)?;
         let title = session.capture_title(&command_id)?;
@@ -111,8 +111,8 @@ impl StartedCommand {
     }
 }
 impl ShellReservation {
-    fn new(session: &Arc<ShellSession>, command_id: &str) -> Result<Self> {
-        session.reserve(command_id)?;
+    fn new(session: &Arc<ShellSession>, tab_id: &str, command_id: &str) -> Result<Self> {
+        session.reserve(tab_id, command_id)?;
         Ok(Self {
             session: Arc::clone(session),
             command_id: command_id.to_owned(),
