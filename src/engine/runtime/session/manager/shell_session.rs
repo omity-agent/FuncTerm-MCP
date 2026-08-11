@@ -176,7 +176,7 @@ impl ShellSession {
     pub(super) fn reserve(&self, command_id: &str) -> Result<()> {
         let mut busy = lock_mutex(&self.busy, "busy")?;
         if let Some(existing_id) = busy.as_deref() {
-            anyhow::bail!("shell is busy with command {existing_id}");
+            anyhow::bail!("The command was not executed because the shell is busy with `{existing_id}`");
         }
         *busy = Some(command_id.to_owned());
         drop(busy);

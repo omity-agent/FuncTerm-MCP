@@ -13,7 +13,7 @@ fn busy_state_rejects_conflicting_reservation() {
     assert!(
         error
             .to_string()
-            .contains("shell is busy with command command-current")
+            .contains("The command was not executed because the shell is busy with `command-current`")
     );
     assert_eq!(
         shell.busy_command_id().unwrap().as_deref(),
@@ -50,7 +50,7 @@ fn busy_state_allows_only_one_concurrent_reservation() {
         match worker.join().unwrap() {
             Ok(command_id) => reserved_ids.push(command_id),
             Err(error) => {
-                assert!(error.to_string().contains("shell is busy with command"));
+                assert!(error.to_string().contains("shell is busy"));
                 conflict_count += 1;
             }
         }
