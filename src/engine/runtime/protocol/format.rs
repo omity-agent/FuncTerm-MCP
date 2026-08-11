@@ -6,7 +6,9 @@ impl Payload {
             Self::TabCreated { tab_id } => tab_created_plain_text(&tab_id),
             Self::KeyboardWritten { view } => view.tab_plain_text(false),
             Self::CommandAccepted {
-                command_id, view, ..
+                command_id,
+                end_reason: _,
+                view,
             } => view.command_plain_text(false, Some(&command_id)),
             Self::View(view) => view.into_plain_text(),
         }

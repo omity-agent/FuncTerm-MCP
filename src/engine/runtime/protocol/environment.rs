@@ -124,10 +124,9 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn new_tab_request_does_not_send_client_environment() {
-        assert!(
-            EnvironmentSnapshot::for_new_tab_request()
-                .variables()
-                .is_empty()
+        assert_eq!(
+            EnvironmentSnapshot::for_new_tab_request().variables(),
+            Vec::new()
         );
     }
 }

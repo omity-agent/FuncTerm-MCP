@@ -94,6 +94,10 @@ fn keyboard_bytes(bytes: &[u8]) -> Cow<'_, [u8]> {
     }
     Cow::Owned(normalized)
 }
+#[expect(
+    clippy::little_endian_bytes,
+    reason = "PowerShell EncodedCommand requires UTF-16LE on every host architecture"
+)]
 fn encode_command(command: &str) -> String {
     let bytes = command
         .encode_utf16()

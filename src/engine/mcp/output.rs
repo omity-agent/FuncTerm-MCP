@@ -36,8 +36,12 @@ pub(super) fn new_tab(payload: Payload) -> Result<CallToolResult, String> {
             &NewTabOutput { tab_id: &tab_id },
         ),
         Payload::Pong
-        | Payload::KeyboardWritten { .. }
-        | Payload::CommandAccepted { .. }
+        | Payload::KeyboardWritten { view: _ }
+        | Payload::CommandAccepted {
+            command_id: _,
+            end_reason: _,
+            view: _,
+        }
         | Payload::View(_) => Err(unexpected_response()),
     }
 }
@@ -59,11 +63,20 @@ pub(super) fn manual_write(payload: Payload) -> Result<CallToolResult, String> {
             },
         ),
         Payload::KeyboardWritten {
-            view: ViewResult::Command { .. },
+            view:
+                ViewResult::Command {
+                    shell: _,
+                    command: _,
+                    note: _,
+                },
         }
         | Payload::Pong
-        | Payload::TabCreated { .. }
-        | Payload::CommandAccepted { .. }
+        | Payload::TabCreated { tab_id: _ }
+        | Payload::CommandAccepted {
+            command_id: _,
+            end_reason: _,
+            view: _,
+        }
         | Payload::View(_) => Err(unexpected_response()),
     }
 }
@@ -77,7 +90,7 @@ pub(super) fn send_command(payload: Payload) -> Result<CallToolResult, String> {
                     command,
                     note,
                 },
-            ..
+            end_reason: _,
         } => tool_result(
             command_plain_text(&shell, &command, &note, false, Some(&command_id)),
             &SendCommandOutput {
@@ -87,12 +100,18 @@ pub(super) fn send_command(payload: Payload) -> Result<CallToolResult, String> {
             },
         ),
         Payload::CommandAccepted {
-            view: ViewResult::Tab { .. },
-            ..
+            command_id: _,
+            end_reason: _,
+            view:
+                ViewResult::Tab {
+                    shell: _,
+                    screen: _,
+                    note: _,
+                },
         }
         | Payload::Pong
-        | Payload::TabCreated { .. }
-        | Payload::KeyboardWritten { .. }
+        | Payload::TabCreated { tab_id: _ }
+        | Payload::KeyboardWritten { view: _ }
         | Payload::View(_) => Err(unexpected_response()),
     }
 }
@@ -125,9 +144,13 @@ pub(super) fn view(payload: Payload) -> Result<CallToolResult, String> {
             },
         ),
         Payload::Pong
-        | Payload::TabCreated { .. }
-        | Payload::KeyboardWritten { .. }
-        | Payload::CommandAccepted { .. } => Err(unexpected_response()),
+        | Payload::TabCreated { tab_id: _ }
+        | Payload::KeyboardWritten { view: _ }
+        | Payload::CommandAccepted {
+            command_id: _,
+            end_reason: _,
+            view: _,
+        } => Err(unexpected_response()),
     }
 }
 fn tool_result<T>(content: String, structured_content: &T) -> Result<CallToolResult, String>
