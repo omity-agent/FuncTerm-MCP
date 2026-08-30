@@ -5,30 +5,43 @@ use crate::support::{
 };
 use core::time::Duration;
 use std::thread;
-const BUN: ShellCase = ShellCase {
-    name: "bun",
-    env_var: "FUNCTERM_BUN",
-    executables: &["bun", "bun.exe"],
+const PYTHON: ShellCase = ShellCase {
+    name: "python",
+    env_var: "FUNCTERM_PYTHON",
+    executables: &["python3", "python", "python3.exe", "python.exe"],
     expected_exit_code: 0,
 };
 #[test]
-fn cli_tools_work_with_bun_repl() {
-    let executable = required_executable(&BUN);
-    let _guard = locked_with_env(&[(BUN.env_var, &executable)]);
-    let cwd = case_dir(BUN.name, "repl tools");
-    let created = create_tab(&cwd, BUN.name);
+fn cli_tools_work_with_python_repl() {
+    let executable = required_executable(&PYTHON);
+    let _guard = locked_with_env(&[(PYTHON.env_var, &executable)]);
+    let cwd = case_dir(PYTHON.name, "repl tools");
+    let created = create_tab(&cwd, PYTHON.name);
     let initial = parse_tab_view(&run_cli(&["view", &created.tab_id]));
-    assert!(initial.alive, "new Bun tab should be alive");
+    assert!(initial.alive, "new Python tab should be alive");
+    assert!(
+        !initial.screen.is_empty(),
+        "new_tab and view should expose the Python screen"
+    );
+    assert!(
+        initial.cwd.contains("repl tools"),
+        "new Python tab should report its cwd: {}",
+        initial.cwd
+    );
     let accepted = send_command(
         &created.tab_id,
-        "await new Promise(resolve => process.stdin.once('data', data => { console.log(`MCP_PTY_BUN_COMMAND_${data.toString().trim()}`); resolve(); }))",
+        "value = input('MCP_PTY_PYTHON_INPUT:'); print(f'MCP_PTY_PYTHON_COMMAND_{value}')",
         0.0,
     );
     let command_id = parse_command_id(&accepted);
     let pending = parse_command_result(&accepted);
-    assert!(!pending.finished, "Bun command should still be running");
-    let marker = "MCP_PTY_BUN_MANUAL_WRITE";
-    let written = manual_write(&created.tab_id, format!("{marker}\r").as_bytes(), 1.0);
+    assert!(!pending.finished, "Python command should wait for input");
+    let marker = "MCP_PTY_PYTHON_MANUAL_WRITE";
+    let written = manual_write(
+        &created.tab_id,
+        format!("{marker}{}", input_terminator()).as_bytes(),
+        1.0,
+    );
     assert!(
         written.status.success(),
         "stdout: {}\nstderr: {}",
@@ -37,43 +50,47 @@ fn cli_tools_work_with_bun_repl() {
     );
     assert!(
         String::from_utf8_lossy(&written.stdout).contains(marker),
-        "manual_write should return Bun's updated REPL screen: stdout: {}\nstderr: {}",
+        "manual_write should return Python's updated REPL screen: stdout: {}\nstderr: {}",
         String::from_utf8_lossy(&written.stdout),
         String::from_utf8_lossy(&written.stderr)
     );
     let completed = parse_command_result(&run_cli(&["view", &command_id, "--waiting", "10"]));
-    assert!(completed.finished, "Bun command should finish");
+    assert!(completed.finished, "Python command should finish");
     assert_eq!(completed.exit_code, Some(0_i32));
     assert!(
         completed
             .stdout
-            .contains("MCP_PTY_BUN_COMMAND_MCP_PTY_BUN_MANUAL_WRITE")
+            .contains("MCP_PTY_PYTHON_COMMAND_MCP_PTY_PYTHON_MANUAL_WRITE"),
+        "stdout: {}\nstderr: {}",
+        completed.stdout,
+        completed.stderr
     );
 }
 #[test]
-fn bun_shim_returns_to_parent_shell_after_exit() {
-    let bun = required_executable(&BUN);
+fn python_shim_returns_to_parent_shell_after_exit() {
+    let python = required_executable(&PYTHON);
     let parent_case = parent_shell();
     let parent = required_executable(&parent_case);
-    let _guard = locked_with_env(&[(BUN.env_var, &bun), (parent_case.env_var, &parent)]);
-    let created = create_tab(&case_dir(BUN.name, "nested shim"), parent_case.name);
-    let launch = parse_command_result(&send_command(&created.tab_id, "bun repl", 10.0));
-    assert!(launch.finished, "Bun shim should report ready");
+    let _guard = locked_with_env(&[(PYTHON.env_var, &python), (parent_case.env_var, &parent)]);
+    let created = create_tab(&case_dir(PYTHON.name, "nested shim"), parent_case.name);
+    let launch = parse_command_result(&send_command(&created.tab_id, "python", 10.0));
+    assert!(launch.finished, "Python shim should report ready");
     let nested = parse_command_result(&send_command(
         &created.tab_id,
-        "console.log('MCP_PTY_NESTED_BUN')",
+        "print('MCP_PTY_NESTED_PYTHON')",
         10.0,
     ));
+    assert_eq!(nested.exit_code, Some(0_i32));
     assert!(
-        nested.stdout.contains("MCP_PTY_NESTED_BUN"),
+        nested.stdout.contains("MCP_PTY_NESTED_PYTHON"),
         "stdout: {}\nstderr: {}",
         nested.stdout,
         nested.stderr
     );
-    let exited = parse_command_result(&send_command(&created.tab_id, ".exit", 10.0));
+    let exited = parse_command_result(&send_command(&created.tab_id, "exit()", 10.0));
     assert!(
         exited.finished,
-        "Bun .exit should finish before leaving the REPL"
+        "Python exit should finish before leaving REPL"
     );
     thread::sleep(Duration::from_millis(500));
     let restored = parse_command_result(&send_command(
@@ -83,6 +100,14 @@ fn bun_shim_returns_to_parent_shell_after_exit() {
     ));
     assert_eq!(restored.exit_code, Some(0_i32));
     assert!(restored.stdout.contains("MCP_PTY_PARENT_SHELL"));
+}
+#[cfg(windows)]
+const fn input_terminator() -> &'static str {
+    "\r"
+}
+#[cfg(not(windows))]
+const fn input_terminator() -> &'static str {
+    "\n"
 }
 #[cfg(windows)]
 const fn parent_shell() -> ShellCase {

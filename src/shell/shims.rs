@@ -160,6 +160,7 @@ mod tests {
             zsh: "definitely-missing-zsh".to_owned(),
             cmd: "definitely-missing-cmd".to_owned(),
             bun: "definitely-missing-bun".to_owned(),
+            python: vec!["definitely-missing-python".to_owned()],
         }
     }
     #[test]

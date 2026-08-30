@@ -15,7 +15,7 @@ pub(crate) fn run_if_requested() -> Result<Option<i32>> {
         return Ok(None);
     }
     let arguments = std::env::args_os().skip(1).collect::<Vec<_>>();
-    if arguments.is_empty() || interactive_arguments(choice, &arguments) {
+    if interactive_arguments(choice, &arguments) {
         return run_interactive(choice).map(Some);
     }
     run_passthrough(choice, arguments).map(Some)

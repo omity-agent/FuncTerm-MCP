@@ -11,6 +11,9 @@ mod matrix;
 #[path = "shell_matrix/nested.rs"]
 mod nested;
 #[cfg(test)]
+#[path = "shell_matrix/python.rs"]
+mod python;
+#[cfg(test)]
 #[path = "shell_matrix/repl_commands.rs"]
 mod repl_commands;
 #[cfg(test)]

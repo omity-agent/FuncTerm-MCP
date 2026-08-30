@@ -13,4 +13,6 @@ pub(crate) enum ShellChoice {
     Cmd,
     #[serde(rename = "bun")]
     Bun,
+    #[serde(rename = "python")]
+    Python,
 }

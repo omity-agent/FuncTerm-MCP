@@ -105,7 +105,7 @@ impl ShellChoice {
     pub(crate) fn shim_executable_names(self) -> &'static [&'static str] {
         self.driver().shim_executable_names()
     }
-    pub(crate) const fn all() -> [Self; 6] {
+    pub(crate) const fn all() -> [Self; 7] {
         [
             Self::PowerShell,
             Self::Bash,
@@ -113,6 +113,7 @@ impl ShellChoice {
             Self::Zsh,
             Self::Cmd,
             Self::Bun,
+            Self::Python,
         ]
     }
     pub(crate) fn interactive_arguments(self, arguments: &[std::ffi::OsString]) -> bool {

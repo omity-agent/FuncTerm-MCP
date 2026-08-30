@@ -76,7 +76,8 @@ impl CommandRecord {
             | ShellChoice::NuShell
             | ShellChoice::Zsh
             | ShellChoice::Cmd
-            | ShellChoice::Bun => &self.script,
+            | ShellChoice::Bun
+            | ShellChoice::Python => &self.script,
         }
     }
 }

@@ -14,19 +14,22 @@ terminal_model_title = "FuncTerm"
 shell_startup_timeout_seconds = 30.0
 
 # PowerShell 可执行文件候选
-powershell = ["pwsh.exe", "powershell.exe"]
+powershell = ["pwsh", "powershell"]
 
 # Bash 可执行文件名称。
-bash = "bash.exe"
+bash = "bash"
 
 # NuShell 可执行文件名称。
-nushell = "nu.exe"
+nushell = "nu"
 
 # Zsh 可执行文件名称。
 zsh = "zsh"
 
 # Windows CMD 可执行文件名称。
-cmd = "cmd.exe"
+cmd = "cmd"
 
 # Bun 可执行文件名称。
 bun = "bun"
+
+# Python 可执行文件候选。
+python = ["python3", "python"]

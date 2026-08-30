@@ -59,6 +59,7 @@ mod tests {
             zsh: "zsh".to_owned(),
             cmd: "cmd.exe".to_owned(),
             bun: "bun".to_owned(),
+            python: vec!["python".to_owned()],
         }
     }
     #[test]

@@ -3,36 +3,43 @@ use super::{DriverStartup, InvocationTerminator, ShellDriver, ShellInvocation, S
 use crate::runtime::config::Settings;
 use crate::shell::ShellChoice;
 use anyhow::{Context as _, Result};
-use std::path::Path;
-pub(crate) struct BunDriver;
-impl ShellDriver for BunDriver {
+pub(crate) struct PythonDriver;
+impl ShellDriver for PythonDriver {
     fn choice(&self) -> ShellChoice {
-        ShellChoice::Bun
+        ShellChoice::Python
     }
     fn id(&self) -> &'static str {
-        "bun"
+        "python"
     }
     fn display_name(&self) -> &'static str {
-        "Bun"
+        "Python"
     }
     fn shim_executable_names(&self) -> &'static [&'static str] {
-        &["bun", "bun.exe"]
+        &[
+            "python",
+            "python.exe",
+            "python3",
+            "python3.exe",
+            "pypy3",
+            "pypy3.exe",
+        ]
     }
     fn shim_env_name(&self) -> &'static str {
-        "FUNCTERM_REAL_BUN"
+        "FUNCTERM_REAL_PYTHON"
     }
     fn executable_candidates(&self, settings: &Settings) -> Result<Vec<String>> {
-        Ok(vec![settings.bun.clone()])
+        Ok(settings.python.clone())
     }
     fn startup(&self, context: StartupContext<'_>) -> Result<DriverStartup> {
-        let script = context.startup_directory.join("bun_repl.mjs");
-        std::fs::write(
-            &script,
-            bootstrap::script(&json_path(context.cwd)?, &json_path(context.ready_file)?),
-        )
-        .context("failed to write Bun REPL bootstrap")?;
+        let script = context.startup_directory.join("python_repl.py");
+        std::fs::write(&script, bootstrap::script(context)?)
+            .context("failed to write Python REPL bootstrap")?;
         Ok(DriverStartup {
-            args: vec![crate::text::path_text(&script, "Bun REPL bootstrap path")?],
+            args: vec![
+                "-i".to_owned(),
+                "-u".to_owned(),
+                crate::text::path_text(&script, "Python REPL bootstrap path")?,
+            ],
             env: Vec::new(),
         })
     }
@@ -40,10 +47,18 @@ impl ShellDriver for BunDriver {
         platform_terminator()
     }
     fn invocation(&self) -> Result<Option<ShellInvocation>> {
-        Ok(None)
+        ShellInvocation::new(
+            "_functerm_dispatch()".to_owned(),
+            self.invocation_terminator(),
+        )
+        .map(Some)
     }
     fn interactive_arguments(&self, arguments: &[std::ffi::OsString]) -> bool {
-        matches ! (arguments , [argument] if argument == "repl" || argument == "--interactive")
+        arguments.iter().all(|argument| {
+            argument
+                .to_str()
+                .is_some_and(|value| matches!(value, "-i" | "-u" | "-q"))
+        })
     }
 }
 #[cfg(windows)]
@@ -53,8 +68,4 @@ const fn platform_terminator() -> InvocationTerminator {
 #[cfg(not(windows))]
 const fn platform_terminator() -> InvocationTerminator {
     InvocationTerminator::LineFeed
-}
-fn json_path(path: &Path) -> Result<String> {
-    sonic_rs::to_string(&crate::text::path_text(path, "Bun bootstrap path")?)
-        .context("failed to encode Bun bootstrap path")
 }

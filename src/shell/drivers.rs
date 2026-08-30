@@ -2,6 +2,7 @@ mod bun;
 mod command_prompt;
 mod nushell;
 mod powershell;
+mod python;
 mod unix_shell;
 use super::ShellChoice;
 use crate::contract::DISPATCHER_COMMAND;
@@ -77,6 +78,7 @@ static NUSHELL: nushell::NuShellDriver = nushell::NuShellDriver;
 static ZSH: unix_shell::PosixDriver = unix_shell::PosixDriver::zsh();
 static CMD: command_prompt::CmdDriver = command_prompt::CmdDriver;
 static BUN: bun::BunDriver = bun::BunDriver;
+static PYTHON: python::PythonDriver = python::PythonDriver;
 pub(crate) fn driver(choice: ShellChoice) -> &'static dyn ShellDriver {
     match choice {
         ShellChoice::PowerShell => &POWERSHELL,
@@ -85,6 +87,7 @@ pub(crate) fn driver(choice: ShellChoice) -> &'static dyn ShellDriver {
         ShellChoice::Zsh => &ZSH,
         ShellChoice::Cmd => &CMD,
         ShellChoice::Bun => &BUN,
+        ShellChoice::Python => &PYTHON,
     }
 }
 pub(crate) fn from_canonical_name(value: &str) -> Result<ShellChoice> {
