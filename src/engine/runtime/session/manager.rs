@@ -60,6 +60,7 @@ mod tests {
             cmd: "cmd.exe".to_owned(),
             bun: "bun".to_owned(),
             python: vec!["python".to_owned()],
+            mcp: crate::runtime::config::McpSettings::default(),
         }
     }
     #[test]

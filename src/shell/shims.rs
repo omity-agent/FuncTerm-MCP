@@ -161,6 +161,7 @@ mod tests {
             cmd: "definitely-missing-cmd".to_owned(),
             bun: "definitely-missing-bun".to_owned(),
             python: vec!["definitely-missing-python".to_owned()],
+            mcp: crate::runtime::config::McpSettings::default(),
         }
     }
     #[test]

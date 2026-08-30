@@ -33,3 +33,35 @@ bun = "bun"
 
 # Python 可执行文件候选。
 python = ["python3", "python"]
+
+# MCP 工具及其参数的描述；描述设为空字符串时不向 MCP 客户端提供该描述。
+[mcp.new_tab]
+description = "打开一个新的终端标签页。返回 tab_id"
+
+[mcp.new_tab.parameters]
+starting_directory = "初始位置。已有的 Tab 也可通过 send_command 改变 cwd（如 `cd` 命令）。"
+starting_shell = "启动时使用的交互式命令环境。Shell 适合系统交互、调度已有外部程序，缺点是逻辑复杂时可靠性低；Python REPL 标准库和数据处理生态强；TypeScript REPL（Bun）性能更优，且在 JS/TS 项目中实用。已有的 Tab 也可通过 send_command 切换 Shell 或进入 REPL（如在 Bash 中使用 `python` 命令）。"
+
+[mcp.manual_write]
+description = "手动写入键盘输入。适用于使用 TUI 程序、点击快捷键等场景。调用时需在 text 和 bytes 中选择一个传入。"
+
+[mcp.manual_write.parameters]
+tab_id = "该工具仅在 Tab 处于非空闲状态时有效"
+text = "要写入的 UTF-8 文本"
+bytes = "要写入的原始字节"
+waiting = "等待终端产生新输出的最长时长，单位为秒。输入 0 代表写入后立即返回，此时可能尚未更新。"
+
+[mcp.send_command]
+description = "执行命令。工具会在等待时长结束或命令结束时输出。"
+
+[mcp.send_command.parameters]
+tab_id = "每个 Tab 在同一时刻仅能有一份命令正在运行，Tab 繁忙时收到的命令会被丢弃。"
+command = "该参数中允许存在换行"
+waiting = "等待时长，单位为秒。建议设置略大于预期时长。时间结束后命令不会被终止，仍可通过 view 查看其状态。输入 0 代表不等待，适用于不会自然停止的程序（如 `vim`）。"
+
+[mcp.view]
+description = "查看状态。该工具会在等待时长结束或命令结束时输出。"
+
+[mcp.view.parameters]
+id = "如果输入命令 ID，将返回该命令目前的状态；如果输入标签页 ID，将返回终端屏幕范围内显示的内容。一般输入命令 ID。"
+waiting = "等待时长，单位为秒。"

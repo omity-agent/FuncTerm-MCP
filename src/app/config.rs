@@ -1,3 +1,4 @@
+use alloc::collections::BTreeMap;
 use anyhow::{Context as _, Result};
 use serde::Deserialize;
 const SETTINGS: &str = include_str!("../../settings.toml");
@@ -15,6 +16,21 @@ pub(crate) struct Settings {
     pub(crate) cmd: String,
     pub(crate) bun: String,
     pub(crate) python: Vec<String>,
+    pub(crate) mcp: McpSettings,
+}
+#[derive(Clone, Debug, Default, Deserialize)]
+pub(crate) struct McpSettings {
+    pub(crate) new_tab: ToolDescription,
+    pub(crate) manual_write: ToolDescription,
+    pub(crate) send_command: ToolDescription,
+    pub(crate) view: ToolDescription,
+}
+#[derive(Clone, Debug, Default, Deserialize)]
+pub(crate) struct ToolDescription {
+    #[serde(default)]
+    pub(crate) description: String,
+    #[serde(default)]
+    pub(crate) parameters: BTreeMap<String, String>,
 }
 pub(crate) fn load() -> Result<Settings> {
     let mut settings =
