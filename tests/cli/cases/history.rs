@@ -103,8 +103,7 @@ mod tests {
         root
     }
     fn required_executable(name: &str) -> std::path::PathBuf {
-        which::which(name)
-            .unwrap_or_else(|_| panic!("CI must install required shell executable {name}"))
+        crate::support::required_executable(&[name])
     }
     fn exit_shell(tab_id: &str) {
         let _closed = send_command(tab_id, "exit", 0.2);

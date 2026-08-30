@@ -2,6 +2,8 @@
 mod command;
 #[path = "support/daemon_process.rs"]
 mod daemon;
+#[path = "support/executable.rs"]
+mod executable;
 #[path = "support/parse.rs"]
 mod parse;
 #[path = "support/process.rs"]
@@ -17,6 +19,7 @@ pub(crate) use command::{
 #[cfg(windows)]
 pub(crate) use daemon::locked;
 pub(crate) use daemon::{TestGuard, locked_with_env};
+pub(crate) use executable::required as required_executable;
 pub(crate) use parse::CommandResult;
 pub(crate) use parse::{
     TabView, assert_powershell_primary_prompt, parse_command_id, parse_command_result,

@@ -23,7 +23,11 @@ pub(super) fn terminal_output() -> Result<fs::File> {
 }
 #[cfg(windows)]
 pub(super) fn attach_terminal_stdio(command: &mut Command) -> Result<()> {
-    let input = fs::File::open("CONIN$").context("failed to open console input")?;
+    let input = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open("CONIN$")
+        .context("failed to open console input")?;
     let output = terminal_output()?;
     let error = output
         .try_clone()

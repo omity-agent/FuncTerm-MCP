@@ -147,7 +147,9 @@ impl ShellSession {
             .context("failed to write command script")?;
         crate::file_publish::write_replace(&self.dispatch_file, command_id)
             .context("failed to publish command dispatch")?;
-        let invocation = self.current_choice()?.invocation()?;
+        let Some(invocation) = self.current_choice()?.invocation()? else {
+            return Ok(());
+        };
         let invocation_bytes = invocation.into_bytes();
         let mut writer = lock_mutex(&self.writer, "writer")?;
         writer

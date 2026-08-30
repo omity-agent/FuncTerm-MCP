@@ -69,7 +69,16 @@ fn is_inherited_shim(path: &Path, inherited_shim: Option<&OsStr>) -> Result<bool
     let Some(parent) = path.parent() else {
         return Ok(false);
     };
-    Ok(same_file(parent, &PathBuf::from(shim_dir)))
+    let configured_shim = PathBuf::from(shim_dir);
+    Ok(path_equals(parent, &configured_shim) || same_file(parent, &configured_shim))
+}
+#[cfg(windows)]
+fn path_equals(left: &Path, right: &Path) -> bool {
+    left.as_os_str().eq_ignore_ascii_case(right.as_os_str())
+}
+#[cfg(not(windows))]
+fn path_equals(left: &Path, right: &Path) -> bool {
+    left == right
 }
 #[cfg(windows)]
 fn is_windows_subsystem_bash(

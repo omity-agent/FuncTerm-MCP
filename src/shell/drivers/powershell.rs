@@ -138,7 +138,9 @@ mod tests {
     }
     #[test]
     fn invocation_is_short_dispatcher() {
-        let invocation = crate::shell::drivers::ShellDriver::invocation(&PowerShellDriver).unwrap();
+        let invocation = crate::shell::drivers::ShellDriver::invocation(&PowerShellDriver)
+            .unwrap()
+            .unwrap();
         let bytes = invocation.into_bytes();
         assert_eq!(bytes, b"f\r");
     }

@@ -125,7 +125,7 @@ mod tests {
     #[test]
     fn invocation_uses_line_feed() {
         for driver in [PosixDriver::bash(), PosixDriver::zsh()] {
-            let bytes = driver.invocation().unwrap().into_bytes();
+            let bytes = driver.invocation().unwrap().unwrap().into_bytes();
             assert_eq!(bytes, b"f\n");
         }
     }

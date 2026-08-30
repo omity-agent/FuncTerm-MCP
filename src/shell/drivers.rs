@@ -1,3 +1,4 @@
+mod bun;
 mod command_prompt;
 mod nushell;
 mod powershell;
@@ -59,8 +60,8 @@ pub(crate) trait ShellDriver {
     fn executable_candidates(&self, settings: &Settings) -> Result<Vec<String>>;
     fn startup(&self, context: StartupContext<'_>) -> Result<DriverStartup>;
     fn invocation_terminator(&self) -> InvocationTerminator;
-    fn invocation(&self) -> Result<ShellInvocation> {
-        ShellInvocation::new(DISPATCHER_COMMAND.to_owned(), self.invocation_terminator())
+    fn invocation(&self) -> Result<Option<ShellInvocation>> {
+        ShellInvocation::new(DISPATCHER_COMMAND.to_owned(), self.invocation_terminator()).map(Some)
     }
     fn command_script(&self, command: &str) -> String {
         command.to_owned()
@@ -75,6 +76,7 @@ static BASH: unix_shell::PosixDriver = unix_shell::PosixDriver::bash();
 static NUSHELL: nushell::NuShellDriver = nushell::NuShellDriver;
 static ZSH: unix_shell::PosixDriver = unix_shell::PosixDriver::zsh();
 static CMD: command_prompt::CmdDriver = command_prompt::CmdDriver;
+static BUN: bun::BunDriver = bun::BunDriver;
 pub(crate) fn driver(choice: ShellChoice) -> &'static dyn ShellDriver {
     match choice {
         ShellChoice::PowerShell => &POWERSHELL,
@@ -82,6 +84,7 @@ pub(crate) fn driver(choice: ShellChoice) -> &'static dyn ShellDriver {
         ShellChoice::NuShell => &NUSHELL,
         ShellChoice::Zsh => &ZSH,
         ShellChoice::Cmd => &CMD,
+        ShellChoice::Bun => &BUN,
     }
 }
 pub(crate) fn from_canonical_name(value: &str) -> Result<ShellChoice> {

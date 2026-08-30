@@ -72,9 +72,11 @@ impl CommandRecord {
     pub(super) fn script_for(&self, choice: ShellChoice) -> &Path {
         match choice {
             ShellChoice::PowerShell => &self.powershell_script,
-            ShellChoice::Bash | ShellChoice::NuShell | ShellChoice::Zsh | ShellChoice::Cmd => {
-                &self.script
-            }
+            ShellChoice::Bash
+            | ShellChoice::NuShell
+            | ShellChoice::Zsh
+            | ShellChoice::Cmd
+            | ShellChoice::Bun => &self.script,
         }
     }
 }

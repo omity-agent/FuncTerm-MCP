@@ -73,7 +73,7 @@ mod tests {
     use crate::shell::drivers::ShellDriver as _;
     #[test]
     fn invocation_uses_platform_line_ending() {
-        let bytes = NuShellDriver.invocation().unwrap().into_bytes();
+        let bytes = NuShellDriver.invocation().unwrap().unwrap().into_bytes();
         #[cfg(windows)]
         assert_eq!(bytes, b"f\r\n");
         #[cfg(not(windows))]

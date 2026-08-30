@@ -11,4 +11,6 @@ pub(crate) enum ShellChoice {
     Zsh,
     #[serde(rename = "cmd")]
     Cmd,
+    #[serde(rename = "bun")]
+    Bun,
 }

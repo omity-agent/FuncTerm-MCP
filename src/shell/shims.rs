@@ -159,6 +159,7 @@ mod tests {
             nushell: "definitely-missing-nu".to_owned(),
             zsh: "definitely-missing-zsh".to_owned(),
             cmd: "definitely-missing-cmd".to_owned(),
+            bun: "definitely-missing-bun".to_owned(),
         }
     }
     #[test]

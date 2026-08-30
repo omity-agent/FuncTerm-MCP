@@ -159,8 +159,8 @@ mod tests {
     }
     #[cfg(not(windows))]
     fn required_executable(name: &str) -> String {
-        which::which(name)
-            .map(|path| path.to_string_lossy().into_owned())
-            .unwrap_or_else(|_| panic!("CI on Unix must install required shell executable {name}"))
+        crate::support::required_executable(&[name])
+            .to_string_lossy()
+            .into_owned()
     }
 }

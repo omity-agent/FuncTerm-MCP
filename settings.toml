@@ -27,3 +27,6 @@ zsh = "zsh"
 
 # Windows CMD 可执行文件名称。
 cmd = "cmd.exe"
+
+# Bun 可执行文件名称。
+bun = "bun"

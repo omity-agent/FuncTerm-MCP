@@ -69,7 +69,7 @@ mod tests {
     use crate::shell::drivers::ShellDriver as _;
     #[test]
     fn invocation_uses_windows_line_ending() {
-        let bytes = CmdDriver.invocation().unwrap().into_bytes();
+        let bytes = CmdDriver.invocation().unwrap().unwrap().into_bytes();
         assert_eq!(bytes, b"f\r\n");
     }
 }

@@ -13,6 +13,7 @@ pub(crate) struct Settings {
     pub(crate) nushell: String,
     pub(crate) zsh: String,
     pub(crate) cmd: String,
+    pub(crate) bun: String,
 }
 pub(crate) fn load() -> Result<Settings> {
     let mut settings =
@@ -26,6 +27,7 @@ pub(crate) fn load() -> Result<Settings> {
     apply_string_override("FUNCTERM_NUSHELL", &mut settings.nushell);
     apply_string_override("FUNCTERM_ZSH", &mut settings.zsh);
     apply_string_override("FUNCTERM_CMD", &mut settings.cmd);
+    apply_string_override("FUNCTERM_BUN", &mut settings.bun);
     Ok(settings)
 }
 fn apply_list_override(name: &str, value: &mut Vec<String>) {

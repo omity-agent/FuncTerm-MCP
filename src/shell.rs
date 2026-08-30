@@ -73,7 +73,7 @@ impl ShellChoice {
             ready_file,
         })
     }
-    pub(crate) fn invocation(self) -> Result<drivers::ShellInvocation> {
+    pub(crate) fn invocation(self) -> Result<Option<drivers::ShellInvocation>> {
         self.driver().invocation()
     }
     pub(crate) fn command_script(self, command: &str) -> String {
@@ -105,13 +105,14 @@ impl ShellChoice {
     pub(crate) fn shim_executable_names(self) -> &'static [&'static str] {
         self.driver().shim_executable_names()
     }
-    pub(crate) const fn all() -> [Self; 5] {
+    pub(crate) const fn all() -> [Self; 6] {
         [
             Self::PowerShell,
             Self::Bash,
             Self::NuShell,
             Self::Zsh,
             Self::Cmd,
+            Self::Bun,
         ]
     }
     pub(crate) fn interactive_arguments(self, arguments: &[std::ffi::OsString]) -> bool {
@@ -151,6 +152,10 @@ mod tests {
             ShellChoice::from_canonical_name("cmd").unwrap(),
             ShellChoice::Cmd
         );
+        assert_eq!(
+            ShellChoice::from_canonical_name("bun").unwrap(),
+            ShellChoice::Bun
+        );
     }
     #[test]
     fn executable_aliases_only_parse_for_shim_invocation() {
@@ -174,6 +179,10 @@ mod tests {
             ShellChoice::from_shim_name("cmd.exe"),
             Some(ShellChoice::Cmd)
         );
+        assert_eq!(
+            ShellChoice::from_shim_name("bun.exe"),
+            Some(ShellChoice::Bun)
+        );
     }
     #[test]
     fn starting_shell_does_not_accept_executable_aliases() {
@@ -182,5 +191,6 @@ mod tests {
         assert_rejected_starting_shell("bash.exe");
         assert_rejected_starting_shell("nushell");
         assert_rejected_starting_shell("cmd.exe");
+        assert_rejected_starting_shell("bun.exe");
     }
 }

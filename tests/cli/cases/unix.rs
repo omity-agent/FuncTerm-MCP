@@ -142,10 +142,9 @@ mod tests {
         ]
     }
     fn required_executable(name: &str) -> String {
-        which::which(name)
-            .ok()
-            .map(|path| path.to_string_lossy().into_owned())
-            .unwrap_or_else(|| panic!("CI on Unix must install required shell executable {name}"))
+        crate::support::required_executable(&[name])
+            .to_string_lossy()
+            .into_owned()
     }
     fn wait_for_shell_dead(tab_id: &str) {
         for _attempt in 0_usize..30 {

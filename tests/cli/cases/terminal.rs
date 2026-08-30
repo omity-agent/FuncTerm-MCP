@@ -75,8 +75,7 @@ mod tests {
     }
     #[cfg(unix)]
     fn required_executable(name: &str) -> String {
-        which::which(name)
-            .unwrap_or_else(|_| panic!("CI on Unix must install required executable {name}"))
+        crate::support::required_executable(&[name])
             .to_string_lossy()
             .into_owned()
     }
