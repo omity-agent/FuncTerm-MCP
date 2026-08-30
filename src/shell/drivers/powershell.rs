@@ -1,6 +1,5 @@
 use super::{DriverStartup, InvocationTerminator, ShellDriver, StartupContext, os_strings_lower};
 use crate::runtime::config::Settings;
-use crate::shell::ShellChoice;
 use crate::shell::quote;
 use crate::shell::shims::CURRENT_SHELL_ENV;
 use crate::shell::wrappers::powershell_wrapper;
@@ -9,12 +8,6 @@ use anyhow::Result;
 use base64_turbo::STANDARD;
 pub(crate) struct PowerShellDriver;
 impl ShellDriver for PowerShellDriver {
-    fn choice(&self) -> ShellChoice {
-        ShellChoice::PowerShell
-    }
-    fn id(&self) -> &'static str {
-        "powershell"
-    }
     fn display_name(&self) -> &'static str {
         "PowerShell"
     }

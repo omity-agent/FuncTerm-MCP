@@ -1,17 +1,10 @@
 mod bootstrap;
 use super::{DriverStartup, InvocationTerminator, ShellDriver, ShellInvocation, StartupContext};
 use crate::runtime::config::Settings;
-use crate::shell::ShellChoice;
 use anyhow::{Context as _, Result};
 use std::path::Path;
 pub(crate) struct BunDriver;
 impl ShellDriver for BunDriver {
-    fn choice(&self) -> ShellChoice {
-        ShellChoice::Bun
-    }
-    fn id(&self) -> &'static str {
-        "bun"
-    }
     fn display_name(&self) -> &'static str {
         "Bun"
     }

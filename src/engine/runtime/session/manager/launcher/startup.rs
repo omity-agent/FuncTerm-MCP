@@ -105,7 +105,7 @@ fn startup_result(
     {
         bail!(
             "shell exited during startup with status {status}; screen: {}",
-            startup_screen(screen)?
+            startup_screen(screen)
         );
     }
     Ok(ready_file.exists().then_some(()))
@@ -114,12 +114,12 @@ fn reader_closed_result(child: &mut Box<dyn Child + Send + Sync>, screen: &Termi
     if let Some(status) = child.try_wait().context("failed to inspect closed shell")? {
         bail!(
             "shell exited during startup with status {status}; screen: {}",
-            startup_screen(screen)?
+            startup_screen(screen)
         );
     }
     bail!(
         "shell terminal closed during startup; screen: {}",
-        startup_screen(screen)?
+        startup_screen(screen)
     );
 }
 #[cfg(windows)]
@@ -141,12 +141,11 @@ fn startup_timeout(
     child.kill().context("failed to kill unready shell")?;
     bail!(
         "shell did not report startup readiness within {timeout:?}; screen: {}",
-        startup_screen(screen)?
+        startup_screen(screen)
     );
 }
-fn startup_screen(screen: &Terminal) -> Result<String> {
-    let contents = screen.contents()?;
-    Ok(contents.trim().to_owned())
+fn startup_screen(screen: &Terminal) -> String {
+    screen.contents().trim().to_owned()
 }
 enum StartupEvent {
     Filesystem(notify::Result<()>),

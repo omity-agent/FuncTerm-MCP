@@ -2,9 +2,10 @@ use crate::runtime::session::manager::shell_session::{ShellSession, ShellSession
 use crate::runtime::session::terminal::Terminal;
 use crate::shell::ShellChoice;
 use alloc::sync::Arc;
+use parking_lot::Mutex;
 use portable_pty::{Child, ChildKiller, ExitStatus};
 use std::io::{Result as IoResult, Write};
-use std::sync::{Mutex, mpsc};
+use std::sync::mpsc;
 use tastty_core::TerminalSize;
 pub(super) fn test_shell(busy: Option<&str>) -> ShellSession {
     test_shell_with_writer(busy).0
@@ -64,10 +65,7 @@ struct TestWriter {
 }
 impl Write for TestWriter {
     fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
-        self.written
-            .lock()
-            .map_err(|error| std::io::Error::other(error.to_string()))?
-            .extend_from_slice(buf);
+        self.written.lock().extend_from_slice(buf);
         Ok(buf.len())
     }
     fn flush(&mut self) -> IoResult<()> {

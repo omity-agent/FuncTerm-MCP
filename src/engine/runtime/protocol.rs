@@ -43,7 +43,8 @@ pub(crate) enum Response {
     Ok { payload: Payload },
     Err { message: String },
 }
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, strum :: EnumDiscriminants)]
+#[strum_discriminants(name(PayloadKind))]
 pub(crate) enum Payload {
     Pong,
     TabCreated {

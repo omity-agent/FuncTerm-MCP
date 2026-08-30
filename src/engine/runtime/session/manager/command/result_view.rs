@@ -24,14 +24,10 @@ impl Tab {
                     Ok(self.remember(&session)?.into_view(true))
                 } else {
                     self.close_session(&session)?;
-                    self.snapshot_view()
+                    Ok(self.snapshot_view())
                 }
             }
-            Err(KeyboardWriteFailure::IdlePrompt) => {
-                anyhow::bail!(
-                    "manual_write is unavailable while the prompt is idle; use send_command for prompt commands"
-                )
-            }
+            Err(error @ KeyboardWriteFailure::IdlePrompt) => Err(error.into()),
             Err(KeyboardWriteFailure::Write(error)) => {
                 self.close_session(&session)?;
                 Err(error)
@@ -44,12 +40,12 @@ impl Tab {
         waiting: Duration,
     ) -> Result<ViewResult> {
         let command = self
-            .find_command(command_id)?
+            .find_command(command_id)
             .with_context(|| format!("command owner is missing record: {command_id}"))?;
         match command.wait(waiting)? {
             CommandWait::Finished => self.finish_done_command(&command)?,
             CommandWait::Running => {
-                if let Some(session) = self.optional_session()? {
+                if let Some(session) = self.optional_session() {
                     self.abort_if_shell_dead(&session, &command)?;
                 }
             }
@@ -61,13 +57,13 @@ impl Tab {
         &self,
         command: &ManagedCommand,
     ) -> Result<()> {
-        let session = self.optional_session()?;
+        let session = self.optional_session();
         if let Some(active_session) = session.as_ref() {
             active_session.update_cwd_from_done(command.record())?;
         }
         command.mark_finished()?;
         if let Some(active_session) = session {
-            active_session.release(command.id())?;
+            active_session.release(command.id());
             self.remember(&active_session)?;
         }
         Ok(())
@@ -81,7 +77,7 @@ impl Tab {
             return Ok(false);
         }
         command.mark_failed("shell exited before command wrote done.json")?;
-        session.release(command.id())?;
+        session.release(command.id());
         self.close_session(session)?;
         Ok(true)
     }
@@ -90,15 +86,15 @@ impl Tab {
         self.command_snapshot_result(snapshot)
     }
     fn command_snapshot_result(&self, snapshot: CommandSnapshot) -> Result<ViewResult> {
-        let mut shell = if let Some(session) = self.optional_session()? {
+        let mut shell = if let Some(session) = self.optional_session() {
             let alive = session.is_alive()?;
             if alive {
                 self.remember(&session)?.shell_view(true)
             } else {
-                self.snapshot_shell_view()?
+                self.snapshot_shell_view()
             }
         } else {
-            self.snapshot_shell_view()?
+            self.snapshot_shell_view()
         };
         shell.title = snapshot.title;
         Ok(ViewResult::Command {

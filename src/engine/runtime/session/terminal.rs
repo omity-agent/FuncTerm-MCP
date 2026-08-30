@@ -10,7 +10,7 @@ use self::title::CaptureRegistry;
 pub(super) use self::title::CommandTitle;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result, bail};
-use std::sync::{Condvar, Mutex, MutexGuard};
+use parking_lot::{Condvar, Mutex};
 use tastty_core::{HostProfile, Parser, host_reply::auto_reply_bytes};
 pub(super) struct Terminal {
     model_title: String,
@@ -50,20 +50,20 @@ impl Terminal {
         })
     }
     pub(super) fn capture_title(&self, command_id: &str) -> Result<Arc<CommandTitle>> {
-        self.lock()?.captures.register(command_id)
+        self.state.lock().captures.register(command_id)
     }
-    pub(super) fn contents(&self) -> Result<String> {
-        Ok(self.lock()?.parser.screen().contents())
+    pub(super) fn contents(&self) -> String {
+        self.state.lock().parser.screen().contents()
     }
     pub(super) fn model_title(&self) -> String {
         self.model_title.clone()
     }
     #[cfg(test)]
-    fn raw_title(&self) -> Result<String> {
-        Ok(self.lock()?.parser.screen().title().to_owned())
+    fn raw_title(&self) -> String {
+        self.state.lock().parser.screen().title().to_owned()
     }
     pub(super) fn process(&self, chunk: &[u8], host: &HostProfile) -> Result<Vec<HostReply>> {
-        let mut state = self.lock()?;
+        let mut state = self.state.lock();
         let processed = state.process(chunk, host).and_then(|replies| {
             state.revision = state
                 .revision
@@ -87,11 +87,6 @@ impl Terminal {
                 Err(error)
             }
         }
-    }
-    fn lock(&self) -> Result<MutexGuard<'_, TerminalState>> {
-        self.state
-            .lock()
-            .map_err(|error| anyhow::anyhow!("terminal mutex poisoned: {error}"))
     }
 }
 pub(super) struct HostReply {
@@ -154,14 +149,6 @@ impl TerminalState {
                 );
             })
     }
-}
-pub(super) fn lock_mutex<'guard, T>(
-    mutex: &'guard Mutex<T>,
-    name: &str,
-) -> Result<MutexGuard<'guard, T>> {
-    mutex
-        .lock()
-        .map_err(|error| anyhow::anyhow!("{name} mutex poisoned: {error}"))
 }
 #[cfg(test)]
 #[path = "terminal/terminal_tests.rs"]

@@ -53,8 +53,6 @@ impl InvocationTerminator {
     }
 }
 pub(crate) trait ShellDriver {
-    fn choice(&self) -> ShellChoice;
-    fn id(&self) -> &'static str;
     fn display_name(&self) -> &'static str;
     fn shim_executable_names(&self) -> &'static [&'static str];
     fn shim_env_name(&self) -> &'static str;
@@ -90,29 +88,13 @@ pub(crate) fn driver(choice: ShellChoice) -> &'static dyn ShellDriver {
         ShellChoice::Python => &PYTHON,
     }
 }
-pub(crate) fn from_canonical_name(value: &str) -> Result<ShellChoice> {
-    for choice in ShellChoice::all() {
-        let shell = driver(choice);
-        if shell.id() == value {
-            return Ok(shell.choice());
-        }
-    }
-    bail!("unknown shell")
-}
 pub(crate) fn from_shim_name(value: &str) -> Option<ShellChoice> {
     let normalized = value.to_ascii_lowercase();
-    ShellChoice::all().into_iter().find(|choice| {
+    ShellChoice::all().iter().copied().find(|choice| {
         driver(*choice)
             .shim_executable_names()
             .contains(&normalized.as_str())
     })
-}
-pub(crate) fn supported_shells() -> String {
-    ShellChoice::all()
-        .into_iter()
-        .map(|choice| driver(choice).id())
-        .collect::<Vec<_>>()
-        .join(", ")
 }
 pub(super) fn os_strings_lower(arguments: &[OsString]) -> Option<Vec<String>> {
     arguments

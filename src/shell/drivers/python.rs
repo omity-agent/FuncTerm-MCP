@@ -1,16 +1,9 @@
 mod bootstrap;
 use super::{DriverStartup, InvocationTerminator, ShellDriver, ShellInvocation, StartupContext};
 use crate::runtime::config::Settings;
-use crate::shell::ShellChoice;
 use anyhow::{Context as _, Result};
 pub(crate) struct PythonDriver;
 impl ShellDriver for PythonDriver {
-    fn choice(&self) -> ShellChoice {
-        ShellChoice::Python
-    }
-    fn id(&self) -> &'static str {
-        "python"
-    }
     fn display_name(&self) -> &'static str {
         "Python"
     }

@@ -92,6 +92,7 @@ atomicwrites = "*"
 base64-turbo = "*"
 blake3 = "*"
 clap = { version = "*", features = ["derive"] }
+dashmap = "*"
 encoding_rs = "*"
 humantime = "*"
 interprocess = "*"
@@ -101,6 +102,7 @@ mimalloc = { version = "*", features = ["v3"] }
 named-lock = "*"
 nanoid = "*"
 notify = "*"
+parking_lot = "*"
 portable-pty = "*"
 rmcp = { version = "*", default-features = false, features = [
     "server",
@@ -111,8 +113,10 @@ schemars = "*"
 serde = { version = "*", features = ["derive", "unstable"] }
 shell-words = "*"
 sonic-rs = "*"
+strum = { version = "*", features = ["derive"] }
 sugar_path = "*"
 tastty-core = "*"
+thiserror = "*"
 tokio = { version = "*", features = ["macros", "rt-multi-thread"] }
 toml = "*"
 vte = "*"

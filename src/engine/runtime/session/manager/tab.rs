@@ -4,21 +4,23 @@ use self::snapshot::TabSnapshot;
 use super::command::ManagedCommand;
 use super::shell_session::ShellSession;
 use crate::runtime::protocol::{KeyboardInput, ShellView, ViewResult};
-use crate::runtime::session::terminal::lock_mutex;
 use alloc::sync::Arc;
 use anyhow::{Result, bail};
-use std::collections::HashMap;
-use std::sync::Mutex;
+use dashmap::DashMap;
+use parking_lot::Mutex;
 #[derive(Default)]
 pub(super) struct TabDirectory {
-    tabs: Mutex<HashMap<String, Arc<Tab>>>,
-    commands: Mutex<HashMap<String, Arc<Tab>>>,
+    tabs: DashMap<String, Arc<Tab>>,
+    commands: DashMap<String, Arc<Tab>>,
 }
 pub(super) struct Tab {
     id: String,
-    session: Mutex<Option<Arc<ShellSession>>>,
-    snapshot: Mutex<TabSnapshot>,
-    commands: Mutex<HashMap<String, Arc<ManagedCommand>>>,
+    state: Mutex<TabState>,
+    commands: DashMap<String, Arc<ManagedCommand>>,
+}
+struct TabState {
+    session: Option<Arc<ShellSession>>,
+    snapshot: TabSnapshot,
 }
 const ID_LENGTH: usize = 12;
 const ID_ALPHABET: [char; 36] = [
@@ -26,9 +28,8 @@ const ID_ALPHABET: [char; 36] = [
     'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
 ];
 impl TabDirectory {
-    pub(super) fn insert(&self, tab: Tab) -> Result<()> {
-        lock_mutex(&self.tabs, "tab")?.insert(tab.id().to_owned(), Arc::new(tab));
-        Ok(())
+    pub(super) fn insert(&self, tab: Tab) {
+        self.tabs.insert(tab.id().to_owned(), Arc::new(tab));
     }
     pub(super) fn manual_write(
         &self,
@@ -44,50 +45,46 @@ impl TabDirectory {
         command: &str,
         waiting: core::time::Duration,
     ) -> Result<(String, crate::runtime::protocol::EndReason, ViewResult)> {
-        let command_id = self.next_command_id()?;
+        let command_id = self.next_command_id();
         let tab = self.require_tab(tab_id)?;
         let started = tab.start_command(command_id.clone(), command)?;
-        lock_mutex(&self.commands, "command owner")?.insert(command_id, Arc::clone(&tab));
+        self.commands.insert(command_id, Arc::clone(&tab));
         started.wait(waiting)
     }
     pub(super) fn view(&self, id: &str, waiting: core::time::Duration) -> Result<ViewResult> {
-        let matching_tab = lock_mutex(&self.tabs, "tab")?.get(id).cloned();
+        let matching_tab = self.tabs.get(id).map(|entry| Arc::clone(entry.value()));
         if let Some(found_tab) = matching_tab {
             return found_tab.view(waiting);
         }
-        let command_owner = lock_mutex(&self.commands, "command owner")?
-            .get(id)
-            .cloned();
+        let command_owner = self.commands.get(id).map(|entry| Arc::clone(entry.value()));
         if let Some(owner_tab) = command_owner {
             return owner_tab.command_view(id, waiting);
         }
         bail!("unknown id {id}")
     }
-    pub(super) fn next_tab_id(&self) -> Result<String> {
+    pub(super) fn next_tab_id(&self) -> String {
         self.next_id("tab-")
     }
-    pub(super) fn next_command_id(&self) -> Result<String> {
+    pub(super) fn next_command_id(&self) -> String {
         self.next_id("command-")
     }
     fn require_tab(&self, tab_id: &str) -> Result<Arc<Tab>> {
-        let matching_tab = lock_mutex(&self.tabs, "tab")?.get(tab_id).cloned();
+        let matching_tab = self.tabs.get(tab_id).map(|entry| Arc::clone(entry.value()));
         if let Some(found_tab) = matching_tab {
             return Ok(found_tab);
         }
         bail!("unknown tab id {tab_id}")
     }
-    fn next_id(&self, prefix: &str) -> Result<String> {
+    fn next_id(&self, prefix: &str) -> String {
         loop {
             let id = format!("{prefix}{}", random_id_suffix());
-            if !self.id_exists(&id)? {
-                return Ok(id);
+            if !self.id_exists(&id) {
+                return id;
             }
         }
     }
-    fn id_exists(&self, id: &str) -> Result<bool> {
-        let tab_exists = lock_mutex(&self.tabs, "tab")?.contains_key(id);
-        let command_exists = lock_mutex(&self.commands, "command owner")?.contains_key(id);
-        Ok(tab_exists || command_exists)
+    fn id_exists(&self, id: &str) -> bool {
+        self.tabs.contains_key(id) || self.commands.contains_key(id)
     }
 }
 impl Tab {
@@ -95,60 +92,62 @@ impl Tab {
         let snapshot = TabSnapshot::from_session(&session)?;
         Ok(Self {
             id,
-            session: Mutex::new(Some(session)),
-            snapshot: Mutex::new(snapshot),
-            commands: Mutex::new(HashMap::new()),
+            state: Mutex::new(TabState {
+                session: Some(session),
+                snapshot,
+            }),
+            commands: DashMap::new(),
         })
     }
     pub(super) fn id(&self) -> &str {
         &self.id
     }
     pub(super) fn live_session(&self) -> Result<Arc<ShellSession>> {
-        let session = lock_mutex(&self.session, "tab session")?.clone();
+        let session = self.state.lock().session.clone();
         session.map_or_else(
             || bail!("tab id {} was generated, but its shell is gone", self.id),
             Ok,
         )
     }
     pub(super) fn remember(&self, session: &ShellSession) -> Result<TabSnapshot> {
-        let mut snapshot = TabSnapshot::from_session(session)?;
-        let mut stored = lock_mutex(&self.snapshot, "tab snapshot")?;
-        if snapshot.screen.is_empty() && !stored.screen.is_empty() {
-            snapshot.screen.clone_from(&stored.screen);
-        }
-        *stored = snapshot.clone();
-        drop(stored);
-        Ok(snapshot)
+        Ok(self.store_snapshot(TabSnapshot::from_session(session)?, false))
     }
     pub(super) fn close_session(&self, session: &ShellSession) -> Result<()> {
-        self.remember(session)?;
-        *lock_mutex(&self.session, "tab session")? = None;
+        self.store_snapshot(TabSnapshot::from_session(session)?, true);
         Ok(())
     }
-    pub(super) fn snapshot_view(&self) -> Result<ViewResult> {
-        Ok(lock_mutex(&self.snapshot, "tab snapshot")?
-            .clone()
-            .into_view(false))
+    pub(super) fn snapshot_view(&self) -> ViewResult {
+        self.state.lock().snapshot.clone().into_view(false)
     }
-    pub(super) fn snapshot_shell_view(&self) -> Result<ShellView> {
-        Ok(lock_mutex(&self.snapshot, "tab snapshot")?
-            .clone()
-            .shell_view(false))
+    pub(super) fn snapshot_shell_view(&self) -> ShellView {
+        self.state.lock().snapshot.clone().shell_view(false)
     }
-    pub(super) fn optional_session(&self) -> Result<Option<Arc<ShellSession>>> {
-        Ok(lock_mutex(&self.session, "tab session")?.clone())
+    pub(super) fn optional_session(&self) -> Option<Arc<ShellSession>> {
+        self.state.lock().session.clone()
     }
-    pub(super) fn insert_command(&self, command: Arc<ManagedCommand>) -> Result<()> {
-        lock_mutex(&self.commands, "tab command")?.insert(command.id().to_owned(), command);
-        Ok(())
+    pub(super) fn insert_command(&self, command: Arc<ManagedCommand>) {
+        self.commands.insert(command.id().to_owned(), command);
     }
-    pub(super) fn remove_command(&self, command_id: &str) -> Result<Option<Arc<ManagedCommand>>> {
-        Ok(lock_mutex(&self.commands, "tab command")?.remove(command_id))
+    pub(super) fn remove_command(&self, command_id: &str) -> Option<Arc<ManagedCommand>> {
+        self.commands
+            .remove(command_id)
+            .map(|(_id, command)| command)
     }
-    pub(super) fn find_command(&self, command_id: &str) -> Result<Option<Arc<ManagedCommand>>> {
-        Ok(lock_mutex(&self.commands, "tab command")?
+    pub(super) fn find_command(&self, command_id: &str) -> Option<Arc<ManagedCommand>> {
+        self.commands
             .get(command_id)
-            .cloned())
+            .map(|entry| Arc::clone(entry.value()))
+    }
+    fn store_snapshot(&self, mut snapshot: TabSnapshot, close: bool) -> TabSnapshot {
+        let mut state = self.state.lock();
+        if snapshot.screen.is_empty() && !state.snapshot.screen.is_empty() {
+            snapshot.screen.clone_from(&state.snapshot.screen);
+        }
+        state.snapshot = snapshot.clone();
+        if close {
+            state.session = None;
+        }
+        snapshot
     }
 }
 fn random_id_suffix() -> String {

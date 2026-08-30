@@ -161,37 +161,38 @@ pub(super) fn command_note(stdout: &str, stderr: &str, extra: &str) -> String {
     lines.join("\n")
 }
 fn read_optional(path: &Path) -> Result<String> {
-    if path.exists() {
-        let bytes = fs::read(path).with_context(|| format!("failed to read {}", path.display()))?;
-        decode_text(&bytes).with_context(|| format!("failed to decode {}", path.display()))
-    } else {
-        Ok(String::new())
-    }
+    let Some(bytes) = read_if_present(path, "file")? else {
+        return Ok(String::new());
+    };
+    decode_text(&bytes).with_context(|| format!("failed to decode {}", path.display()))
 }
 fn decode_text(bytes: &[u8]) -> Result<String> {
-    let (encoding, body) =
-        if let Some((detected_encoding, bom_length)) = encoding_rs::Encoding::for_bom(bytes) {
-            let body = bytes
-                .get(bom_length..)
-                .context("detected BOM length exceeds text length")?;
-            (detected_encoding, body)
-        } else {
-            (encoding_rs::UTF_8, bytes)
-        };
-    let (text, had_errors) = encoding.decode_without_bom_handling(body);
+    let encoding = encoding_rs::Encoding::for_bom(bytes)
+        .map_or(encoding_rs::UTF_8, |(detected_encoding, _)| {
+            detected_encoding
+        });
+    let (text, had_errors) = encoding.decode_with_bom_removal(bytes);
     if had_errors {
         bail!("text is not valid {}", encoding.name());
     }
     Ok(text.into_owned())
 }
 pub(super) fn read_done(path: &Path) -> Result<Option<DoneFile>> {
-    if !path.exists() {
+    let Some(bytes) = read_if_present(path, "done file")? else {
         return Ok(None);
-    }
-    let bytes = fs::read(path).context("failed to read done file")?;
+    };
     let text = decode_text(&bytes).context("failed to decode done file")?;
     let done = sonic_rs::from_str::<DoneFile>(&text).context("failed to parse done file")?;
     Ok(Some(done))
+}
+fn read_if_present(path: &Path, label: &str) -> Result<Option<Vec<u8>>> {
+    match fs::read(path) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => {
+            Err(error).with_context(|| format!("failed to read {label} {}", path.display()))
+        }
+    }
 }
 #[cfg(test)]
 #[path = "records/record_tests.rs"]

@@ -7,22 +7,20 @@ use crate::runtime::session::terminal::CommandTitle;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use core::time::Duration;
-use std::sync::Mutex;
+use parking_lot::Mutex;
 use std::time::Instant;
 pub(in crate::engine::runtime::session::manager) struct ManagedCommand {
     id: String,
     record: CommandRecord,
     started_at: Instant,
-    state: Mutex<CommandState>,
-    cached_view: Mutex<Option<CommandSnapshot>>,
+    state: Mutex<ManagedCommandState>,
     title: Arc<CommandTitle>,
 }
-#[derive(Clone, Copy)]
-enum CommandState {
-    Running,
-    Finished,
-    Failed,
+struct ManagedCommandState {
+    wait: CommandWait,
+    cached_view: Option<CommandSnapshot>,
 }
+#[derive(Clone, Copy)]
 pub(in crate::engine::runtime::session::manager) enum CommandWait {
     Running,
     Finished,
@@ -34,8 +32,10 @@ impl ManagedCommand {
             id,
             record,
             started_at: Instant::now(),
-            state: Mutex::new(CommandState::Running),
-            cached_view: Mutex::new(None),
+            state: Mutex::new(ManagedCommandState {
+                wait: CommandWait::Running,
+                cached_view: None,
+            }),
             title,
         }
     }
@@ -49,10 +49,10 @@ impl ManagedCommand {
         &self,
         limit: Duration,
     ) -> Result<CommandWait> {
-        match self.state()? {
-            CommandState::Finished => return Ok(CommandWait::Finished),
-            CommandState::Failed => return Ok(CommandWait::Failed),
-            CommandState::Running => {}
+        let state = self.state.lock().wait;
+        match state {
+            CommandWait::Finished | CommandWait::Failed => return Ok(state),
+            CommandWait::Running => {}
         }
         match wait_for_done(&self.record.done, limit) {
             Ok(true) => Ok(CommandWait::Finished),
@@ -64,7 +64,8 @@ impl ManagedCommand {
         }
     }
     pub(super) fn view(&self) -> Result<CommandSnapshot> {
-        if let Some(view) = self.cached_view()? {
+        let cached_view = self.state.lock().cached_view.clone();
+        if let Some(view) = cached_view {
             return Ok(view);
         }
         read_command_result(&self.record, self.time_consumption(), self.title.current()?)
@@ -74,17 +75,18 @@ impl ManagedCommand {
         reason = "the state lock serializes the single read-and-delete of command files"
     )]
     pub(super) fn mark_finished(&self) -> Result<()> {
-        let mut state = self.lock_state()?;
-        if !matches!(*state, CommandState::Running) {
-            self.lock_cached_view()?
+        let mut state = self.state.lock();
+        if !matches!(state.wait, CommandWait::Running) {
+            state
+                .cached_view
                 .as_ref()
                 .context("finished command is missing cached view")?;
             return Ok(());
         }
         let title = self.title.wait_finished()?;
         let view = read_and_clear_command_result(&self.record, self.time_consumption(), title)?;
-        *self.lock_cached_view()? = Some(view);
-        *state = CommandState::Finished;
+        state.cached_view = Some(view);
+        state.wait = CommandWait::Finished;
         Ok(())
     }
     pub(in crate::engine::runtime::session::manager) fn mark_failed(
@@ -92,8 +94,8 @@ impl ManagedCommand {
         message: impl Into<String>,
     ) -> Result<()> {
         let failure_message = message.into();
-        let mut state = self.lock_state()?;
-        if matches!(*state, CommandState::Running) {
+        let mut state = self.state.lock();
+        if matches!(state.wait, CommandWait::Running) {
             let title = self.title.cancel()?;
             write_failed_result(&self.id, &self.record, &failure_message)?;
             let view = failure_view(
@@ -105,27 +107,11 @@ impl ManagedCommand {
             if let Err(error) = remove_record_directory(&self.record) {
                 eprintln!("{error:#}");
             }
-            *self.lock_cached_view()? = Some(view);
-            *state = CommandState::Failed;
+            state.cached_view = Some(view);
+            state.wait = CommandWait::Failed;
         }
         drop(state);
         Ok(())
-    }
-    fn state(&self) -> Result<CommandState> {
-        Ok(*self.lock_state()?)
-    }
-    fn lock_state(&self) -> Result<std::sync::MutexGuard<'_, CommandState>> {
-        self.state
-            .lock()
-            .map_err(|error| anyhow::anyhow!("command state mutex poisoned: {error}"))
-    }
-    fn cached_view(&self) -> Result<Option<CommandSnapshot>> {
-        Ok(self.lock_cached_view()?.clone())
-    }
-    fn lock_cached_view(&self) -> Result<std::sync::MutexGuard<'_, Option<CommandSnapshot>>> {
-        self.cached_view
-            .lock()
-            .map_err(|error| anyhow::anyhow!("command view mutex poisoned: {error}"))
     }
     fn time_consumption(&self) -> Duration {
         self.started_at.elapsed()

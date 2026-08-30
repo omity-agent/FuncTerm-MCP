@@ -3,7 +3,7 @@ use anyhow::{Result, bail};
 use core::time::Duration;
 impl Terminal {
     pub(in crate::engine::runtime::session) fn output_revision(&self) -> Result<u64> {
-        let state = self.lock()?;
+        let state = self.state.lock();
         if let Some(message) = state.reader_failure.as_deref() {
             bail!("terminal reader is unavailable: {message}");
         }
@@ -24,43 +24,36 @@ impl Terminal {
         if waiting.is_zero() {
             return Ok(());
         }
-        let state = self.lock()?;
-        let (waited_state, _timeout) = self
-            .changed
-            .wait_timeout_while(state, waiting, |current| {
+        let mut state = self.state.lock();
+        self.changed.wait_while_for(
+            &mut state,
+            |current| {
                 current.revision == revision
                     && !current.reader_closed
                     && current.reader_failure.is_none()
-            })
-            .map_err(|error| anyhow::anyhow!("terminal mutex poisoned while waiting: {error}"))?;
-        if let Some(message) = waited_state.reader_failure.as_deref() {
+            },
+            waiting,
+        );
+        if let Some(message) = state.reader_failure.as_deref() {
             bail!("terminal reader failed while waiting for output: {message}");
         }
-        drop(waited_state);
         Ok(())
     }
     pub(in crate::engine::runtime::session) fn reader_closed(&self) {
-        match self.lock() {
-            Ok(mut state) => {
-                let message = "PTY reader closed before command title capture completed";
-                state.captures.fail_all(message);
-                state.reader_closed = true;
-                drop(state);
-                self.changed.notify_all();
-            }
-            Err(error) => eprintln!("failed to close command title captures: {error:#}"),
-        }
+        let mut state = self.state.lock();
+        state
+            .captures
+            .fail_all("PTY reader closed before command title capture completed");
+        state.reader_closed = true;
+        drop(state);
+        self.changed.notify_all();
     }
     pub(in crate::engine::runtime::session) fn reader_failed(&self, message: &str) {
-        match self.lock() {
-            Ok(mut state) => {
-                state.captures.fail_all(message);
-                state.reader_closed = true;
-                state.reader_failure = Some(message.to_owned());
-                drop(state);
-                self.changed.notify_all();
-            }
-            Err(error) => eprintln!("failed to report terminal reader failure: {error:#}"),
-        }
+        let mut state = self.state.lock();
+        state.captures.fail_all(message);
+        state.reader_closed = true;
+        state.reader_failure = Some(message.to_owned());
+        drop(state);
+        self.changed.notify_all();
     }
 }

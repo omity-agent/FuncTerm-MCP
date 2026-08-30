@@ -1,18 +1,11 @@
 use super::{DriverStartup, InvocationTerminator, ShellDriver, StartupContext, os_strings_lower};
 use crate::runtime::config::Settings;
-use crate::shell::ShellChoice;
 use crate::shell::quote;
 use crate::shell::shims::CURRENT_SHELL_ENV;
 use crate::shell::wrappers::nushell_wrapper;
 use anyhow::Result;
 pub(crate) struct NuShellDriver;
 impl ShellDriver for NuShellDriver {
-    fn choice(&self) -> ShellChoice {
-        ShellChoice::NuShell
-    }
-    fn id(&self) -> &'static str {
-        "nu"
-    }
     fn display_name(&self) -> &'static str {
         "NuShell"
     }

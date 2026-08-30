@@ -1,7 +1,7 @@
 use super::sequence::ProtocolEvent;
 use alloc::{collections::BTreeMap, sync::Arc};
-use anyhow::{Context as _, Result, bail};
-use std::sync::{Condvar, Mutex};
+use anyhow::{Result, bail};
+use parking_lot::{Condvar, Mutex};
 pub(in crate::engine::runtime::session) struct CommandTitle {
     state: Mutex<CommandTitleState>,
     changed: Condvar,
@@ -9,14 +9,13 @@ pub(in crate::engine::runtime::session) struct CommandTitle {
 struct CommandTitleState {
     phase: TitlePhase,
     title: String,
-    failure: Option<String>,
 }
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 enum TitlePhase {
     Pending,
     Active,
     Finished,
-    Failed,
+    Failed(String),
 }
 impl CommandTitle {
     const fn new(initial: String) -> Self {
@@ -24,81 +23,56 @@ impl CommandTitle {
             state: Mutex::new(CommandTitleState {
                 phase: TitlePhase::Pending,
                 title: initial,
-                failure: None,
             }),
             changed: Condvar::new(),
         }
     }
     pub(in crate::engine::runtime::session) fn current(&self) -> Result<String> {
-        let state = self.lock()?;
-        let result = state.result();
-        drop(state);
-        result
+        self.state.lock().result()
     }
     pub(in crate::engine::runtime::session) fn wait_finished(&self) -> Result<String> {
-        let mut state = self.lock()?;
+        let mut state = self.state.lock();
         while matches!(state.phase, TitlePhase::Pending | TitlePhase::Active) {
-            state = self.changed.wait(state).map_err(|error| {
-                anyhow::anyhow!("command title mutex poisoned while waiting: {error}")
-            })?;
+            self.changed.wait(&mut state);
         }
-        let result = state.result();
-        drop(state);
-        result
+        state.result()
     }
     pub(in crate::engine::runtime::session) fn cancel(&self) -> Result<String> {
-        let mut state = self.lock()?;
-        if state.phase != TitlePhase::Failed {
+        let mut state = self.state.lock();
+        if !matches!(state.phase, TitlePhase::Failed(_)) {
             state.phase = TitlePhase::Finished;
             self.changed.notify_all();
         }
-        let result = state.result();
-        drop(state);
-        result
+        state.result()
     }
-    fn start(&self) -> Result<()> {
-        let mut state = self.lock()?;
+    fn start(&self) {
+        let mut state = self.state.lock();
         if state.phase == TitlePhase::Pending {
             state.phase = TitlePhase::Active;
         }
-        drop(state);
-        Ok(())
     }
-    fn update(&self, title: &str) -> Result<()> {
-        let mut state = self.lock()?;
+    fn update(&self, title: &str) {
+        let mut state = self.state.lock();
         if state.phase == TitlePhase::Active {
             title.clone_into(&mut state.title);
         }
-        drop(state);
-        Ok(())
     }
     fn finish(&self) -> Result<()> {
         drop(self.cancel()?);
         Ok(())
     }
-    fn fail(&self, message: &str) -> Result<()> {
-        let mut state = self.lock()?;
+    fn fail(&self, message: &str) {
+        let mut state = self.state.lock();
         if state.phase != TitlePhase::Finished {
-            state.phase = TitlePhase::Failed;
-            state.failure = Some(message.to_owned());
+            state.phase = TitlePhase::Failed(message.to_owned());
             self.changed.notify_all();
         }
         drop(state);
-        Ok(())
-    }
-    fn lock(&self) -> Result<std::sync::MutexGuard<'_, CommandTitleState>> {
-        self.state
-            .lock()
-            .map_err(|error| anyhow::anyhow!("command title mutex poisoned: {error}"))
     }
 }
 impl CommandTitleState {
     fn result(&self) -> Result<String> {
-        if self.phase == TitlePhase::Failed {
-            let message = self
-                .failure
-                .clone()
-                .context("failed command title capture is missing an error")?;
+        if let TitlePhase::Failed(message) = self.phase.clone() {
             bail!(message);
         }
         Ok(self.title.clone())
@@ -135,9 +109,7 @@ impl CaptureRegistry {
     }
     pub(super) fn fail_all(&mut self, message: &str) {
         for capture in self.captures.values() {
-            if let Err(error) = capture.fail(message) {
-                eprintln!("failed to report terminal reader failure: {error:#}");
-            }
+            capture.fail(message);
         }
         self.captures.clear();
         self.active = None;
@@ -146,7 +118,7 @@ impl CaptureRegistry {
         if let Some(active) = self.active.as_deref() {
             bail!("command title capture {id} started while {active} is active");
         }
-        self.require(id)?.start()?;
+        self.require(id)?.start();
         self.active = Some(id.to_owned());
         Ok(())
     }
@@ -165,7 +137,7 @@ impl CaptureRegistry {
     }
     fn update(&self, title: &str) -> Result<()> {
         if let Some(id) = self.active.as_deref() {
-            self.require(id)?.update(title)?;
+            self.require(id)?.update(title);
         }
         Ok(())
     }

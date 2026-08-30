@@ -14,19 +14,13 @@ fn busy_state_rejects_conflicting_reservation() {
         error.to_string(),
         "The command was not executed because `tab-current` is busy with `command-current`"
     );
-    assert_eq!(
-        shell.busy_command_id().unwrap().as_deref(),
-        Some("command-current")
-    );
+    assert_eq!(shell.busy_command_id().as_deref(), Some("command-current"));
 }
 #[test]
 fn busy_state_release_keeps_conflicting_owner() {
     let shell = test_shell(Some("command-owner"));
-    shell.release("command-stranger").unwrap();
-    assert_eq!(
-        shell.busy_command_id().unwrap().as_deref(),
-        Some("command-owner")
-    );
+    shell.release("command-stranger");
+    assert_eq!(shell.busy_command_id().as_deref(), Some("command-owner"));
 }
 #[test]
 fn busy_state_allows_only_one_concurrent_reservation() {
@@ -60,7 +54,7 @@ fn busy_state_allows_only_one_concurrent_reservation() {
     assert_eq!(conflict_count, ATTEMPTS - 1);
     let reserved_id = reserved_ids.first().unwrap();
     assert_eq!(
-        shell.busy_command_id().unwrap().as_deref(),
+        shell.busy_command_id().as_deref(),
         Some(reserved_id.as_str())
     );
 }
@@ -94,7 +88,7 @@ fn raw_keyboard_bytes_skip_shell_text_normalization() {
             core::time::Duration::ZERO,
         )
         .unwrap();
-    assert_eq!(*written.lock().unwrap(), b"line\n");
+    assert_eq!(*written.lock(), b"line\n");
 }
 #[test]
 fn keyboard_text_uses_active_shell_normalization() {
@@ -105,7 +99,7 @@ fn keyboard_text_uses_active_shell_normalization() {
             core::time::Duration::ZERO,
         )
         .unwrap();
-    assert_eq!(*written.lock().unwrap(), b"line\r");
+    assert_eq!(*written.lock(), b"line\r");
 }
 #[test]
 fn output_wait_does_not_hold_the_busy_state_lock() {
@@ -124,12 +118,11 @@ fn output_wait_does_not_hold_the_busy_state_lock() {
     let releasing_shell = Arc::clone(&shared_shell);
     let (released_tx, released_rx) = mpsc::channel();
     let releaser = thread::spawn(move || {
-        let result = releasing_shell.release("command-current");
-        released_tx.send(result).unwrap();
+        releasing_shell.release("command-current");
+        released_tx.send(()).unwrap();
     });
     released_rx
         .recv_timeout(core::time::Duration::from_secs(1))
-        .unwrap()
         .unwrap();
     terminal.reader_closed();
     writer.join().unwrap().unwrap();

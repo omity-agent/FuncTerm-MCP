@@ -1,6 +1,5 @@
 use super::{DriverStartup, InvocationTerminator, ShellDriver, StartupContext, os_strings_lower};
 use crate::runtime::config::Settings;
-use crate::shell::ShellChoice;
 use crate::shell::quote;
 use crate::shell::shims::CURRENT_SHELL_ENV;
 use crate::shell::wrappers::{bash_wrapper, zsh_wrapper};
@@ -26,18 +25,6 @@ impl PosixDriver {
     }
 }
 impl ShellDriver for PosixDriver {
-    fn choice(&self) -> ShellChoice {
-        match self.kind {
-            PosixKind::Bash => ShellChoice::Bash,
-            PosixKind::Zsh => ShellChoice::Zsh,
-        }
-    }
-    fn id(&self) -> &'static str {
-        match self.kind {
-            PosixKind::Bash => "bash",
-            PosixKind::Zsh => "zsh",
-        }
-    }
     fn display_name(&self) -> &'static str {
         match self.kind {
             PosixKind::Bash => "Bash",

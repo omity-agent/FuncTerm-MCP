@@ -1,7 +1,7 @@
 use anyhow::{Context as _, Result};
 use kill_tree::{Config, blocking::kill_tree_with_config};
+use parking_lot::Mutex;
 use portable_pty::Child;
-use std::sync::Mutex;
 #[derive(Default)]
 pub(super) struct ProcessTree {
     process_id: Mutex<Option<u32>>,
@@ -14,18 +14,11 @@ impl ProcessTree {
         let process_id = child
             .process_id()
             .context("shell child does not expose a process id")?;
-        *self
-            .process_id
-            .lock()
-            .map_err(|error| anyhow::anyhow!("process tree mutex poisoned: {error}"))? =
-            Some(process_id);
+        *self.process_id.lock() = Some(process_id);
         Ok(())
     }
     pub(super) fn terminate(&self) -> Result<()> {
-        let stored_process_id = *self
-            .process_id
-            .lock()
-            .map_err(|error| anyhow::anyhow!("process tree mutex poisoned: {error}"))?;
+        let stored_process_id = *self.process_id.lock();
         let Some(process_id) = stored_process_id else {
             return Ok(());
         };

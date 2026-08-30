@@ -31,11 +31,11 @@ impl Tab {
         session.refresh_choice()?;
         self.remember(&session)?;
         let reservation = ShellReservation::new(&session, self.id(), &command_id)?;
-        let initial_cwd = session.cwd()?;
+        let initial_cwd = session.cwd();
         let record = create_record(session.command_root(), &command_id, &initial_cwd)?;
         let title = session.capture_title(&command_id)?;
         let managed = Arc::new(ManagedCommand::new(command_id, record, title));
-        self.insert_command(Arc::clone(&managed))?;
+        self.insert_command(Arc::clone(&managed));
         if let Err(error) = session.write_invocation(managed.id(), command_text, managed.record()) {
             self.abandon_start(&managed, &session)?;
             return Err(error);
@@ -67,13 +67,11 @@ impl Tab {
                 Ok(CommandWait::Running | CommandWait::Failed) => {}
                 Err(error) => eprintln!("{error:#}"),
             }
-            if let Err(error) = reservation.release() {
-                eprintln!("{error:#}");
-            }
+            reservation.release();
         });
     }
     fn abandon_start(&self, command: &ManagedCommand, session: &ShellSession) -> Result<()> {
-        self.remove_command(command.id())?;
+        drop(self.remove_command(command.id()));
         if let Err(error) = remove_record_directory(command.record()) {
             eprintln!("{error:#}");
         }
@@ -119,19 +117,16 @@ impl ShellReservation {
             released: false,
         })
     }
-    fn release(&mut self) -> Result<()> {
+    fn release(&mut self) {
         if self.released {
-            return Ok(());
+            return;
         }
-        self.session.release(&self.command_id)?;
+        self.session.release(&self.command_id);
         self.released = true;
-        Ok(())
     }
 }
 impl Drop for ShellReservation {
     fn drop(&mut self) {
-        if let Err(error) = self.release() {
-            eprintln!("{error:#}");
-        }
+        self.release();
     }
 }

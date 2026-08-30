@@ -4,6 +4,7 @@ use crate::runtime::protocol::{
 use crate::runtime::working_dir;
 use crate::shell::ShellChoice;
 use anyhow::Result;
+use core::time::Duration;
 use std::path::Path;
 type DaemonCall<'callback> = dyn Fn(&Request) -> Result<Payload> + 'callback;
 pub(crate) fn new_tab(
@@ -40,13 +41,11 @@ pub(crate) fn manual_write_payload(
     input: KeyboardInput,
     waiting_seconds: f64,
 ) -> Result<Payload> {
-    let waiting = waiting_from_seconds(waiting_seconds)?;
-    let request = Request::ManualWrite {
+    call_after_wait(call, waiting_seconds, |waiting| Request::ManualWrite {
         tab_id,
         input,
         waiting,
-    };
-    call_payload(call, &request)
+    })
 }
 pub(crate) fn send_command(
     call: impl Fn(&Request) -> Result<Payload>,
@@ -62,13 +61,11 @@ pub(crate) fn send_command_payload(
     command: String,
     waiting_seconds: f64,
 ) -> Result<Payload> {
-    let waiting = waiting_from_seconds(waiting_seconds)?;
-    let request = Request::SendCommand {
+    call_after_wait(call, waiting_seconds, |waiting| Request::SendCommand {
         tab_id,
         command,
         waiting,
-    };
-    call_payload(call, &request)
+    })
 }
 pub(crate) fn view(
     call: impl Fn(&Request) -> Result<Payload>,
@@ -82,9 +79,10 @@ pub(crate) fn view_payload(
     id: String,
     waiting_seconds: f64,
 ) -> Result<Payload> {
-    let waiting = waiting_from_seconds(waiting_seconds)?;
-    let request = Request::View { id, waiting };
-    call_payload(call, &request)
+    call_after_wait(call, waiting_seconds, |waiting| Request::View {
+        id,
+        waiting,
+    })
 }
 pub(crate) fn with_daemon(
     daemon_service_name: &str,
@@ -95,4 +93,12 @@ pub(crate) fn with_daemon(
 }
 fn call_payload(call: impl Fn(&Request) -> Result<Payload>, request: &Request) -> Result<Payload> {
     call(request)?.ensure_matches(request)
+}
+fn call_after_wait(
+    call: impl Fn(&Request) -> Result<Payload>,
+    waiting_seconds: f64,
+    request: impl FnOnce(Duration) -> Request,
+) -> Result<Payload> {
+    let waiting = waiting_from_seconds(waiting_seconds)?;
+    call_payload(call, &request(waiting))
 }

@@ -13,9 +13,9 @@ use crate::shell::{ShellChoice, ShellStartup, shims};
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use core::time::Duration;
+use parking_lot::Mutex;
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::path::Path;
-use std::sync::Mutex;
 use tastty_core::TerminalSize;
 pub(super) struct ShellLauncher {
     settings: Settings,

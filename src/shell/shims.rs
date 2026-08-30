@@ -48,7 +48,7 @@ pub(crate) fn environment(
             OsString::from(current_shell.canonical_name()),
         ),
     ];
-    for shell in ShellChoice::all() {
+    for &shell in ShellChoice::all() {
         if let Ok(executable) = shell.executable_path(settings, inherited, cwd) {
             env.push((
                 OsString::from(shell.shim_env_name()),
@@ -67,7 +67,7 @@ pub(crate) fn environment(
 pub(crate) fn ensure_directory(shim_dir: &Path) -> Result<()> {
     fs::create_dir_all(shim_dir).context("failed to create shell shim directory")?;
     let current_exe = std::env::current_exe().context("failed to resolve current executable")?;
-    for shell in ShellChoice::all() {
+    for &shell in ShellChoice::all() {
         for alias in shell.shim_executable_names() {
             create_shim_alias(&current_exe, &shim_dir.join(alias), alias)?;
         }
@@ -185,7 +185,7 @@ mod tests {
     fn ensure_directory_creates_shell_aliases() {
         let shim_dir = crate::test_fs::temp_dir("shim-aliases");
         ensure_directory(&shim_dir).unwrap();
-        for shell in ShellChoice::all() {
+        for &shell in ShellChoice::all() {
             for alias in shell.shim_executable_names() {
                 assert!(shim_dir.join(alias).exists());
             }

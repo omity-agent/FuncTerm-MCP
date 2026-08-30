@@ -1,18 +1,11 @@
 use super::{DriverStartup, InvocationTerminator, ShellDriver, StartupContext, os_strings_lower};
 use crate::runtime::config::Settings;
-use crate::shell::ShellChoice;
 use crate::shell::quote;
 use crate::shell::shims::CURRENT_SHELL_ENV;
 use crate::shell::wrappers::{cmd_dispatcher, cmd_wrapper};
 use anyhow::{Context as _, Result};
 pub(crate) struct CmdDriver;
 impl ShellDriver for CmdDriver {
-    fn choice(&self) -> ShellChoice {
-        ShellChoice::Cmd
-    }
-    fn id(&self) -> &'static str {
-        "cmd"
-    }
     fn display_name(&self) -> &'static str {
         "Windows CMD"
     }

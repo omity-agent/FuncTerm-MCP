@@ -3,15 +3,15 @@ use super::{process, process_tree};
 use crate::runtime::protocol::KeyboardInput;
 use crate::runtime::session::keyboard;
 use crate::runtime::session::records::{CommandRecord, read_done};
-use crate::runtime::session::terminal::{CommandTitle, Terminal, lock_mutex};
+use crate::runtime::session::terminal::{CommandTitle, Terminal};
 use crate::shell::{ShellChoice, shims};
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use core::time::Duration;
+use parking_lot::Mutex;
 use portable_pty::{Child, SlavePty};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::thread::JoinHandle;
 pub(super) struct ShellSession {
     choice: Mutex<ShellChoice>,
@@ -28,10 +28,14 @@ pub(super) struct ShellSession {
     slave: Mutex<Option<Box<dyn SlavePty + Send>>>,
     reader: Option<JoinHandle<()>>,
 }
-#[derive(Debug)]
+#[derive(Debug, thiserror :: Error)]
 pub(super) enum KeyboardWriteFailure {
+    #[error(
+        "manual_write is unavailable while the prompt is idle; use send_command for prompt commands"
+    )]
     IdlePrompt,
-    Write(anyhow::Error),
+    #[error(transparent)]
+    Write(#[from] anyhow::Error),
 }
 pub(super) struct ShellSessionParts {
     pub(super) choice: ShellChoice,
@@ -66,17 +70,16 @@ impl ShellSession {
             reader: parts.reader,
         }
     }
-    pub(super) fn cwd(&self) -> Result<PathBuf> {
-        Ok(lock_mutex(&self.cwd, "cwd")?.clone())
+    pub(super) fn cwd(&self) -> PathBuf {
+        self.cwd.lock().clone()
     }
     pub(super) fn command_root(&self) -> &Path {
         &self.command_root
     }
-    pub(super) fn set_cwd(&self, cwd: PathBuf) -> Result<()> {
-        *lock_mutex(&self.cwd, "cwd")? = cwd;
-        Ok(())
+    pub(super) fn set_cwd(&self, cwd: PathBuf) {
+        *self.cwd.lock() = cwd;
     }
-    pub(super) fn screen_contents(&self) -> Result<String> {
+    pub(super) fn screen_contents(&self) -> String {
         self.screen.contents()
     }
     pub(super) fn model_title(&self) -> String {
@@ -85,51 +88,44 @@ impl ShellSession {
     pub(super) fn capture_title(&self, command_id: &str) -> Result<Arc<CommandTitle>> {
         self.screen.capture_title(command_id)
     }
-    pub(super) fn current_choice(&self) -> Result<ShellChoice> {
-        Ok(*lock_mutex(&self.choice, "choice")?)
+    pub(super) fn current_choice(&self) -> ShellChoice {
+        *self.choice.lock()
     }
     pub(super) fn refresh_choice(&self) -> Result<()> {
         if let Some(choice) = shims::read_active_shell(&self.active_shell_file)? {
-            *lock_mutex(&self.choice, "choice")? = choice;
+            *self.choice.lock() = choice;
         }
         Ok(())
     }
     pub(super) fn is_alive(&self) -> Result<bool> {
-        let mut child = lock_mutex(&self.child, "child")?;
-        let alive = process::is_alive(child.as_mut())?;
-        drop(child);
-        Ok(alive)
+        process::is_alive(self.child.lock().as_mut())
     }
     pub(super) fn write_keyboard_for_running_command(
         &self,
         input: KeyboardInput,
         waiting: Duration,
     ) -> Result<(), KeyboardWriteFailure> {
-        let busy = lock_mutex(&self.busy, "busy").map_err(KeyboardWriteFailure::Write)?;
+        let busy = self.busy.lock();
         if busy.is_none() {
             return Err(KeyboardWriteFailure::IdlePrompt);
         }
-        let revision = self
-            .screen
-            .output_revision()
-            .map_err(KeyboardWriteFailure::Write)?;
+        let revision = self.screen.output_revision()?;
         let write_result = self.write_keyboard(input);
         drop(busy);
-        write_result.map_err(KeyboardWriteFailure::Write)?;
-        self.screen
-            .wait_for_output(revision, waiting)
-            .map_err(KeyboardWriteFailure::Write)
+        write_result?;
+        self.screen.wait_for_output(revision, waiting)?;
+        Ok(())
     }
     fn write_keyboard(&self, input: KeyboardInput) -> Result<()> {
         let shell_bytes = match input {
             KeyboardInput::Text(text) => self
-                .current_choice()?
+                .current_choice()
                 .keyboard_bytes(text.as_bytes())
                 .into_owned(),
             KeyboardInput::Bytes(bytes) => bytes,
         };
         let physical_bytes = keyboard::user_bytes(&shell_bytes);
-        let mut writer = lock_mutex(&self.writer, "writer")?;
+        let mut writer = self.writer.lock();
         writer
             .write_all(physical_bytes.as_ref())
             .context("failed to write to pty")?;
@@ -142,16 +138,16 @@ impl ShellSession {
         record: &CommandRecord,
     ) -> Result<()> {
         std::fs::write(&record.command, command).context("failed to write command")?;
-        let choice = self.current_choice()?;
+        let choice = self.current_choice();
         std::fs::write(record.script_for(choice), choice.command_script(command))
             .context("failed to write command script")?;
         crate::file_publish::write_replace(&self.dispatch_file, command_id)
             .context("failed to publish command dispatch")?;
-        let Some(invocation) = self.current_choice()?.invocation()? else {
+        let Some(invocation) = choice.invocation()? else {
             return Ok(());
         };
         let invocation_bytes = invocation.into_bytes();
-        let mut writer = lock_mutex(&self.writer, "writer")?;
+        let mut writer = self.writer.lock();
         writer
             .write_all(&invocation_bytes)
             .context("failed to write command invocation")?;
@@ -159,7 +155,7 @@ impl ShellSession {
     }
     pub(super) fn update_cwd_from_done(&self, record: &CommandRecord) -> Result<()> {
         if let Some(done) = read_done(&record.done)? {
-            self.set_cwd(PathBuf::from(done.cwd))?;
+            self.set_cwd(PathBuf::from(done.cwd));
         }
         Ok(())
     }
@@ -176,7 +172,7 @@ impl ShellSession {
         );
     }
     pub(super) fn reserve(&self, tab_id: &str, command_id: &str) -> Result<()> {
-        let mut busy = lock_mutex(&self.busy, "busy")?;
+        let mut busy = self.busy.lock();
         if let Some(existing_id) = busy.as_deref() {
             anyhow::bail!(
                 "The command was not executed because `{tab_id}` is busy with `{existing_id}`"
@@ -186,15 +182,13 @@ impl ShellSession {
         drop(busy);
         Ok(())
     }
-    pub(super) fn release(&self, command_id: &str) -> Result<()> {
-        let mut busy = lock_mutex(&self.busy, "busy")?;
+    pub(super) fn release(&self, command_id: &str) {
+        let mut busy = self.busy.lock();
         if busy.as_deref() == Some(command_id) {
             *busy = None;
         }
-        drop(busy);
-        Ok(())
     }
-    pub(super) fn busy_command_id(&self) -> Result<Option<String>> {
-        Ok(lock_mutex(&self.busy, "busy")?.clone())
+    pub(super) fn busy_command_id(&self) -> Option<String> {
+        self.busy.lock().clone()
     }
 }

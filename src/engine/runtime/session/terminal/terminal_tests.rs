@@ -14,7 +14,7 @@ fn command_without_title_ignores_titles_outside_its_boundaries() {
     let capture = terminal.capture_title("command-a").unwrap();
     process (& terminal , b"\x1b]2;Shell before\x1b\\\x1b]9999;FuncTerm;start;command-a\x1b\\output\x1b]9999;FuncTerm;end;command-a\x1b\\\x1b]2;Shell after\x1b\\" ,) ;
     assert_eq!(capture.wait_finished().unwrap(), "FuncTerm");
-    assert_eq!(terminal.raw_title().unwrap(), "Shell after");
+    assert_eq!(terminal.raw_title(), "Shell after");
 }
 #[test]
 fn command_title_is_frozen_before_shell_restores_its_title() {
@@ -26,7 +26,7 @@ fn command_title_is_frozen_before_shell_restores_its_title() {
         process(&terminal, before_split);
         process(&terminal, after_split);
         assert_eq!(capture.wait_finished().unwrap(), "Command title");
-        assert_eq!(terminal.raw_title().unwrap(), "Shell title");
+        assert_eq!(terminal.raw_title(), "Shell title");
     }
 }
 #[test]
@@ -76,7 +76,7 @@ fn input_waits_for_the_next_terminal_output_revision() {
     process(&terminal, b" after");
     returned_rx.recv().unwrap().unwrap();
     worker.join().unwrap();
-    assert!(terminal.contents().unwrap().contains("before after"));
+    assert!(terminal.contents().contains("before after"));
 }
 #[test]
 fn normal_reader_close_wakes_output_wait_without_failure() {

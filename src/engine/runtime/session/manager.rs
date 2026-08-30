@@ -32,11 +32,11 @@ impl Manager {
                 starting_directory.display()
             );
         }
-        let tab_id = self.tabs.next_tab_id()?;
+        let tab_id = self.tabs.next_tab_id();
         let session =
             self.launcher
                 .launch(&tab_id, starting_directory, starting_shell, environment)?;
-        self.tabs.insert(tab::Tab::new(tab_id.clone(), session)?)?;
+        self.tabs.insert(tab::Tab::new(tab_id.clone(), session)?);
         Ok(tab_id)
     }
 }

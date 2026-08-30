@@ -11,20 +11,20 @@ pub(in crate::engine::runtime::session::manager) struct TabSnapshot {
 }
 impl TabSnapshot {
     pub(super) fn from_session(session: &ShellSession) -> Result<Self> {
-        let cwd = crate::text::path_text(&session.cwd()?, "cwd")?;
-        let current_screen = session.screen_contents()?;
+        let cwd = crate::text::path_text(&session.cwd(), "cwd")?;
+        let current_screen = session.screen_contents();
         let screen = if current_screen.is_empty() {
             cwd.clone()
         } else {
             current_screen
         };
-        let shell_type = session.current_choice()?;
+        let shell_type = session.current_choice();
         Ok(Self {
             screen,
             cwd,
             title: session.model_title(),
             shell_type,
-            idle: session.busy_command_id()?.is_none(),
+            idle: session.busy_command_id().is_none(),
         })
     }
     pub(in crate::engine::runtime::session::manager) fn into_view(self, alive: bool) -> ViewResult {

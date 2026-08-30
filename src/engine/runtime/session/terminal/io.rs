@@ -2,8 +2,8 @@ use super::{HostReply, Terminal};
 use crate::runtime::session::keyboard;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
+use parking_lot::Mutex;
 use std::io::{Read, Write};
-use std::sync::Mutex;
 use std::thread::{self, JoinHandle};
 use tastty_core::HostProfile;
 pub(in crate::engine::runtime::session) fn start_reader(
@@ -64,9 +64,7 @@ fn write_replies(writer: &Arc<Mutex<Box<dyn Write + Send>>>, replies: &[HostRepl
     if replies.is_empty() {
         return Ok(());
     }
-    let mut locked_writer = writer.lock().map_err(|error| {
-        anyhow::anyhow!("terminal writer mutex poisoned while replying: {error}")
-    })?;
+    let mut locked_writer = writer.lock();
     for reply in replies {
         let physical_reply = keyboard::host_reply_bytes(&reply.bytes, reply.win32_input)?;
         locked_writer

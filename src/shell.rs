@@ -83,18 +83,18 @@ impl ShellChoice {
         self.driver().keyboard_bytes(bytes)
     }
     pub(crate) fn from_canonical_name(value: &str) -> Result<Self> {
-        drivers::from_canonical_name(value).with_context(|| {
+        let parsed = value
+            .parse::<Self>()
+            .map_err(|error| anyhow::anyhow!("unknown shell: {error}"));
+        parsed.with_context(|| {
             format!(
                 "unsupported shell `{value}`; supported shells are {}",
-                drivers::supported_shells()
+                <Self as strum::VariantNames>::VARIANTS.join(", ")
             )
         })
     }
     pub(crate) fn from_shim_name(value: &str) -> Option<Self> {
         drivers::from_shim_name(value)
-    }
-    pub(crate) fn canonical_name(self) -> &'static str {
-        self.driver().id()
     }
     pub(crate) fn display_name(self) -> &'static str {
         self.driver().display_name()
@@ -105,16 +105,8 @@ impl ShellChoice {
     pub(crate) fn shim_executable_names(self) -> &'static [&'static str] {
         self.driver().shim_executable_names()
     }
-    pub(crate) const fn all() -> [Self; 7] {
-        [
-            Self::PowerShell,
-            Self::Bash,
-            Self::NuShell,
-            Self::Zsh,
-            Self::Cmd,
-            Self::Bun,
-            Self::Python,
-        ]
+    pub(crate) const fn all() -> &'static [Self] {
+        <Self as strum::VariantArray>::VARIANTS
     }
     pub(crate) fn interactive_arguments(self, arguments: &[std::ffi::OsString]) -> bool {
         self.driver().interactive_arguments(arguments)
@@ -134,29 +126,15 @@ mod tests {
     #[test]
     fn canonical_shell_names_parse_to_supported_choices() {
         assert_eq!(
-            ShellChoice::from_canonical_name("powershell").unwrap(),
-            ShellChoice::PowerShell
+            <ShellChoice as strum::VariantNames>::VARIANTS,
+            ["powershell", "bash", "nu", "zsh", "cmd", "bun", "python"]
         );
-        assert_eq!(
-            ShellChoice::from_canonical_name("bash").unwrap(),
-            ShellChoice::Bash
-        );
-        assert_eq!(
-            ShellChoice::from_canonical_name("nu").unwrap(),
-            ShellChoice::NuShell
-        );
-        assert_eq!(
-            ShellChoice::from_canonical_name("zsh").unwrap(),
-            ShellChoice::Zsh
-        );
-        assert_eq!(
-            ShellChoice::from_canonical_name("cmd").unwrap(),
-            ShellChoice::Cmd
-        );
-        assert_eq!(
-            ShellChoice::from_canonical_name("bun").unwrap(),
-            ShellChoice::Bun
-        );
+        for &choice in ShellChoice::all() {
+            assert_eq!(
+                ShellChoice::from_canonical_name(choice.canonical_name()).unwrap(),
+                choice
+            );
+        }
     }
     #[test]
     fn executable_aliases_only_parse_for_shim_invocation() {

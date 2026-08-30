@@ -4,9 +4,6 @@ use std::fs;
 use std::io::Write as _;
 use std::path::Path;
 pub(crate) fn write_once(destination: &Path, contents: impl AsRef<[u8]>) -> Result<()> {
-    if destination.exists() {
-        return Ok(());
-    }
     publish_once(destination, |file| file.write_all(contents.as_ref()))
 }
 pub(crate) fn copy_once(source: &Path, destination: &Path) -> Result<()> {

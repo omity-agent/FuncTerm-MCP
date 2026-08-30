@@ -1,6 +1,7 @@
 use anyhow::{Context as _, Result};
 use named_lock::{NamedLock, NamedLockGuard};
-#[derive(Debug)]
+#[derive(Debug, thiserror :: Error)]
+#[error("daemon is already running for IPC service {service_name}")]
 pub(crate) struct DaemonAlreadyRunning {
     service_name: String,
 }
@@ -16,16 +17,6 @@ impl DaemonAlreadyRunning {
         &self.service_name
     }
 }
-impl core::fmt::Display for DaemonAlreadyRunning {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(
-            f,
-            "daemon is already running for IPC service {}",
-            self.service_name
-        )
-    }
-}
-impl core::error::Error for DaemonAlreadyRunning {}
 pub(crate) struct DaemonLock {
     _lock: NamedLock,
     _guard: NamedLockGuard,

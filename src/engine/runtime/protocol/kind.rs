@@ -1,13 +1,5 @@
-use super::{Payload, Request};
+use super::{Payload, PayloadKind, Request};
 use anyhow::{Result, bail};
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum PayloadKind {
-    Pong,
-    TabCreated,
-    KeyboardWritten,
-    CommandAccepted,
-    View,
-}
 impl Payload {
     pub(crate) fn ensure_matches(self, request: &Request) -> Result<Self> {
         let expected = request.response_kind();
@@ -21,18 +13,8 @@ impl Payload {
             expected.name()
         )
     }
-    const fn kind(&self) -> PayloadKind {
-        match *self {
-            Self::Pong => PayloadKind::Pong,
-            Self::TabCreated { tab_id: _ } => PayloadKind::TabCreated,
-            Self::KeyboardWritten { view: _ } => PayloadKind::KeyboardWritten,
-            Self::CommandAccepted {
-                command_id: _,
-                end_reason: _,
-                view: _,
-            } => PayloadKind::CommandAccepted,
-            Self::View(_) => PayloadKind::View,
-        }
+    fn kind(&self) -> PayloadKind {
+        self.into()
     }
 }
 impl Request {
