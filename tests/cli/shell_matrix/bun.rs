@@ -12,6 +12,23 @@ const BUN: ShellCase = ShellCase {
     expected_exit_code: 0,
 };
 #[test]
+fn bun_command_output_excludes_repl_echo_and_terminal_styling() {
+    let executable = required_executable(&BUN);
+    let _guard = locked_with_env(&[(BUN.env_var, &executable)]);
+    let cwd = case_dir(BUN.name, "clean command output");
+    let created = create_tab(&cwd, BUN.name);
+    let result = parse_command_result(&send_command(&created.tab_id, "1 + 2", 10.0));
+    assert_eq!(result.exit_code, Some(0_i32));
+    assert_eq!(result.stdout, "\n3\n");
+    let multiline = parse_command_result(&send_command(
+        &created.tab_id,
+        "console.log('FIRST')\nconsole.log('SECOND')",
+        10.0,
+    ));
+    assert_eq!(multiline.exit_code, Some(0_i32));
+    assert_eq!(multiline.stdout, "\nFIRST\ntrue\nSECOND\ntrue\n");
+}
+#[test]
 fn cli_tools_work_with_bun_repl() {
     let executable = required_executable(&BUN);
     let _guard = locked_with_env(&[(BUN.env_var, &executable)]);

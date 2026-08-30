@@ -1,19 +1,16 @@
+mod output_capture;
 use crate::contract::{
     COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, COMMAND_INPUT_DIRECTORY,
     COMMAND_OUTPUT_DIRECTORY, COMMAND_WORKING_DIRECTORY_FILE, DISPATCH_FILE, HELPER_EXECUTABLE_ENV,
     SESSION_COMMANDS_DIRECTORY, SESSION_STATE_DIRECTORY, STDERR_FILE, STDOUT_FILE,
 };
-#[expect(
-    clippy::uninlined_format_args,
-    reason = "explicit aliases keep Rust format fields distinct from embedded JavaScript templates"
-)]
 pub(super) fn script(cwd: &str, ready: &str) -> String {
     format!(
         r#"import {{ spawnSync }} from "node:child_process";
 import {{ existsSync, readFileSync, rmSync, watch, writeFileSync }} from "node:fs";
 import {{ join, delimiter }} from "node:path";
-import {{ start }} from "node:repl";
-import {{ format }} from "node:util";
+import {{ Recoverable, start }} from "node:repl";
+import {{ format, inspect }} from "node:util";
 process.chdir({cwd});
 process.env.FUNCTERM_CURRENT_SHELL = "bun";
 const server = start({{ prompt: "> " }});
@@ -36,37 +33,13 @@ const prependShimPath = () => {{
     if (!shim) return;
     process.env.PATH = [shim, ...(process.env.PATH ?? "").split(delimiter).filter(value => value && value !== shim)].join(delimiter);
 }};
-const captureOutput = () => {{
-    const stdout = [], stderr = [];
-    const stdoutWrite = process.stdout.write.bind(process.stdout);
-    const stderrWrite = process.stderr.write.bind(process.stderr);
-    const write = (original, chunks) => (chunk, ...args) => {{
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, typeof args[0] === "string" ? args[0] : undefined));
-        return original(chunk, ...args);
-    }};
-    process.stdout.write = write(stdoutWrite, stdout);
-    process.stderr.write = write(stderrWrite, stderr);
-    const consoleMethods = [];
-    for (const consoleObject of new Set([console, server.context.console])) {{
-        for (const [name, target] of [["log", process.stdout], ["info", process.stdout], ["warn", process.stderr], ["error", process.stderr]]) {{
-            consoleMethods.push([consoleObject, name, consoleObject[name]]);
-            consoleObject[name] = (...values) => target.write(`${{format(...values)}}\n`);
-        }}
-    }}
-    return {{
-        stdout, stderr,
-        restore() {{
-            process.stdout.write = stdoutWrite;
-            process.stderr.write = stderrWrite;
-            for (const [consoleObject, name, method] of consoleMethods) consoleObject[name] = method;
-        }}
-    }};
-}};
+{output_capture}
 const restoreEnvironment = (name, value) => value === undefined ? delete process.env[name] : process.env[name] = value;
 const finishCommand = () => {{
     const command = activeCommand;
     if (!command) return;
     activeCommand = undefined;
+    server.writer = command.previousWriter;
     command.capture.restore();
     writeFileSync(join(command.output, "{stdout_file}"), Buffer.concat(command.capture.stdout));
     writeFileSync(join(command.output, "{stderr_file}"), Buffer.concat(command.capture.stderr));
@@ -98,14 +71,20 @@ const finishDeferredPrompt = () => {{
     displayPrompt(...args);
 }};
 server.eval = (source, context, file, callback) => {{
+    if (activeCommand) activeCommand.readingInput = false;
     pendingEvaluations += 1;
     let callbackCalled = false;
     const finishEvaluation = (error, value) => {{
         if (callbackCalled) return;
         callbackCalled = true;
-        if (activeCommand && error) activeCommand.failed = true;
+        if (activeCommand && error instanceof Recoverable && inputDepth > 0) {{
+            activeCommand.readingInput = true;
+        }} else if (activeCommand && error) {{
+            activeCommand.failed = true;
+        }}
         pendingEvaluations -= 1;
         callback(error, value);
+        if (activeCommand && inputDepth > 0) activeCommand.readingInput = true;
         finishDeferredPrompt();
     }};
     try {{
@@ -144,9 +123,12 @@ const dispatch = () => {{
         prependShimPath();
         process.chdir(workingDirectory);
         runHelper(["internal-write-start", "--command-id", commandId, "--directory", directory]);
+        const previousWriter = server.writer;
+        server.writer = value => inspect(value, {{ ...previousWriter.options, colors: false }});
         activeCommand = {{
             id: commandId, directory, output, previousId, previousDirectory, previousError,
-            started: performance.now(), failed: false, capture: captureOutput()
+            previousWriter, started: performance.now(), failed: false, readingInput: true,
+            nativeInput: source.trimStart().startsWith("."), capture: captureOutput()
         }};
         evaluationReturned = true;
         inputDepth += 1;
@@ -188,5 +170,6 @@ writeFileSync({ready}, "");
         command_directory_env = COMMAND_DIRECTORY_ENV,
         stdout_file = STDOUT_FILE,
         stderr_file = STDERR_FILE,
+        output_capture = output_capture::SCRIPT,
     )
 }

@@ -1,3 +1,5 @@
+mod snapshot_system;
+use self::snapshot_system::SnapshotSystem;
 use super::{ShellChoice, shims};
 use crate::runtime::protocol::EnvironmentSnapshot;
 use anyhow::{Context as _, Result, bail};
@@ -9,14 +11,12 @@ pub(super) fn select_available_executable(
     environment: &EnvironmentSnapshot,
     cwd: &Path,
 ) -> Result<PathBuf> {
-    let search_path = environment.value("PATH");
     let inherited_shim = environment.value(shims::SHIM_DIR_ENV);
     let mut errors = Vec::new();
     for candidate in candidates {
         match resolve_executable(
             choice,
             candidate,
-            search_path.as_deref(),
             cwd,
             inherited_shim.as_deref(),
             environment,
@@ -34,12 +34,13 @@ pub(super) fn select_available_executable(
 fn resolve_executable(
     choice: ShellChoice,
     candidate: &str,
-    path: Option<&OsStr>,
     cwd: &Path,
     inherited_shim: Option<&OsStr>,
     environment: &EnvironmentSnapshot,
 ) -> Result<PathBuf> {
-    let executables = which::which_in_all(candidate, path, cwd)?;
+    let executables = which::WhichConfig::new_with_sys(SnapshotSystem::new(environment, cwd))
+        .binary_name(candidate.into())
+        .all_results()?;
     for executable in executables {
         if !is_rejected_executable(choice, &executable, inherited_shim, environment)? {
             return Ok(executable);
@@ -128,30 +129,4 @@ fn same_file(left: &Path, right: &Path) -> bool {
     left_path == right_path
 }
 #[cfg(test)]
-mod tests {
-    #[cfg(windows)]
-    use super::is_windows_subsystem_bash_path;
-    #[cfg(windows)]
-    #[test]
-    fn windows_system32_bash_is_rejected_as_wsl() {
-        let system_root = crate::test_fs::temp_dir("wsl-bash").join("Windows");
-        let system32 = system_root.join("System32");
-        std::fs::create_dir_all(&system32).unwrap();
-        let bash = system32.join("bash.exe");
-        std::fs::write(&bash, b"").unwrap();
-        assert!(is_windows_subsystem_bash_path(&bash, &system_root));
-    }
-    #[cfg(windows)]
-    #[test]
-    fn non_system32_bash_is_available() {
-        let root = crate::test_fs::temp_dir("non-wsl-bash");
-        let directory = root.join("Git").join("bin");
-        std::fs::create_dir_all(&directory).unwrap();
-        let bash = directory.join("bash.exe");
-        std::fs::write(&bash, b"").unwrap();
-        assert!(!is_windows_subsystem_bash_path(
-            &bash,
-            std::path::Path::new("C:\\Windows")
-        ));
-    }
-}
+mod tests;
