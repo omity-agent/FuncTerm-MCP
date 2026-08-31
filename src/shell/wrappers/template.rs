@@ -36,7 +36,7 @@ pub(super) fn render_powershell(template: &str) -> String {
     )
 }
 pub(in crate::shell) fn cmd_dispatcher() -> String {
-    render(
+    let rendered = render(
         CMD_DISPATCHER,
         &[
             ("@DISPATCH@", DISPATCH_FILE),
@@ -44,7 +44,8 @@ pub(in crate::shell) fn cmd_dispatcher() -> String {
             ("@SESSION_STATE@", SESSION_STATE_DIRECTORY),
             ("@WORKING_DIRECTORY@", COMMAND_WORKING_DIRECTORY_FILE),
         ],
-    )
+    );
+    super::VariableNamespace::new().render(&rendered)
 }
 pub(super) fn powershell_dispatcher() -> String {
     let session_root_env = SESSION_ROOT_ENV;
@@ -56,13 +57,13 @@ pub(super) fn powershell_dispatcher() -> String {
     let runner = POWERSHELL_COMMAND_FUNCTION;
     format!(
         r"function f {{
-    $dispatchFile = Join-Path $env:{session_root_env} '{state_directory}\{dispatch_file}'
-    $commandId = [IO.File]::ReadAllText($dispatchFile, [Text.Encoding]::UTF8)
-    [IO.File]::Delete($dispatchFile)
-    $directory = Join-Path $env:{session_root_env} ('{commands_directory}\' + $commandId)
-    $workingDirectoryFile = Join-Path $directory '{input_directory}\{working_directory_file}'
-    $workingDirectory = [IO.File]::ReadAllText($workingDirectoryFile, [Text.Encoding]::UTF8)
-    {runner} -CommandId $commandId -Directory $directory -WorkingDirectory $workingDirectory
+    $@VAR_dispatchFile@ = Join-Path $env:{session_root_env} '{state_directory}\{dispatch_file}'
+    $@VAR_commandId@ = [IO.File]::ReadAllText($@VAR_dispatchFile@, [Text.Encoding]::UTF8)
+    [IO.File]::Delete($@VAR_dispatchFile@)
+    $@VAR_directory@ = Join-Path $env:{session_root_env} ('{commands_directory}\' + $@VAR_commandId@)
+    $@VAR_workingDirectoryFile@ = Join-Path $@VAR_directory@ '{input_directory}\{working_directory_file}'
+    $@VAR_workingDirectory@ = [IO.File]::ReadAllText($@VAR_workingDirectoryFile@, [Text.Encoding]::UTF8)
+    {runner} -@VAR_CommandId@ $@VAR_commandId@ -@VAR_Directory@ $@VAR_directory@ -@VAR_WorkingDirectory@ $@VAR_workingDirectory@
 }}",
     )
 }
@@ -76,15 +77,15 @@ pub(super) fn posix_dispatcher() -> String {
     let runner = POSIX_COMMAND_FUNCTION;
     format!(
         r#"f() {{
-    local dispatch_file="${{{session_root_env}}}/{state_directory}/{dispatch_file}"
-    local command_id
-    command_id="$(cat "$dispatch_file")" || return 1
-    rm -f -- "$dispatch_file" || return 1
-    local native_directory="${{{session_root_env}}}/{commands_directory}/$command_id"
-    local working_directory_file="$native_directory/{input_directory}/{working_directory_file}"
-    local working_directory
-    working_directory="$(cat "$working_directory_file")" || return 1
-    {runner} "$command_id" "$native_directory" "$working_directory"
+    local @VAR_dispatch_file@="${{{session_root_env}}}/{state_directory}/{dispatch_file}"
+    local @VAR_command_id@
+    @VAR_command_id@="$(cat "$@VAR_dispatch_file@")" || return 1
+    rm -f -- "$@VAR_dispatch_file@" || return 1
+    local @VAR_native_directory@="${{{session_root_env}}}/{commands_directory}/$@VAR_command_id@"
+    local @VAR_working_directory_file@="$@VAR_native_directory@/{input_directory}/{working_directory_file}"
+    local @VAR_working_directory@
+    @VAR_working_directory@="$(cat "$@VAR_working_directory_file@")" || return 1
+    {runner} "$@VAR_command_id@" "$@VAR_native_directory@" "$@VAR_working_directory@"
 }}"#,
     )
 }
@@ -97,7 +98,7 @@ pub(super) fn nushell_dispatcher() -> String {
     let working_directory_file = COMMAND_WORKING_DIRECTORY_FILE;
     let runner = POSIX_COMMAND_FUNCTION;
     format!(
-        "def --env f [] {{\n    let dispatch_file = ($env.{session_root_env} | path join '{state_directory}' '{dispatch_file}')\n    let command_id = (open --raw $dispatch_file)\n    rm --force $dispatch_file\n    let directory = ($env.{session_root_env} | path join '{commands_directory}' $command_id)\n    let working_directory = (open --raw ($directory | path join '{input_directory}' '{working_directory_file}'))\n    {runner} $command_id $directory $working_directory\n}}",
+        "def --env f [] {{\n    let @VAR_dispatch_file@ = ($env.{session_root_env} | path join '{state_directory}' '{dispatch_file}')\n    let @VAR_command_id@ = (open --raw $@VAR_dispatch_file@)\n    rm --force $@VAR_dispatch_file@\n    let @VAR_directory@ = ($env.{session_root_env} | path join '{commands_directory}' $@VAR_command_id@)\n    let @VAR_working_directory@ = (open --raw ($@VAR_directory@ | path join '{input_directory}' '{working_directory_file}'))\n    {runner} $@VAR_command_id@ $@VAR_directory@ $@VAR_working_directory@\n}}",
     )
 }
 fn render(template: &str, extra: &[(&str, &str)]) -> String {
@@ -108,35 +109,35 @@ fn render(template: &str, extra: &[(&str, &str)]) -> String {
     text
 }
 const CMD_DISPATCHER: &str = r#"@echo off
-set "dispatch_file=%FUNCTERM_SESSION_ROOT%\@SESSION_STATE@\@DISPATCH@"
-set /p "command_id="<"%dispatch_file%" || exit /b 1
-del /q "%dispatch_file%" || exit /b 1
-set "directory=%FUNCTERM_SESSION_ROOT%\@SESSION_COMMANDS@\%command_id%"
-set /p "working_directory="<"%directory%\@INPUT_DIR@\@WORKING_DIRECTORY@" || exit /b 1
-call "%FUNCTERM_SESSION_ROOT%\startup\cmd_run.bat" "%command_id%" "%directory%" "%working_directory%"
+set "@VAR_dispatch_file@=%FUNCTERM_SESSION_ROOT%\@SESSION_STATE@\@DISPATCH@"
+set /p "@VAR_command_id@="<"%@VAR_dispatch_file@%" || exit /b 1
+del /q "%@VAR_dispatch_file@%" || exit /b 1
+set "@VAR_directory@=%FUNCTERM_SESSION_ROOT%\@SESSION_COMMANDS@\%@VAR_command_id@%"
+set /p "@VAR_working_directory@="<"%@VAR_directory@%\@INPUT_DIR@\@WORKING_DIRECTORY@" || exit /b 1
+call "%FUNCTERM_SESSION_ROOT%\startup\cmd_run.bat" "%@VAR_command_id@%" "%@VAR_directory@%" "%@VAR_working_directory@%"
 exit /b %ERRORLEVEL%
 "#;
-pub (super) const POWERSHELL_STATE_PROMOTION : & str = "        foreach ($variable in Get-Variable -Scope Local) {
-            if (
-                $variable.Name -notin $existingVariables -and
-                $variable.Options -notmatch 'ReadOnly|Constant'
-            ) {
-                Set-Variable -Scope Global -Name $variable.Name -Value $variable.Value
-            }
-        }
-        foreach ($function in Get-ChildItem Function:) {
-            if (
-                -not $existingFunctions.ContainsKey($function.Name) -or
-                $existingFunctions[$function.Name] -ne $function.ScriptBlock.ToString()
-            ) {
-                Set-Item -LiteralPath ('Function:\\global:' + $function.Name) -Value $function.ScriptBlock
-            }
-        }
-        foreach ($alias in Get-ChildItem Alias:) {
-            if (
-                -not $existingAliases.ContainsKey($alias.Name) -or
-                $existingAliases[$alias.Name] -ne $alias.Definition
-            ) {
-                Set-Alias -Scope Global -Name $alias.Name -Value $alias.Definition
-            }
-	        }" ;
+pub (super) const POWERSHELL_STATE_PROMOTION : & str = "        foreach ($@VAR_variable@ in Get-Variable -Scope Local) {
+	            if (
+	                $@VAR_variable@.Name -notin $@VAR_existingVariables@ -and
+	                $@VAR_variable@.Options -notmatch 'ReadOnly|Constant'
+	            ) {
+	                Set-Variable -Scope Global -Name $@VAR_variable@.Name -Value $@VAR_variable@.Value
+	            }
+	        }
+	        foreach ($@VAR_function@ in Get-ChildItem Function:) {
+	            if (
+	                -not $@VAR_existingFunctions@.ContainsKey($@VAR_function@.Name) -or
+	                $@VAR_existingFunctions@[$@VAR_function@.Name] -ne $@VAR_function@.ScriptBlock.ToString()
+	            ) {
+	                Set-Item -LiteralPath ('Function:\\global:' + $@VAR_function@.Name) -Value $@VAR_function@.ScriptBlock
+	            }
+	        }
+	        foreach ($@VAR_alias@ in Get-ChildItem Alias:) {
+	            if (
+	                -not $@VAR_existingAliases@.ContainsKey($@VAR_alias@.Name) -or
+	                $@VAR_existingAliases@[$@VAR_alias@.Name] -ne $@VAR_alias@.Definition
+	            ) {
+	                Set-Alias -Scope Global -Name $@VAR_alias@.Name -Value $@VAR_alias@.Definition
+	            }
+		        }" ;

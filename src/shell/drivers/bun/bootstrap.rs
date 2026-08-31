@@ -5,158 +5,160 @@ use crate::contract::{
     SESSION_COMMANDS_DIRECTORY, SESSION_STATE_DIRECTORY, STDERR_FILE, STDOUT_FILE,
 };
 pub(super) fn script(cwd: &str, ready: &str) -> String {
-    format!(
-        r#"import {{ spawnSync }} from "node:child_process";
-import {{ existsSync, readFileSync, rmSync, watch, writeFileSync }} from "node:fs";
-import {{ join, delimiter }} from "node:path";
-import {{ Recoverable, start }} from "node:repl";
-import {{ format, inspect }} from "node:util";
-process.chdir({cwd});
-process.env.FUNCTERM_CURRENT_SHELL = "bun";
-const server = start({{ prompt: "> " }});
-const evaluate = server.eval;
-let activeCommand;
-let dispatching = false;
-let inputDepth = 0;
-let pendingEvaluations = 0;
-let deferredPrompt;
-let evaluationReturned = false;
-const runHelper = args => {{
-    const helper = process.env.{helper_env};
-    if (!helper) throw new Error("{helper_env} is not set");
-    const result = spawnSync(helper, args, {{ env: process.env, stdio: "inherit" }});
-    if (result.error) throw result.error;
-    if (result.status !== 0) throw new Error(`FuncTerm helper exited with ${{result.status}}`);
-}};
-const prependShimPath = () => {{
-    const shim = process.env.FUNCTERM_SHIM_DIR;
-    if (!shim) return;
-    process.env.PATH = [shim, ...(process.env.PATH ?? "").split(delimiter).filter(value => value && value !== shim)].join(delimiter);
-}};
-{output_capture}
-const restoreEnvironment = (name, value) => value === undefined ? delete process.env[name] : process.env[name] = value;
-const finishCommand = () => {{
-    const command = activeCommand;
-    if (!command) return;
-    activeCommand = undefined;
-    server.writer = command.previousWriter;
-    command.capture.restore();
-    writeFileSync(join(command.output, "{stdout_file}"), Buffer.concat(command.capture.stdout));
-    writeFileSync(join(command.output, "{stderr_file}"), Buffer.concat(command.capture.stderr));
-    const elapsed = `${{Math.max(1, Math.ceil(performance.now() - command.started))}}ms`;
-    runHelper(["internal-write-done", "--command-id", command.id, "--exit-code", command.failed ? "1" : "0", "--time-consumption", elapsed, "--cwd", process.cwd(), "--directory", command.directory]);
-    restoreEnvironment("{command_id_env}", command.previousId);
-    restoreEnvironment("{command_directory_env}", command.previousDirectory);
-}};
-const displayPrompt = server.displayPrompt.bind(server);
-server.displayPrompt = (...args) => {{
-    const nativeError = activeCommand && server.context._error !== activeCommand.previousError;
-    if (nativeError) {{
-        activeCommand.failed = true;
-        pendingEvaluations = 0;
-        evaluationReturned = true;
-    }}
-    if (activeCommand && (inputDepth > 0 || pendingEvaluations > 0 || !evaluationReturned)) {{
-        deferredPrompt = args;
-        return;
-    }}
-    finishCommand();
-    return displayPrompt(...args);
-}};
-const finishDeferredPrompt = () => {{
-    if (!activeCommand || inputDepth > 0 || pendingEvaluations > 0 || !evaluationReturned || !deferredPrompt) return;
-    const args = deferredPrompt;
-    deferredPrompt = undefined;
-    finishCommand();
-    displayPrompt(...args);
-}};
-server.eval = (source, context, file, callback) => {{
-    if (activeCommand) activeCommand.readingInput = false;
-    pendingEvaluations += 1;
-    let callbackCalled = false;
-    const finishEvaluation = (error, value) => {{
-        if (callbackCalled) return;
-        callbackCalled = true;
-        if (activeCommand && error instanceof Recoverable && inputDepth > 0) {{
-            activeCommand.readingInput = true;
-        }} else if (activeCommand && error) {{
-            activeCommand.failed = true;
-        }}
-        pendingEvaluations -= 1;
-        callback(error, value);
-        if (activeCommand && inputDepth > 0) activeCommand.readingInput = true;
-        finishDeferredPrompt();
-    }};
-    try {{
-        const returned = evaluate.call(server, source, context, file, finishEvaluation);
-        if (returned && typeof returned.then === "function") {{
-            returned.then(value => finishEvaluation(null, value), error => finishEvaluation(error));
-        }}
-    }} finally {{
-        evaluationReturned = true;
-        finishDeferredPrompt();
-    }}
-}};
-server.on("exit", () => {{
-    finishCommand();
-    watcher.close();
-}});
-const stateDirectory = join(process.env.FUNCTERM_SESSION_ROOT, "{session_state}");
-const dispatchFile = join(stateDirectory, "{dispatch_file}");
-const dispatch = () => {{
-    if (dispatching || activeCommand) return;
-    dispatching = true;
-    try {{
-        const commandId = readFileSync(dispatchFile, "utf8");
-        rmSync(dispatchFile);
-        const directory = join(process.env.FUNCTERM_SESSION_ROOT, "{commands_directory}", commandId);
-        const input = join(directory, "{input_directory}");
-        const output = join(directory, "{output_directory}");
-        const source = readFileSync(join(input, "{command_file}"), "utf8");
-        const workingDirectory = readFileSync(join(input, "{working_directory_file}"), "utf8");
-        const previousId = process.env.{command_id_env};
-        const previousDirectory = process.env.{command_directory_env};
-        const previousError = server.context._error;
-        process.env.{command_id_env} = commandId;
-        process.env.{command_directory_env} = directory;
-        runHelper(["internal-ensure-shims", "--directory", process.env.FUNCTERM_SHIM_DIR]);
-        prependShimPath();
-        process.chdir(workingDirectory);
-        runHelper(["internal-write-start", "--command-id", commandId, "--directory", directory]);
-        const previousWriter = server.writer;
-        server.writer = value => inspect(value, {{ ...previousWriter.options, colors: false }});
-        activeCommand = {{
-            id: commandId, directory, output, previousId, previousDirectory, previousError,
-            previousWriter, started: performance.now(), failed: false, readingInput: true,
-            nativeInput: source.trimStart().startsWith("."), capture: captureOutput()
-        }};
-        evaluationReturned = true;
-        inputDepth += 1;
-        try {{
-            server.write(source.endsWith("\n") ? source : `${{source}}\n`);
-        }} finally {{
-            inputDepth -= 1;
-        }}
-        finishDeferredPrompt();
-        server.resume();
-    }} catch (error) {{
-        console.error(error);
-        server.close();
-    }} finally {{
-        dispatching = false;
-    }}
-}};
-const watcher = watch(stateDirectory, () => {{
-    if (!existsSync(dispatchFile)) return;
-    try {{
-        dispatch();
-    }} catch (error) {{
-        console.error(error);
-        server.close();
-    }}
-}});
-server.resume();
-writeFileSync({ready}, "");
+    let bootstrap = format!(
+        r#"import {{ spawnSync as @VAR_spawnSync@ }} from "node:child_process";
+	import {{ existsSync as @VAR_existsSync@, readFileSync as @VAR_readFileSync@, rmSync as @VAR_rmSync@, watch as @VAR_watch@, writeFileSync as @VAR_writeFileSync@ }} from "node:fs";
+	import {{ join as @VAR_join@, delimiter as @VAR_delimiter@ }} from "node:path";
+	import {{ Recoverable as @VAR_Recoverable@, start as @VAR_start@ }} from "node:repl";
+	import {{ format as @VAR_format@, inspect as @VAR_inspect@ }} from "node:util";
+	process.chdir({cwd});
+	process.env.FUNCTERM_CURRENT_SHELL = "bun";
+	const @VAR_server@ = @VAR_start@({{ prompt: "> " }});
+	const @VAR_evaluate@ = @VAR_server@.eval;
+	let @VAR_activeCommand@;
+	let @VAR_dispatching@ = false;
+	let @VAR_inputDepth@ = 0;
+	let @VAR_pendingEvaluations@ = 0;
+	let @VAR_deferredPrompt@;
+	let @VAR_evaluationReturned@ = false;
+	const @VAR_runHelper@ = @VAR_args@ => {{
+	    const @VAR_helper@ = process.env.{helper_env};
+	    if (!@VAR_helper@) throw new Error("{helper_env} is not set");
+	    const @VAR_result@ = @VAR_spawnSync@(@VAR_helper@, @VAR_args@, {{ env: process.env, stdio: "inherit" }});
+	    if (@VAR_result@.error) throw @VAR_result@.error;
+	    if (@VAR_result@.status !== 0) throw new Error(`FuncTerm helper exited with ${{@VAR_result@.status}}`);
+	}};
+	const @VAR_prependShimPath@ = () => {{
+	    const @VAR_shim@ = process.env.FUNCTERM_SHIM_DIR;
+	    if (!@VAR_shim@) return;
+	    process.env.PATH = [@VAR_shim@, ...(process.env.PATH ?? "").split(@VAR_delimiter@).filter(@VAR_value@ => @VAR_value@ && @VAR_value@ !== @VAR_shim@)].join(@VAR_delimiter@);
+	}};
+	{output_capture}
+	const @VAR_restoreEnvironment@ = (@VAR_name@, @VAR_value@) => @VAR_value@ === undefined ? delete process.env[@VAR_name@] : process.env[@VAR_name@] = @VAR_value@;
+	const @VAR_finishCommand@ = () => {{
+	    const @VAR_command@ = @VAR_activeCommand@;
+	    if (!@VAR_command@) return;
+	    @VAR_activeCommand@ = undefined;
+	    @VAR_server@.writer = @VAR_command@.previousWriter;
+	    @VAR_command@.capture.restore();
+	    @VAR_writeFileSync@(@VAR_join@(@VAR_command@.output, "{stdout_file}"), Buffer.concat(@VAR_command@.capture.stdout));
+	    @VAR_writeFileSync@(@VAR_join@(@VAR_command@.output, "{stderr_file}"), Buffer.concat(@VAR_command@.capture.stderr));
+	    const @VAR_elapsed@ = `${{Math.max(1, Math.ceil(performance.now() - @VAR_command@.started))}}ms`;
+	    @VAR_runHelper@(["internal-write-done", "--command-id", @VAR_command@.id, "--exit-code", @VAR_command@.failed ? "1" : "0", "--time-consumption", @VAR_elapsed@, "--cwd", process.cwd(), "--directory", @VAR_command@.directory]);
+	    @VAR_restoreEnvironment@("{command_id_env}", @VAR_command@.previousId);
+	    @VAR_restoreEnvironment@("{command_directory_env}", @VAR_command@.previousDirectory);
+	}};
+	const @VAR_displayPrompt@ = @VAR_server@.displayPrompt.bind(@VAR_server@);
+	@VAR_server@.displayPrompt = (...@VAR_args@) => {{
+	    const @VAR_nativeError@ = @VAR_activeCommand@ && @VAR_server@.context._error !== @VAR_activeCommand@.previousError;
+	    if (@VAR_nativeError@) {{
+	        @VAR_activeCommand@.failed = true;
+	        @VAR_pendingEvaluations@ = 0;
+	        @VAR_evaluationReturned@ = true;
+	    }}
+	    if (@VAR_activeCommand@ && (@VAR_inputDepth@ > 0 || @VAR_pendingEvaluations@ > 0 || !@VAR_evaluationReturned@)) {{
+	        @VAR_deferredPrompt@ = @VAR_args@;
+	        return;
+	    }}
+	    @VAR_finishCommand@();
+	    return @VAR_displayPrompt@(...@VAR_args@);
+	}};
+	const @VAR_finishDeferredPrompt@ = () => {{
+	    if (!@VAR_activeCommand@ || @VAR_inputDepth@ > 0 || @VAR_pendingEvaluations@ > 0 || !@VAR_evaluationReturned@ || !@VAR_deferredPrompt@) return;
+	    const @VAR_args@ = @VAR_deferredPrompt@;
+	    @VAR_deferredPrompt@ = undefined;
+	    @VAR_finishCommand@();
+	    @VAR_displayPrompt@(...@VAR_args@);
+	}};
+	@VAR_server@.eval = (@VAR_source@, @VAR_context@, @VAR_file@, @VAR_callback@) => {{
+	    if (@VAR_activeCommand@) @VAR_activeCommand@.readingInput = false;
+	    @VAR_pendingEvaluations@ += 1;
+	    let @VAR_callbackCalled@ = false;
+	    const @VAR_finishEvaluation@ = (@VAR_error@, @VAR_value@) => {{
+	        if (@VAR_callbackCalled@) return;
+	        @VAR_callbackCalled@ = true;
+	        if (@VAR_activeCommand@ && @VAR_error@ instanceof @VAR_Recoverable@ && @VAR_inputDepth@ > 0) {{
+	            @VAR_activeCommand@.readingInput = true;
+	        }} else if (@VAR_activeCommand@ && @VAR_error@) {{
+	            @VAR_activeCommand@.failed = true;
+	        }}
+	        @VAR_pendingEvaluations@ -= 1;
+	        @VAR_callback@(@VAR_error@, @VAR_value@);
+	        if (@VAR_activeCommand@ && @VAR_inputDepth@ > 0) @VAR_activeCommand@.readingInput = true;
+	        @VAR_finishDeferredPrompt@();
+	    }};
+	    try {{
+	        const @VAR_returned@ = @VAR_evaluate@.call(@VAR_server@, @VAR_source@, @VAR_context@, @VAR_file@, @VAR_finishEvaluation@);
+	        if (@VAR_returned@ && typeof @VAR_returned@.then === "function") {{
+	            @VAR_returned@.then(@VAR_value@ => @VAR_finishEvaluation@(null, @VAR_value@), @VAR_error@ => @VAR_finishEvaluation@(@VAR_error@));
+	        }}
+	    }} finally {{
+	        @VAR_evaluationReturned@ = true;
+	        @VAR_finishDeferredPrompt@();
+	    }}
+	}};
+	@VAR_server@.on("exit", () => {{
+	    @VAR_finishCommand@();
+	    @VAR_watcher@.close();
+	}});
+	const @VAR_stateDirectory@ = @VAR_join@(process.env.FUNCTERM_SESSION_ROOT, "{session_state}");
+	const @VAR_dispatchFile@ = @VAR_join@(@VAR_stateDirectory@, "{dispatch_file}");
+	const @VAR_dispatch@ = () => {{
+	    if (@VAR_dispatching@ || @VAR_activeCommand@) return;
+	    @VAR_dispatching@ = true;
+	    try {{
+	        const @VAR_commandId@ = @VAR_readFileSync@(@VAR_dispatchFile@, "utf8");
+	        @VAR_rmSync@(@VAR_dispatchFile@);
+	        const @VAR_directory@ = @VAR_join@(process.env.FUNCTERM_SESSION_ROOT, "{commands_directory}", @VAR_commandId@);
+	        const @VAR_input@ = @VAR_join@(@VAR_directory@, "{input_directory}");
+	        const @VAR_output@ = @VAR_join@(@VAR_directory@, "{output_directory}");
+	        const @VAR_source@ = @VAR_readFileSync@(@VAR_join@(@VAR_input@, "{command_file}"), "utf8");
+	        const @VAR_workingDirectory@ = @VAR_readFileSync@(@VAR_join@(@VAR_input@, "{working_directory_file}"), "utf8");
+	        const @VAR_previousId@ = process.env.{command_id_env};
+	        const @VAR_previousDirectory@ = process.env.{command_directory_env};
+	        const @VAR_previousError@ = @VAR_server@.context._error;
+	        process.env.{command_id_env} = @VAR_commandId@;
+	        process.env.{command_directory_env} = @VAR_directory@;
+	        @VAR_runHelper@(["internal-ensure-shims", "--directory", process.env.FUNCTERM_SHIM_DIR]);
+	        @VAR_prependShimPath@();
+	        process.chdir(@VAR_workingDirectory@);
+	        @VAR_runHelper@(["internal-write-start", "--command-id", @VAR_commandId@, "--directory", @VAR_directory@]);
+	        const @VAR_previousWriter@ = @VAR_server@.writer;
+	        @VAR_server@.writer = @VAR_value@ => @VAR_inspect@(@VAR_value@, {{ ...@VAR_previousWriter@.options, colors: false }});
+	        @VAR_activeCommand@ = {{
+	            id: @VAR_commandId@, directory: @VAR_directory@, output: @VAR_output@,
+	            previousId: @VAR_previousId@, previousDirectory: @VAR_previousDirectory@,
+	            previousError: @VAR_previousError@, previousWriter: @VAR_previousWriter@,
+	            started: performance.now(), failed: false, readingInput: true,
+	            nativeInput: @VAR_source@.trimStart().startsWith("."), capture: @VAR_captureOutput@()
+	        }};
+	        @VAR_evaluationReturned@ = true;
+	        @VAR_inputDepth@ += 1;
+	        try {{
+	            @VAR_server@.write(@VAR_source@.endsWith("\n") ? @VAR_source@ : `${{@VAR_source@}}\n`);
+	        }} finally {{
+	            @VAR_inputDepth@ -= 1;
+	        }}
+	        @VAR_finishDeferredPrompt@();
+	        @VAR_server@.resume();
+	    }} catch (@VAR_error@) {{
+	        console.error(@VAR_error@);
+	        @VAR_server@.close();
+	    }} finally {{
+	        @VAR_dispatching@ = false;
+	    }}
+	}};
+	const @VAR_watcher@ = @VAR_watch@(@VAR_stateDirectory@, () => {{
+	    if (!@VAR_existsSync@(@VAR_dispatchFile@)) return;
+	    try {{
+	        @VAR_dispatch@();
+	    }} catch (@VAR_error@) {{
+	        console.error(@VAR_error@);
+	        @VAR_server@.close();
+	    }}
+	}});
+	@VAR_server@.resume();
+	@VAR_writeFileSync@({ready}, "");
 "#,
         helper_env = HELPER_EXECUTABLE_ENV,
         session_state = SESSION_STATE_DIRECTORY,
@@ -171,5 +173,6 @@ writeFileSync({ready}, "");
         stdout_file = STDOUT_FILE,
         stderr_file = STDERR_FILE,
         output_capture = output_capture::SCRIPT,
-    )
+    );
+    crate::shell::wrappers::VariableNamespace::new().render(&bootstrap)
 }

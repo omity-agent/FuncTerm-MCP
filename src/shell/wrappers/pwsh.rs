@@ -8,143 +8,147 @@ pub(in crate::shell) fn wrapper() -> String {
         super::template::powershell_dispatcher()
     );
     let rendered = template::render_command_function(&script, POWERSHELL_COMMAND_FUNCTION);
-    template::render_powershell(&rendered.replace(
+    let wrapper = template::render_powershell(&rendered.replace(
         "@POWERSHELL_STATE_PROMOTION@",
         template::POWERSHELL_STATE_PROMOTION,
-    ))
+    ));
+    super::VariableNamespace::new().render(&wrapper)
 }
 const COMMAND_TEMPLATE : & str = "if (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue) {
-    Set-PSReadLineOption -HistorySaveStyle SaveNothing
-    $setPsReadLineOption = Get-Command Set-PSReadLineOption
-    if ($setPsReadLineOption.Parameters.ContainsKey('AddToHistoryHandler')) {
-        Set-PSReadLineOption -AddToHistoryHandler {
-            param([string] $line)
-            return $false
-        }
+	    Set-PSReadLineOption -HistorySaveStyle SaveNothing
+	    $@VAR_setPsReadLineOption@ = Get-Command Set-PSReadLineOption
+	    if ($@VAR_setPsReadLineOption@.Parameters.ContainsKey('AddToHistoryHandler')) {
+	        Set-PSReadLineOption -AddToHistoryHandler {
+	            param([string] $@VAR_line@)
+	            return $false
+	        }
     }
 }
 Clear-History
-function @FUNCTION@ {
-    param(
-        [Parameter(Mandatory = $true)][string]$CommandId,
-        [Parameter(Mandatory = $true)][string]$Directory,
-        [Parameter(Mandatory = $true)][string]$WorkingDirectory
-    )
-    Set-FuncTermShimPath
-    $inputDir = Join-Path $Directory '@INPUT_DIR@'
-    $outputDir = Join-Path $Directory '@OUTPUT_DIR@'
-    $stateDir = Join-Path $Directory '@STATE_DIR@'
-    $stdoutFile = Join-Path $outputDir '@STDOUT@'
-    $stderrFile = Join-Path $outputDir '@STDERR@'
-    $scriptFile = Join-Path $inputDir '@SCRIPT@'
-    $doneFile = Join-Path $stateDir '@DONE@'
-    $previousCommandId = $env:@COMMAND_ID_ENV@
-    $previousCommandDirectory = $env:@COMMAND_DIR_ENV@
-    $exitCode = 1
-    $timeConsumption = '0ns'
-    trap {
-        [IO.File]::AppendAllText($stderrFile, [string]$_ + [Environment]::NewLine, [Text.Encoding]::UTF8)
-        [Console]::Error.WriteLine($_)
-        $exitCode = 130
-        continue
-    }
-    $env:@COMMAND_ID_ENV@ = $CommandId
-    $env:@COMMAND_DIR_ENV@ = $Directory
-    try {
-        Ensure-FuncTermShims
-        Set-FuncTermShimPath
-        Set-Location -LiteralPath $WorkingDirectory
-        $global:LASTEXITCODE = $null
-        Publish-FuncTermStart -CommandId $CommandId -Directory $Directory
-        $global:LASTEXITCODE = $null
-        $script:FuncTermCommandNativeExitCode = $null
-        $script:FuncTermCommandSucceeded = $false
-        $existingVariables = $null
-        $existingFunctions = $null
-        $existingAliases = $null
-        $commandTimer = $null
-        $variable = $null
-        $function = $null
-        $alias = $null
-        $existingVariables = (Get-Variable -Scope Local).Name
-        $existingFunctions = @{}
-        foreach ($function in Get-ChildItem Function:) {
-            $existingFunctions[$function.Name] = $function.ScriptBlock.ToString()
-        }
-        $existingAliases = @{}
-        foreach ($alias in Get-ChildItem Alias:) {
-            $existingAliases[$alias.Name] = $alias.Definition
-        }
-        $commandTimer = [Diagnostics.Stopwatch]::StartNew()
-        . $scriptFile
-        . $script:FuncTermCommandScript 2> $stderrFile | Tee-Object -FilePath $stdoutFile
-        $script:FuncTermCommandSucceeded = $?
-        $script:FuncTermCommandNativeExitCode = $global:LASTEXITCODE
-        $commandTimer.Stop()
-@POWERSHELL_STATE_PROMOTION@
-        $timeConsumption = [string]::Format(
-            [Globalization.CultureInfo]::InvariantCulture,
-            '{0}ms',
-            $commandTimer.Elapsed.TotalMilliseconds
-        )
-        if ($null -ne $script:FuncTermCommandNativeExitCode) {
-            $exitCode = [int]$script:FuncTermCommandNativeExitCode
-        }
-        elseif ($script:FuncTermCommandSucceeded) {
-            $exitCode = 0
-        }
-        else {
-            $exitCode = 1
-        }
-        if ((Test-Path -LiteralPath $stderrFile) -and ((Get-Item -LiteralPath $stderrFile).Length -gt 0)) {
-            Get-Content -LiteralPath $stderrFile | ForEach-Object { [Console]::Error.WriteLine($_) }
-        }
-    }
-    catch {
-        $_ | Out-File -LiteralPath $stderrFile -Append -Encoding utf8
-        [Console]::Error.WriteLine($_)
-        $exitCode = 1
-    }
-    finally {
-        if (-not [IO.File]::Exists($doneFile)) {
-            $null = [IO.Directory]::CreateDirectory($stateDir)
-            if ([string]::IsNullOrEmpty($env:@HELPER_ENV@)) {
-                [Console]::Error.WriteLine('@HELPER_ENV@ is not set')
-                $exitCode = 1
-            }
-            else {
-                $currentDirectory = $ExecutionContext.SessionState.Path.CurrentFileSystemLocation.ProviderPath
-                $helperStart = [Diagnostics.ProcessStartInfo]::new($env:@HELPER_ENV@)
-                $helperStart.UseShellExecute = $false
-                $helperStart.ArgumentList.Add('internal-write-done')
-                $helperStart.ArgumentList.Add('--command-id')
-                $helperStart.ArgumentList.Add($CommandId)
-                $helperStart.ArgumentList.Add('--exit-code')
-                $helperStart.ArgumentList.Add([string]$exitCode)
-                $helperStart.ArgumentList.Add('--time-consumption')
-                $helperStart.ArgumentList.Add($timeConsumption)
-                $helperStart.ArgumentList.Add('--cwd')
-                $helperStart.ArgumentList.Add($currentDirectory)
-                $helperStart.ArgumentList.Add('--directory')
-                $helperStart.ArgumentList.Add($Directory)
-                $helperProcess = [Diagnostics.Process]::Start($helperStart)
-                $helperProcess.WaitForExit()
-                if ($helperProcess.ExitCode -ne 0) {
-                    $exitCode = $helperProcess.ExitCode
-                }
-            }
-        }
-        if ($null -eq $previousCommandId) {
-            Remove-Item Env:@COMMAND_ID_ENV@ -ErrorAction SilentlyContinue
-        }
-        else {
-            $env:@COMMAND_ID_ENV@ = $previousCommandId
-        }
-        if ($null -eq $previousCommandDirectory) {
-            Remove-Item Env:@COMMAND_DIR_ENV@ -ErrorAction SilentlyContinue
-        }
-        else {
-            $env:@COMMAND_DIR_ENV@ = $previousCommandDirectory
+	function @FUNCTION@ {
+	    param(
+	        [Parameter(Mandatory = $true)][string]$@VAR_CommandId@,
+	        [Parameter(Mandatory = $true)][string]$@VAR_Directory@,
+	        [Parameter(Mandatory = $true)][string]$@VAR_WorkingDirectory@
+	    )
+	    Set-FuncTermShimPath
+	    $@VAR_inputDir@ = Join-Path $@VAR_Directory@ '@INPUT_DIR@'
+	    $@VAR_outputDir@ = Join-Path $@VAR_Directory@ '@OUTPUT_DIR@'
+	    $@VAR_stateDir@ = Join-Path $@VAR_Directory@ '@STATE_DIR@'
+	    $@VAR_stdoutFile@ = Join-Path $@VAR_outputDir@ '@STDOUT@'
+	    $@VAR_stderrFile@ = Join-Path $@VAR_outputDir@ '@STDERR@'
+	    $@VAR_scriptFile@ = Join-Path $@VAR_inputDir@ '@SCRIPT@'
+	    $@VAR_doneFile@ = Join-Path $@VAR_stateDir@ '@DONE@'
+	    $@VAR_previousCommandId@ = $env:@COMMAND_ID_ENV@
+	    $@VAR_previousCommandDirectory@ = $env:@COMMAND_DIR_ENV@
+	    $@VAR_exitCode@ = 1
+	    $@VAR_timeConsumption@ = '0ns'
+	    trap {
+	        [IO.File]::AppendAllText($@VAR_stderrFile@, [string]$_ + [Environment]::NewLine, [Text.Encoding]::UTF8)
+	        [Console]::Error.WriteLine($_)
+	        $@VAR_exitCode@ = 130
+	        continue
+	    }
+	    $env:@COMMAND_ID_ENV@ = $@VAR_CommandId@
+	    $env:@COMMAND_DIR_ENV@ = $@VAR_Directory@
+	    try {
+	        Ensure-FuncTermShims
+	        Set-FuncTermShimPath
+	        Set-Location -LiteralPath $@VAR_WorkingDirectory@
+	        $global:LASTEXITCODE = $null
+	        Publish-FuncTermStart -@VAR_CommandId@ $@VAR_CommandId@ -@VAR_Directory@ $@VAR_Directory@
+	        $global:LASTEXITCODE = $null
+	        $@VAR_commandNativeExitCode@ = $null
+	        $@VAR_commandSucceeded@ = $false
+	        $@VAR_existingVariables@ = $null
+	        $@VAR_existingFunctions@ = $null
+	        $@VAR_existingAliases@ = $null
+	        $@VAR_commandTimer@ = $null
+	        $@VAR_commandScript@ = $null
+	        $@VAR_variable@ = $null
+	        $@VAR_function@ = $null
+	        $@VAR_alias@ = $null
+	        $@VAR_existingVariables@ = (Get-Variable -Scope Local).Name
+	        $@VAR_existingFunctions@ = @{}
+	        foreach ($@VAR_function@ in Get-ChildItem Function:) {
+	            $@VAR_existingFunctions@[$@VAR_function@.Name] = $@VAR_function@.ScriptBlock.ToString()
+	        }
+	        $@VAR_existingAliases@ = @{}
+	        foreach ($@VAR_alias@ in Get-ChildItem Alias:) {
+	            $@VAR_existingAliases@[$@VAR_alias@.Name] = $@VAR_alias@.Definition
+	        }
+	        $@VAR_commandScript@ = [scriptblock]::Create(
+	            [IO.File]::ReadAllText($@VAR_scriptFile@, [Text.Encoding]::UTF8)
+	        )
+	        $@VAR_commandTimer@ = [Diagnostics.Stopwatch]::StartNew()
+	        . $@VAR_commandScript@ 2> $@VAR_stderrFile@ | Tee-Object -FilePath $@VAR_stdoutFile@
+	        $@VAR_commandSucceeded@ = $?
+	        $@VAR_commandNativeExitCode@ = $global:LASTEXITCODE
+	        $@VAR_commandTimer@.Stop()
+	@POWERSHELL_STATE_PROMOTION@
+	        $@VAR_timeConsumption@ = [string]::Format(
+	            [Globalization.CultureInfo]::InvariantCulture,
+	            '{0}ms',
+	            $@VAR_commandTimer@.Elapsed.TotalMilliseconds
+	        )
+	        if ($null -ne $@VAR_commandNativeExitCode@) {
+	            $@VAR_exitCode@ = [int]$@VAR_commandNativeExitCode@
+	        }
+	        elseif ($@VAR_commandSucceeded@) {
+	            $@VAR_exitCode@ = 0
+	        }
+	        else {
+	            $@VAR_exitCode@ = 1
+	        }
+	        if ((Test-Path -LiteralPath $@VAR_stderrFile@) -and ((Get-Item -LiteralPath $@VAR_stderrFile@).Length -gt 0)) {
+	            Get-Content -LiteralPath $@VAR_stderrFile@ | ForEach-Object { [Console]::Error.WriteLine($_) }
+	        }
+	    }
+	    catch {
+	        $_ | Out-File -LiteralPath $@VAR_stderrFile@ -Append -Encoding utf8
+	        [Console]::Error.WriteLine($_)
+	        $@VAR_exitCode@ = 1
+	    }
+	    finally {
+	        if (-not [IO.File]::Exists($@VAR_doneFile@)) {
+	            $null = [IO.Directory]::CreateDirectory($@VAR_stateDir@)
+	            if ([string]::IsNullOrEmpty($env:@HELPER_ENV@)) {
+	                [Console]::Error.WriteLine('@HELPER_ENV@ is not set')
+	                $@VAR_exitCode@ = 1
+	            }
+	            else {
+	                $@VAR_currentDirectory@ = $ExecutionContext.SessionState.Path.CurrentFileSystemLocation.ProviderPath
+	                $@VAR_helperStart@ = [Diagnostics.ProcessStartInfo]::new($env:@HELPER_ENV@)
+	                $@VAR_helperStart@.UseShellExecute = $false
+	                $@VAR_helperStart@.ArgumentList.Add('internal-write-done')
+	                $@VAR_helperStart@.ArgumentList.Add('--command-id')
+	                $@VAR_helperStart@.ArgumentList.Add($@VAR_CommandId@)
+	                $@VAR_helperStart@.ArgumentList.Add('--exit-code')
+	                $@VAR_helperStart@.ArgumentList.Add([string]$@VAR_exitCode@)
+	                $@VAR_helperStart@.ArgumentList.Add('--time-consumption')
+	                $@VAR_helperStart@.ArgumentList.Add($@VAR_timeConsumption@)
+	                $@VAR_helperStart@.ArgumentList.Add('--cwd')
+	                $@VAR_helperStart@.ArgumentList.Add($@VAR_currentDirectory@)
+	                $@VAR_helperStart@.ArgumentList.Add('--directory')
+	                $@VAR_helperStart@.ArgumentList.Add($@VAR_Directory@)
+	                $@VAR_helperProcess@ = [Diagnostics.Process]::Start($@VAR_helperStart@)
+	                $@VAR_helperProcess@.WaitForExit()
+	                if ($@VAR_helperProcess@.ExitCode -ne 0) {
+	                    $@VAR_exitCode@ = $@VAR_helperProcess@.ExitCode
+	                }
+	            }
+	        }
+	        if ($null -eq $@VAR_previousCommandId@) {
+	            Remove-Item Env:@COMMAND_ID_ENV@ -ErrorAction SilentlyContinue
+	        }
+	        else {
+	            $env:@COMMAND_ID_ENV@ = $@VAR_previousCommandId@
+	        }
+	        if ($null -eq $@VAR_previousCommandDirectory@) {
+	            Remove-Item Env:@COMMAND_DIR_ENV@ -ErrorAction SilentlyContinue
+	        }
+	        else {
+	            $env:@COMMAND_DIR_ENV@ = $@VAR_previousCommandDirectory@
         }
     }
 }

@@ -20,17 +20,17 @@ impl PosixDialect {
     pub(super) fn previous_flags(self) -> String {
         match self {
             Self::Bash => format!(
-                r#"    local had_previous_command_id=0
-    local had_previous_command_directory=0
-    if [ "${{{COMMAND_ID_ENV}+x}}" ]; then
-        had_previous_command_id=1
-    fi
-    if [ "${{{COMMAND_DIRECTORY_ENV}+x}}" ]; then
-        had_previous_command_directory=1
-    fi"#
+                r#"    local @VAR_had_previous_command_id@=0
+	    local @VAR_had_previous_command_directory@=0
+	    if [ "${{{COMMAND_ID_ENV}+x}}" ]; then
+	        @VAR_had_previous_command_id@=1
+	    fi
+	    if [ "${{{COMMAND_DIRECTORY_ENV}+x}}" ]; then
+	        @VAR_had_previous_command_directory@=1
+	    fi"#
             ),
             Self::Zsh => format!(
-                "    local had_previous_command_id=${{+{COMMAND_ID_ENV}}}\n    local had_previous_command_directory=${{+{COMMAND_DIRECTORY_ENV}}}"
+                "    local @VAR_had_previous_command_id@=${{+{COMMAND_ID_ENV}}}\n    local @VAR_had_previous_command_directory@=${{+{COMMAND_DIRECTORY_ENV}}}"
             ),
         }
     }

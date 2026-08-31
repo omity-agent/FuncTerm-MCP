@@ -6,11 +6,13 @@ mod posix_startup;
 mod pwsh;
 mod start;
 mod template;
+mod variables;
 pub(super) use batch::wrapper as cmd_wrapper;
 pub(super) use nu::wrapper as nushell_wrapper;
 pub(super) use posix_startup::{bash_wrapper, zsh_wrapper};
 pub(super) use pwsh::wrapper as powershell_wrapper;
 pub(super) use template::cmd_dispatcher;
+pub(in crate::shell) use variables::VariableNamespace;
 #[cfg(test)]
 mod tests {
     use crate::contract::{
@@ -72,15 +74,31 @@ mod tests {
     fn powershell_wrapper_captures_helper_failures_and_promotes_user_state() {
         let wrapper = super::powershell_wrapper();
         for required in [
-            "$shimStart.RedirectStandardOutput = $true",
-            "$shimStart.RedirectStandardError = $true",
-            "$shimExitCode = $shimProcess.ExitCode",
+            ".RedirectStandardOutput = $true",
+            ".RedirectStandardError = $true",
+            ".ExitCode",
             "Set-Variable -Scope Global",
             "Function:\\global:",
             "Set-Alias -Scope Global",
         ] {
             assert!(wrapper.contains(required));
         }
+    }
+    #[test]
+    fn every_wrapper_randomizes_control_variable_names() {
+        let wrappers = [
+            super::cmd_wrapper(),
+            super::cmd_dispatcher(),
+            super::nushell_wrapper(),
+            super::bash_wrapper(),
+            super::zsh_wrapper(),
+            super::powershell_wrapper(),
+        ];
+        for wrapper in &wrappers {
+            assert!(!wrapper.contains("@VAR_"));
+            assert!(has_base36_suffix(wrapper));
+        }
+        assert_ne!(super::powershell_wrapper(), super::powershell_wrapper());
     }
     #[test]
     fn nushell_wrapper_persists_serializable_state() {
@@ -95,5 +113,20 @@ mod tests {
         ] {
             assert!(wrapper.contains(required));
         }
+    }
+    fn has_base36_suffix(wrapper: &str) -> bool {
+        wrapper
+            .split(|character: char| {
+                !character.is_ascii_lowercase() && !character.is_ascii_digit() && character != '_'
+            })
+            .any(|word| {
+                let Some((_, suffix)) = word.rsplit_once('_') else {
+                    return false;
+                };
+                suffix.len() == 12
+                    && suffix
+                        .bytes()
+                        .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+            })
     }
 }

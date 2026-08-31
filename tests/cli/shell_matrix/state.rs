@@ -54,6 +54,28 @@ fn cli_preserves_shell_state_between_commands() {
         );
     }
 }
+#[cfg(windows)]
+#[test]
+fn powershell_user_variables_do_not_overwrite_wrapper_state() {
+    let executable =
+        crate::support::required_executable(&["pwsh", "pwsh.exe", "powershell", "powershell.exe"]);
+    let _guard = locked_with_env(&[("FUNCTERM_POWERSHELL", &executable.to_string_lossy())]);
+    let directory = case_dir("powershell", "wrapper variable collision");
+    let created = create_tab(&directory, "powershell");
+    let command = parse_command_result(&send_command(
+        &created.tab_id,
+        "$directory = '.'; Write-Output 'MCP_PTY_COLLISION_SAFE'",
+        10.0,
+    ));
+    assert!(
+        command.finished && command.exit_code == Some(0_i32),
+        "PowerShell wrapper did not finish: stdout: {}\nstderr: {}",
+        command.stdout,
+        command.stderr
+    );
+    assert!(command.stdout.contains("MCP_PTY_COLLISION_SAFE"));
+    assert!(!directory.join("state").join("done.json").exists());
+}
 fn definition_command(shell: &str) -> &'static str {
     match shell {
         "powershell" => {

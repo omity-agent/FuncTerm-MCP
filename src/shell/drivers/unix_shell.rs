@@ -43,11 +43,12 @@ fn initialization_script(
     wrapper: &str,
     overwrite: &str,
 ) -> Result<String> {
-    Ok(format!(
-        "export {CURRENT_SHELL_ENV}={shell}\n{wrapper}\nfuncterm_cwd=$(functerm_posix_path {}) || exit 1\nfuncterm_ready_file=$(functerm_posix_path {}) || exit 1\ncd \"$functerm_cwd\"\n: {overwrite} \"$functerm_ready_file\"\n",
+    let initialization = format!(
+        "export {CURRENT_SHELL_ENV}={shell}\n{wrapper}\n@VAR_cwd@=$(functerm_posix_path {}) || exit 1\n@VAR_ready_file@=$(functerm_posix_path {}) || exit 1\ncd \"$@VAR_cwd@\"\n: {overwrite} \"$@VAR_ready_file@\"\n",
         quote::posix_string(&quote::native_path(context.cwd)?),
         quote::posix_string(&quote::native_path(context.ready_file)?)
-    ))
+    );
+    Ok(crate::shell::wrappers::VariableNamespace::new().render(&initialization))
 }
 #[cfg(test)]
 mod tests {

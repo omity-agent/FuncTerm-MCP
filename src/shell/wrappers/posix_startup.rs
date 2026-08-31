@@ -1,7 +1,7 @@
 use super::posix_dialect::PosixDialect;
 use crate::shell::shims::SHIM_DIR_ENV;
 pub(in crate::shell) fn bash_wrapper() -> String {
-    format!(
+    let wrapper = format!(
         "set +o history
 	unset HISTFILE
 export HISTSIZE=0
@@ -16,10 +16,11 @@ history -c
         shim_path = shim_path_function(false),
         command = super::posix_function::command_function(PosixDialect::Bash),
         dispatcher = super::template::posix_dispatcher()
-    )
+    );
+    super::VariableNamespace::new().render(&wrapper)
 }
 pub(in crate::shell) fn zsh_wrapper() -> String {
-    format!(
+    let wrapper = format!(
         "unset HISTFILE
 	HISTSIZE=0
 	SAVEHIST=0
@@ -37,7 +38,8 @@ pub(in crate::shell) fn zsh_wrapper() -> String {
         shim_path = shim_path_function(true),
         command = super::posix_function::command_function(PosixDialect::Zsh),
         dispatcher = super::template::posix_dispatcher()
-    )
+    );
+    super::VariableNamespace::new().render(&wrapper)
 }
 pub(super) fn path_function(zsh: bool) -> String {
     let local_options = if zsh {
@@ -47,18 +49,18 @@ pub(super) fn path_function(zsh: bool) -> String {
     };
     format!(
         r#"functerm_posix_path() {{{local_options}
-    local value="$1"
-    if command -v cygpath > /dev/null 2>&1; then
-        cygpath -u "$value"
-        return $?
-    fi
-    case "$value" in
-        [A-Za-z]:\\*|[A-Za-z]:/*)
-            printf 'cygpath is required to convert Windows path: %s\n' "$value" >&2
-            return 1
-            ;;
-    esac
-    printf '%s\n' "$value"
+	    local @VAR_value@="$1"
+	    if command -v cygpath > /dev/null 2>&1; then
+	        cygpath -u "$@VAR_value@"
+	        return $?
+	    fi
+	    case "$@VAR_value@" in
+	        [A-Za-z]:\\*|[A-Za-z]:/*)
+	            printf 'cygpath is required to convert Windows path: %s\n' "$@VAR_value@" >&2
+	            return 1
+	            ;;
+	    esac
+	    printf '%s\n' "$@VAR_value@"
 }}"#
     )
 }
@@ -73,19 +75,19 @@ pub(super) fn shim_path_function(zsh: bool) -> String {
     if [ -z "${{{SHIM_DIR_ENV}-}}" ]; then
         return 0
     fi
-    local shim_dir="${{{SHIM_DIR_ENV}}}"
-    shim_dir="$(functerm_posix_path "$shim_dir")" || return 1
-    local new_path="$shim_dir"
-    local old_ifs="$IFS"
-    local entry
-    IFS=:
-    for entry in $PATH; do
-        if [ "$entry" != "$shim_dir" ]; then
-            new_path="$new_path:$entry"
-        fi
-    done
-    IFS="$old_ifs"
-    export PATH="$new_path"
+	    local @VAR_shim_dir@="${{{SHIM_DIR_ENV}}}"
+	    @VAR_shim_dir@="$(functerm_posix_path "$@VAR_shim_dir@")" || return 1
+	    local @VAR_new_path@="$@VAR_shim_dir@"
+	    local @VAR_old_ifs@="$IFS"
+	    local @VAR_entry@
+	    IFS=:
+	    for @VAR_entry@ in $PATH; do
+	        if [ "$@VAR_entry@" != "$@VAR_shim_dir@" ]; then
+	            @VAR_new_path@="$@VAR_new_path@:$@VAR_entry@"
+	        fi
+	    done
+	    IFS="$@VAR_old_ifs@"
+	    export PATH="$@VAR_new_path@"
 }}
 functerm_prepend_shim_path"#
     )

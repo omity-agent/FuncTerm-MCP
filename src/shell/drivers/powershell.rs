@@ -4,9 +4,10 @@ use crate::shell::shims::CURRENT_SHELL_ENV;
 use crate::shell::wrappers::powershell_wrapper;
 use alloc::borrow::Cow;
 use anyhow::Result;
-use base64_turbo::STANDARD;
 pub(super) fn startup(context: StartupContext<'_>) -> Result<DriverStartup> {
     let init = initialization_script(context)?;
+    let init_path = context.startup_directory.join("powershell_init.ps1");
+    fs_err::write(&init_path, init)?;
     Ok(DriverStartup {
         args: vec![
             "-NoLogo".to_owned(),
@@ -14,17 +15,14 @@ pub(super) fn startup(context: StartupContext<'_>) -> Result<DriverStartup> {
             "-NoExit".to_owned(),
             "-ExecutionPolicy".to_owned(),
             "Bypass".to_owned(),
-            "-EncodedCommand".to_owned(),
-            encode_command(&init),
+            "-File".to_owned(),
+            quote::native_path(&init_path)?,
         ],
         env: Vec::new(),
     })
 }
 pub(super) fn command_script(command: &str) -> String {
-    format!(
-        "$script:FuncTermCommandScript = [scriptblock]::Create({})",
-        quote::powershell_string(command)
-    )
+    command.to_owned()
 }
 pub(super) fn interactive_arguments(arguments: &[std::ffi::OsString]) -> bool {
     let Some(values) = os_strings_lower(arguments) else {
@@ -33,12 +31,13 @@ pub(super) fn interactive_arguments(arguments: &[std::ffi::OsString]) -> bool {
     powershell_interactive_arguments(&values)
 }
 fn initialization_script(context: StartupContext<'_>) -> Result<String> {
-    Ok(format!(
-        "$env:{CURRENT_SHELL_ENV} = 'powershell'\n{}\nSet-Location -LiteralPath {}\n$script:FuncTermReadyWritten = $false\n$script:FuncTermOriginalPrompt = (Get-Command prompt).ScriptBlock\nfunction prompt {{\n    if (-not $script:FuncTermReadyWritten) {{\n        Set-Content -LiteralPath {} -Value '' -NoNewline\n        $script:FuncTermReadyWritten = $true\n    }}\n    & $script:FuncTermOriginalPrompt\n}}",
+    let initialization = format!(
+        "$env:{CURRENT_SHELL_ENV} = 'powershell'\n{}\nSet-Location -LiteralPath {}\n$script:@VAR_readyWritten@ = $false\n$script:@VAR_originalPrompt@ = (Get-Command prompt).ScriptBlock\nfunction prompt {{\n    if (-not $script:@VAR_readyWritten@) {{\n        Set-Content -LiteralPath {} -Value '' -NoNewline\n        $script:@VAR_readyWritten@ = $true\n    }}\n    & $script:@VAR_originalPrompt@\n}}",
         powershell_wrapper(),
         quote::powershell_path(context.cwd)?,
         quote::powershell_path(context.ready_file)?
-    ))
+    );
+    Ok(crate::shell::wrappers::VariableNamespace::new().render(&initialization))
 }
 pub(super) fn keyboard_bytes(bytes: &[u8]) -> Cow<'_, [u8]> {
     if !bytes.contains(&b'\n') {
@@ -57,17 +56,6 @@ pub(super) fn keyboard_bytes(bytes: &[u8]) -> Cow<'_, [u8]> {
         previous = Some(*byte);
     }
     Cow::Owned(normalized)
-}
-#[expect(
-    clippy::little_endian_bytes,
-    reason = "PowerShell EncodedCommand requires UTF-16LE on every host architecture"
-)]
-fn encode_command(command: &str) -> String {
-    let bytes = command
-        .encode_utf16()
-        .flat_map(u16::to_le_bytes)
-        .collect::<Vec<_>>();
-    STANDARD.encode(&bytes)
 }
 fn powershell_interactive_arguments(values: &[String]) -> bool {
     let mut index = 0_usize;
