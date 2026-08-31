@@ -1,65 +1,36 @@
-use super::{DriverStartup, InvocationTerminator, ShellDriver, StartupContext, os_strings_lower};
-use crate::runtime::config::Settings;
+use super::{DriverStartup, StartupContext, os_strings_lower};
 use crate::shell::quote;
 use crate::shell::shims::CURRENT_SHELL_ENV;
 use crate::shell::wrappers::powershell_wrapper;
 use alloc::borrow::Cow;
 use anyhow::Result;
 use base64_turbo::STANDARD;
-pub(crate) struct PowerShellDriver;
-impl ShellDriver for PowerShellDriver {
-    fn display_name(&self) -> &'static str {
-        "PowerShell"
-    }
-    fn shim_executable_names(&self) -> &'static [&'static str] {
-        &[
-            "pwsh",
-            "pwsh.exe",
-            "powershell",
-            "powershell.exe",
-            "powershell_core",
-            "windows_powershell",
-        ]
-    }
-    fn shim_env_name(&self) -> &'static str {
-        "FUNCTERM_REAL_POWERSHELL"
-    }
-    fn executable_candidates(&self, settings: &Settings) -> Result<Vec<String>> {
-        Ok(settings.powershell.clone())
-    }
-    fn startup(&self, context: StartupContext<'_>) -> Result<DriverStartup> {
-        let init = initialization_script(context)?;
-        Ok(DriverStartup {
-            args: vec![
-                "-NoLogo".to_owned(),
-                "-NoProfile".to_owned(),
-                "-NoExit".to_owned(),
-                "-ExecutionPolicy".to_owned(),
-                "Bypass".to_owned(),
-                "-EncodedCommand".to_owned(),
-                encode_command(&init),
-            ],
-            env: Vec::new(),
-        })
-    }
-    fn invocation_terminator(&self) -> InvocationTerminator {
-        InvocationTerminator::CarriageReturn
-    }
-    fn command_script(&self, command: &str) -> String {
-        format!(
-            "$script:FuncTermCommandScript = [scriptblock]::Create({})",
-            quote::powershell_string(command)
-        )
-    }
-    fn keyboard_bytes<'bytes>(&self, bytes: &'bytes [u8]) -> Cow<'bytes, [u8]> {
-        keyboard_bytes(bytes)
-    }
-    fn interactive_arguments(&self, arguments: &[std::ffi::OsString]) -> bool {
-        let Some(values) = os_strings_lower(arguments) else {
-            return false;
-        };
-        powershell_interactive_arguments(&values)
-    }
+pub(super) fn startup(context: StartupContext<'_>) -> Result<DriverStartup> {
+    let init = initialization_script(context)?;
+    Ok(DriverStartup {
+        args: vec![
+            "-NoLogo".to_owned(),
+            "-NoProfile".to_owned(),
+            "-NoExit".to_owned(),
+            "-ExecutionPolicy".to_owned(),
+            "Bypass".to_owned(),
+            "-EncodedCommand".to_owned(),
+            encode_command(&init),
+        ],
+        env: Vec::new(),
+    })
+}
+pub(super) fn command_script(command: &str) -> String {
+    format!(
+        "$script:FuncTermCommandScript = [scriptblock]::Create({})",
+        quote::powershell_string(command)
+    )
+}
+pub(super) fn interactive_arguments(arguments: &[std::ffi::OsString]) -> bool {
+    let Some(values) = os_strings_lower(arguments) else {
+        return false;
+    };
+    powershell_interactive_arguments(&values)
 }
 fn initialization_script(context: StartupContext<'_>) -> Result<String> {
     Ok(format!(
@@ -69,7 +40,7 @@ fn initialization_script(context: StartupContext<'_>) -> Result<String> {
         quote::powershell_path(context.ready_file)?
     ))
 }
-fn keyboard_bytes(bytes: &[u8]) -> Cow<'_, [u8]> {
+pub(super) fn keyboard_bytes(bytes: &[u8]) -> Cow<'_, [u8]> {
     if !bytes.contains(&b'\n') {
         return Cow::Borrowed(bytes);
     }
@@ -114,7 +85,7 @@ fn powershell_interactive_arguments(values: &[String]) -> bool {
 }
 #[cfg(test)]
 mod tests {
-    use super::PowerShellDriver;
+    use crate::shell::ShellChoice;
     use crate::shell::drivers::StartupContext;
     use std::path::Path;
     #[test]
@@ -131,7 +102,7 @@ mod tests {
     }
     #[test]
     fn invocation_is_short_dispatcher() {
-        let invocation = crate::shell::drivers::ShellDriver::invocation(&PowerShellDriver)
+        let invocation = crate::shell::drivers::invocation(ShellChoice::PowerShell)
             .unwrap()
             .unwrap();
         let bytes = invocation.into_bytes();

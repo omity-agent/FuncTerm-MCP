@@ -1,56 +1,29 @@
-use super::{DriverStartup, InvocationTerminator, ShellDriver, StartupContext, os_strings_lower};
-use crate::runtime::config::Settings;
+use super::{DriverStartup, StartupContext, os_strings_lower};
 use crate::shell::quote;
 use crate::shell::shims::CURRENT_SHELL_ENV;
 use crate::shell::wrappers::nushell_wrapper;
 use anyhow::Result;
-pub(crate) struct NuShellDriver;
-impl ShellDriver for NuShellDriver {
-    fn display_name(&self) -> &'static str {
-        "NuShell"
-    }
-    fn shim_executable_names(&self) -> &'static [&'static str] {
-        &["nu", "nu.exe", "nushell", "nushell.exe"]
-    }
-    fn shim_env_name(&self) -> &'static str {
-        "FUNCTERM_REAL_NUSHELL"
-    }
-    fn executable_candidates(&self, settings: &Settings) -> Result<Vec<String>> {
-        Ok(vec![settings.nushell.clone()])
-    }
-    fn startup(&self, context: StartupContext<'_>) -> Result<DriverStartup> {
-        Ok(DriverStartup {
-            args: vec![
-                "--no-config-file".to_owned(),
-                "--no-history".to_owned(),
-                "--execute".to_owned(),
-                initialization_script(context)?,
-            ],
-            env: Vec::new(),
-        })
-    }
-    fn invocation_terminator(&self) -> InvocationTerminator {
-        invocation_terminator()
-    }
-    fn interactive_arguments(&self, arguments: &[std::ffi::OsString]) -> bool {
-        let Some(values) = os_strings_lower(arguments) else {
-            return false;
-        };
-        values.iter().all(|value| {
-            matches!(
-                value.as_str(),
-                "--login" | "--no-config-file" | "--no-history"
-            )
-        })
-    }
+pub(super) fn startup(context: StartupContext<'_>) -> Result<DriverStartup> {
+    Ok(DriverStartup {
+        args: vec![
+            "--no-config-file".to_owned(),
+            "--no-history".to_owned(),
+            "--execute".to_owned(),
+            initialization_script(context)?,
+        ],
+        env: Vec::new(),
+    })
 }
-#[cfg(windows)]
-const fn invocation_terminator() -> InvocationTerminator {
-    InvocationTerminator::CarriageReturnLineFeed
-}
-#[cfg(not(windows))]
-const fn invocation_terminator() -> InvocationTerminator {
-    InvocationTerminator::LineFeed
+pub(super) fn interactive_arguments(arguments: &[std::ffi::OsString]) -> bool {
+    let Some(values) = os_strings_lower(arguments) else {
+        return false;
+    };
+    values.iter().all(|value| {
+        matches!(
+            value.as_str(),
+            "--login" | "--no-config-file" | "--no-history"
+        )
+    })
 }
 fn initialization_script(context: StartupContext<'_>) -> Result<String> {
     Ok(format!(
@@ -62,11 +35,13 @@ fn initialization_script(context: StartupContext<'_>) -> Result<String> {
 }
 #[cfg(test)]
 mod tests {
-    use super::NuShellDriver;
-    use crate::shell::drivers::ShellDriver as _;
+    use crate::shell::ShellChoice;
     #[test]
     fn invocation_uses_platform_line_ending() {
-        let bytes = NuShellDriver.invocation().unwrap().unwrap().into_bytes();
+        let bytes = crate::shell::drivers::invocation(ShellChoice::NuShell)
+            .unwrap()
+            .unwrap()
+            .into_bytes();
         #[cfg(windows)]
         assert_eq!(bytes, b"f\r\n");
         #[cfg(not(windows))]

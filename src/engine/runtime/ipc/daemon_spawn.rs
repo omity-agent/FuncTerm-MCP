@@ -103,8 +103,7 @@ fn wait_for_startup_file(
     bail!("daemon startup report was not published within {timeout:?}");
 }
 fn read_startup_file(path: &std::path::Path) -> Result<()> {
-    let text = std::fs::read_to_string(path)
-        .with_context(|| format!("failed to read daemon startup report {}", path.display()))?;
+    let text = fs_err::read_to_string(path)?;
     match sonic_rs::from_str::<StartupReply>(text.trim_end())
         .context("failed to parse daemon startup report")?
     {

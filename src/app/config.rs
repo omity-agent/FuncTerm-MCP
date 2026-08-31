@@ -10,11 +10,11 @@ pub(crate) struct Settings {
     pub(crate) terminal_model_title: String,
     pub(crate) shell_startup_timeout_seconds: f64,
     pub(crate) powershell: Vec<String>,
-    pub(crate) bash: String,
-    pub(crate) nushell: String,
-    pub(crate) zsh: String,
-    pub(crate) cmd: String,
-    pub(crate) bun: String,
+    pub(crate) bash: Vec<String>,
+    pub(crate) nushell: Vec<String>,
+    pub(crate) zsh: Vec<String>,
+    pub(crate) cmd: Vec<String>,
+    pub(crate) bun: Vec<String>,
     pub(crate) python: Vec<String>,
     pub(crate) mcp: McpSettings,
 }
@@ -39,13 +39,17 @@ pub(crate) fn load() -> Result<Settings> {
         "FUNCTERM_DAEMON_SERVICE_NAME",
         &mut settings.daemon_service_name,
     );
-    apply_list_override("FUNCTERM_POWERSHELL", &mut settings.powershell);
-    apply_string_override("FUNCTERM_BASH", &mut settings.bash);
-    apply_string_override("FUNCTERM_NUSHELL", &mut settings.nushell);
-    apply_string_override("FUNCTERM_ZSH", &mut settings.zsh);
-    apply_string_override("FUNCTERM_CMD", &mut settings.cmd);
-    apply_string_override("FUNCTERM_BUN", &mut settings.bun);
-    apply_list_override("FUNCTERM_PYTHON", &mut settings.python);
+    for (name, candidates) in [
+        ("FUNCTERM_POWERSHELL", &mut settings.powershell),
+        ("FUNCTERM_BASH", &mut settings.bash),
+        ("FUNCTERM_NUSHELL", &mut settings.nushell),
+        ("FUNCTERM_ZSH", &mut settings.zsh),
+        ("FUNCTERM_CMD", &mut settings.cmd),
+        ("FUNCTERM_BUN", &mut settings.bun),
+        ("FUNCTERM_PYTHON", &mut settings.python),
+    ] {
+        apply_list_override(name, candidates);
+    }
     Ok(settings)
 }
 fn apply_list_override(name: &str, value: &mut Vec<String>) {

@@ -48,8 +48,8 @@ impl ShellLauncher {
         let tab_root = temp::tab_root(&self.generation_root, tab_id);
         let tab_state = temp::tab_state_directory(&tab_root);
         let command_root = temp::tab_commands_directory(&tab_root);
-        std::fs::create_dir_all(&tab_state).context("failed to create tab state directory")?;
-        std::fs::create_dir_all(&command_root).context("failed to create command root")?;
+        fs_err::create_dir_all(&tab_state)?;
+        fs_err::create_dir_all(&command_root)?;
         let mut startup = starting_shell.startup(starting_directory, &tab_root)?;
         startup.env.extend(shims::environment(
             &self.settings,

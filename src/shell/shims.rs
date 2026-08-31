@@ -3,8 +3,8 @@ use crate::contract::HELPER_EXECUTABLE_ENV;
 use crate::runtime::config::Settings;
 use crate::runtime::protocol::EnvironmentSnapshot;
 use anyhow::{Context as _, Result};
+use fs_err as fs;
 use std::ffi::{OsStr, OsString};
-use std::fs;
 use std::path::Path;
 pub(crate) const ACTIVE_SHELL_FILE_ENV: &str = "FUNCTERM_ACTIVE_SHELL_FILE";
 pub(crate) const CURRENT_SHELL_ENV: &str = "FUNCTERM_CURRENT_SHELL";
@@ -65,7 +65,7 @@ pub(crate) fn environment(
     Ok(inherited_env)
 }
 pub(crate) fn ensure_directory(shim_dir: &Path) -> Result<()> {
-    fs::create_dir_all(shim_dir).context("failed to create shell shim directory")?;
+    fs::create_dir_all(shim_dir)?;
     let current_exe = std::env::current_exe().context("failed to resolve current executable")?;
     for &shell in ShellChoice::all() {
         for alias in shell.shim_executable_names() {
@@ -83,12 +83,11 @@ pub(crate) fn write_active_shell(path: &Path, shell: ShellChoice) -> Result<()> 
         .with_context(|| format!("failed to publish active shell state {}", path.display()))
 }
 pub(crate) fn read_active_shell(path: &Path) -> Result<Option<ShellChoice>> {
-    if !path.exists() {
-        return Ok(None);
+    match fs::read_to_string(path) {
+        Ok(text) => Ok(Some(ShellChoice::from_canonical_name(text.trim())?)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
     }
-    let text = fs::read_to_string(path)
-        .with_context(|| format!("failed to read active shell state {}", path.display()))?;
-    Ok(Some(ShellChoice::from_canonical_name(text.trim())?))
 }
 fn prepend_path(
     shim_dir: &Path,
@@ -155,11 +154,11 @@ mod tests {
             terminal_model_title: "FuncTerm".to_owned(),
             shell_startup_timeout_seconds: 10.0,
             powershell: vec!["definitely-missing-powershell".to_owned()],
-            bash: "definitely-missing-bash".to_owned(),
-            nushell: "definitely-missing-nu".to_owned(),
-            zsh: "definitely-missing-zsh".to_owned(),
-            cmd: "definitely-missing-cmd".to_owned(),
-            bun: "definitely-missing-bun".to_owned(),
+            bash: vec!["definitely-missing-bash".to_owned()],
+            nushell: vec!["definitely-missing-nu".to_owned()],
+            zsh: vec!["definitely-missing-zsh".to_owned()],
+            cmd: vec!["definitely-missing-cmd".to_owned()],
+            bun: vec!["definitely-missing-bun".to_owned()],
             python: vec!["definitely-missing-python".to_owned()],
             mcp: crate::runtime::config::McpSettings::default(),
         }

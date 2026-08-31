@@ -1,53 +1,32 @@
-use super::{DriverStartup, InvocationTerminator, ShellDriver, StartupContext, os_strings_lower};
-use crate::runtime::config::Settings;
+use super::{DriverStartup, StartupContext, os_strings_lower};
 use crate::shell::quote;
 use crate::shell::shims::CURRENT_SHELL_ENV;
 use crate::shell::wrappers::{cmd_dispatcher, cmd_wrapper};
-use anyhow::{Context as _, Result};
-pub(crate) struct CmdDriver;
-impl ShellDriver for CmdDriver {
-    fn display_name(&self) -> &'static str {
-        "Windows CMD"
-    }
-    fn shim_executable_names(&self) -> &'static [&'static str] {
-        &["cmd", "cmd.exe"]
-    }
-    fn shim_env_name(&self) -> &'static str {
-        "FUNCTERM_REAL_CMD"
-    }
-    fn executable_candidates(&self, settings: &Settings) -> Result<Vec<String>> {
-        Ok(vec![settings.cmd.clone()])
-    }
-    fn startup(&self, context: StartupContext<'_>) -> Result<DriverStartup> {
-        let runner = context.startup_directory.join("cmd_run.bat");
-        let dispatcher = context.startup_directory.join("f.cmd");
-        let init = context.startup_directory.join("cmd_init.bat");
-        std::fs::write(&runner, cmd_wrapper()).context("failed to write Cmd command wrapper")?;
-        std::fs::write(&dispatcher, cmd_dispatcher())
-            .context("failed to write Cmd command dispatcher")?;
-        std::fs::write(&init, initialization_script(context)?)
-            .context("failed to write Cmd initialization script")?;
-        Ok(DriverStartup {
-            args: vec![
-                "/D".to_owned(),
-                "/Q".to_owned(),
-                "/K".to_owned(),
-                format!("call {}", quote::native_path(&init)?),
-            ],
-            env: Vec::new(),
-        })
-    }
-    fn invocation_terminator(&self) -> InvocationTerminator {
-        InvocationTerminator::CarriageReturnLineFeed
-    }
-    fn interactive_arguments(&self, arguments: &[std::ffi::OsString]) -> bool {
-        let Some(values) = os_strings_lower(arguments) else {
-            return false;
-        };
-        values
-            .iter()
-            .all(|value| matches!(value.as_str(), "/d" | "/q" | "/k"))
-    }
+use anyhow::Result;
+pub(super) fn startup(context: StartupContext<'_>) -> Result<DriverStartup> {
+    let runner = context.startup_directory.join("cmd_run.bat");
+    let dispatcher = context.startup_directory.join("f.cmd");
+    let init = context.startup_directory.join("cmd_init.bat");
+    fs_err::write(&runner, cmd_wrapper())?;
+    fs_err::write(&dispatcher, cmd_dispatcher())?;
+    fs_err::write(&init, initialization_script(context)?)?;
+    Ok(DriverStartup {
+        args: vec![
+            "/D".to_owned(),
+            "/Q".to_owned(),
+            "/K".to_owned(),
+            format!("call {}", quote::native_path(&init)?),
+        ],
+        env: Vec::new(),
+    })
+}
+pub(super) fn interactive_arguments(arguments: &[std::ffi::OsString]) -> bool {
+    let Some(values) = os_strings_lower(arguments) else {
+        return false;
+    };
+    values
+        .iter()
+        .all(|value| matches!(value.as_str(), "/d" | "/q" | "/k"))
 }
 fn initialization_script(context: StartupContext<'_>) -> Result<String> {
     Ok(format!(
@@ -58,11 +37,13 @@ fn initialization_script(context: StartupContext<'_>) -> Result<String> {
 }
 #[cfg(test)]
 mod tests {
-    use super::CmdDriver;
-    use crate::shell::drivers::ShellDriver as _;
+    use crate::shell::ShellChoice;
     #[test]
     fn invocation_uses_windows_line_ending() {
-        let bytes = CmdDriver.invocation().unwrap().unwrap().into_bytes();
+        let bytes = crate::shell::drivers::invocation(ShellChoice::Cmd)
+            .unwrap()
+            .unwrap()
+            .into_bytes();
         assert_eq!(bytes, b"f\r\n");
     }
 }

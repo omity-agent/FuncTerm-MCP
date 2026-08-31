@@ -1,8 +1,8 @@
 use super::CommandRecord;
 use anyhow::{Context as _, Result, bail};
 use core::time::Duration;
+use fs_err as fs;
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher as _};
-use std::fs;
 use std::path::Path;
 use std::sync::mpsc;
 use std::time::Instant;
@@ -35,12 +35,7 @@ fn wait_for_any_path(paths: &[&Path], limit: Duration) -> Result<bool> {
             bail!("watched paths must share a parent directory");
         }
     }
-    fs::create_dir_all(parent).with_context(|| {
-        format!(
-            "failed to create watched parent directory {}",
-            parent.display()
-        )
-    })?;
+    fs::create_dir_all(parent)?;
     let (tx, rx) = mpsc::channel();
     let mut watcher = RecommendedWatcher::new(tx, Config::default())
         .context("failed to create filesystem watcher")?;

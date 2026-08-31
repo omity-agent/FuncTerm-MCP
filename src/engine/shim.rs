@@ -3,7 +3,6 @@ mod stdio;
 use crate::shell::{ShellChoice, ShellStartup, shims};
 use anyhow::{Context as _, Result};
 use core::time::Duration;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 use std::time::Instant;
@@ -59,7 +58,7 @@ fn run_interactive(choice: ShellChoice) -> Result<i32> {
     let parent_shell = current_shell().unwrap_or(choice);
     let active_shell_file = active_shell_file()?;
     let session_root = nested_session_root(choice)?;
-    fs::create_dir_all(&session_root).context("failed to create nested shell root")?;
+    fs_err::create_dir_all(&session_root)?;
     let cwd = std::env::current_dir().context("failed to read current directory")?;
     let startup = choice.startup(&cwd, &session_root)?;
     let ready_file = startup.ready_file.clone();

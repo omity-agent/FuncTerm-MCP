@@ -1,6 +1,5 @@
 use anyhow::{Context as _, Result};
 use atomicwrites::{AllowOverwrite, AtomicFile, DisallowOverwrite};
-use std::fs;
 use std::io::Write as _;
 use std::path::Path;
 pub(crate) fn write_once(destination: &Path, contents: impl AsRef<[u8]>) -> Result<()> {
@@ -10,12 +9,8 @@ pub(crate) fn copy_once(source: &Path, destination: &Path) -> Result<()> {
     if destination.exists() {
         return Ok(());
     }
-    let mut source_file = fs::File::open(source)
-        .with_context(|| format!("failed to open copied file {}", source.display()))?;
-    let permissions = source_file
-        .metadata()
-        .with_context(|| format!("failed to read copied file metadata {}", source.display()))?
-        .permissions();
+    let mut source_file = fs_err::File::open(source)?;
+    let permissions = source_file.metadata()?.permissions();
     publish_once(destination, |destination_file| {
         std::io::copy(&mut source_file, destination_file)?;
         destination_file.set_permissions(permissions)
@@ -34,7 +29,7 @@ pub(crate) fn write_replace(destination: &Path, contents: impl AsRef<[u8]>) -> R
 }
 fn publish_once(
     destination: &Path,
-    operation: impl FnOnce(&mut fs::File) -> std::io::Result<()>,
+    operation: impl FnOnce(&mut std::fs::File) -> std::io::Result<()>,
 ) -> Result<()> {
     prepare_parent(destination)?;
     match AtomicFile::new(destination, DisallowOverwrite).write(operation) {
@@ -56,12 +51,7 @@ fn prepare_parent(destination: &Path) -> Result<()> {
     let parent = destination
         .parent()
         .context("published file has no parent")?;
-    fs::create_dir_all(parent).with_context(|| {
-        format!(
-            "failed to create published file directory {}",
-            parent.display()
-        )
-    })
+    fs_err::create_dir_all(parent).map_err(Into::into)
 }
 #[cfg(test)]
 mod tests {

@@ -6,7 +6,6 @@ mod python;
 mod unix_shell;
 use super::ShellChoice;
 use crate::contract::DISPATCHER_COMMAND;
-use crate::runtime::config::Settings;
 use alloc::borrow::Cow;
 use anyhow::{Result, bail};
 use std::ffi::OsString;
@@ -52,46 +51,90 @@ impl InvocationTerminator {
         }
     }
 }
-pub(crate) trait ShellDriver {
-    fn display_name(&self) -> &'static str;
-    fn shim_executable_names(&self) -> &'static [&'static str];
-    fn shim_env_name(&self) -> &'static str;
-    fn executable_candidates(&self, settings: &Settings) -> Result<Vec<String>>;
-    fn startup(&self, context: StartupContext<'_>) -> Result<DriverStartup>;
-    fn invocation_terminator(&self) -> InvocationTerminator;
-    fn invocation(&self) -> Result<Option<ShellInvocation>> {
-        ShellInvocation::new(DISPATCHER_COMMAND.to_owned(), self.invocation_terminator()).map(Some)
-    }
-    fn command_script(&self, command: &str) -> String {
-        command.to_owned()
-    }
-    fn keyboard_bytes<'bytes>(&self, bytes: &'bytes [u8]) -> Cow<'bytes, [u8]> {
-        Cow::Borrowed(bytes)
-    }
-    fn interactive_arguments(&self, arguments: &[OsString]) -> bool;
-}
-static POWERSHELL: powershell::PowerShellDriver = powershell::PowerShellDriver;
-static BASH: unix_shell::PosixDriver = unix_shell::PosixDriver::bash();
-static NUSHELL: nushell::NuShellDriver = nushell::NuShellDriver;
-static ZSH: unix_shell::PosixDriver = unix_shell::PosixDriver::zsh();
-static CMD: command_prompt::CmdDriver = command_prompt::CmdDriver;
-static BUN: bun::BunDriver = bun::BunDriver;
-static PYTHON: python::PythonDriver = python::PythonDriver;
-pub(crate) fn driver(choice: ShellChoice) -> &'static dyn ShellDriver {
+pub(crate) fn startup(choice: ShellChoice, context: StartupContext<'_>) -> Result<DriverStartup> {
     match choice {
-        ShellChoice::PowerShell => &POWERSHELL,
-        ShellChoice::Bash => &BASH,
-        ShellChoice::NuShell => &NUSHELL,
-        ShellChoice::Zsh => &ZSH,
-        ShellChoice::Cmd => &CMD,
-        ShellChoice::Bun => &BUN,
-        ShellChoice::Python => &PYTHON,
+        ShellChoice::PowerShell => powershell::startup(context),
+        ShellChoice::Bash => unix_shell::bash_startup(context),
+        ShellChoice::NuShell => nushell::startup(context),
+        ShellChoice::Zsh => unix_shell::zsh_startup(context),
+        ShellChoice::Cmd => command_prompt::startup(context),
+        ShellChoice::Bun => bun::startup(context),
+        ShellChoice::Python => python::startup(context),
     }
+}
+pub(crate) fn invocation(choice: ShellChoice) -> Result<Option<ShellInvocation>> {
+    let line = match choice {
+        ShellChoice::Bun => return Ok(None),
+        ShellChoice::Python => "_functerm_dispatch()",
+        ShellChoice::PowerShell
+        | ShellChoice::Bash
+        | ShellChoice::NuShell
+        | ShellChoice::Zsh
+        | ShellChoice::Cmd => DISPATCHER_COMMAND,
+    };
+    ShellInvocation::new(line.to_owned(), invocation_terminator(choice)).map(Some)
+}
+pub(crate) fn command_script(choice: ShellChoice, command: &str) -> String {
+    match choice {
+        ShellChoice::PowerShell => powershell::command_script(command),
+        ShellChoice::Bash
+        | ShellChoice::NuShell
+        | ShellChoice::Zsh
+        | ShellChoice::Cmd
+        | ShellChoice::Bun
+        | ShellChoice::Python => command.to_owned(),
+    }
+}
+pub(crate) fn keyboard_bytes(choice: ShellChoice, bytes: &[u8]) -> Cow<'_, [u8]> {
+    match choice {
+        ShellChoice::PowerShell => powershell::keyboard_bytes(bytes),
+        ShellChoice::Bash
+        | ShellChoice::NuShell
+        | ShellChoice::Zsh
+        | ShellChoice::Cmd
+        | ShellChoice::Bun
+        | ShellChoice::Python => Cow::Borrowed(bytes),
+    }
+}
+pub(crate) fn interactive_arguments(choice: ShellChoice, arguments: &[OsString]) -> bool {
+    match choice {
+        ShellChoice::PowerShell => powershell::interactive_arguments(arguments),
+        ShellChoice::Bash | ShellChoice::Zsh => unix_shell::interactive_arguments(arguments),
+        ShellChoice::NuShell => nushell::interactive_arguments(arguments),
+        ShellChoice::Cmd => command_prompt::interactive_arguments(arguments),
+        ShellChoice::Bun => bun::interactive_arguments(arguments),
+        ShellChoice::Python => python::interactive_arguments(arguments),
+    }
+}
+const fn invocation_terminator(choice: ShellChoice) -> InvocationTerminator {
+    match choice {
+        ShellChoice::PowerShell => InvocationTerminator::CarriageReturn,
+        ShellChoice::Python => platform_carriage_return(),
+        ShellChoice::NuShell => platform_line_ending(),
+        ShellChoice::Cmd => InvocationTerminator::CarriageReturnLineFeed,
+        ShellChoice::Bash | ShellChoice::Zsh | ShellChoice::Bun => InvocationTerminator::LineFeed,
+    }
+}
+#[cfg(windows)]
+const fn platform_carriage_return() -> InvocationTerminator {
+    InvocationTerminator::CarriageReturn
+}
+#[cfg(not(windows))]
+const fn platform_carriage_return() -> InvocationTerminator {
+    InvocationTerminator::LineFeed
+}
+#[cfg(windows)]
+const fn platform_line_ending() -> InvocationTerminator {
+    InvocationTerminator::CarriageReturnLineFeed
+}
+#[cfg(not(windows))]
+const fn platform_line_ending() -> InvocationTerminator {
+    InvocationTerminator::LineFeed
 }
 pub(crate) fn from_shim_name(value: &str) -> Option<ShellChoice> {
     let normalized = value.to_ascii_lowercase();
     ShellChoice::all().iter().copied().find(|choice| {
-        driver(*choice)
+        choice
             .shim_executable_names()
             .contains(&normalized.as_str())
     })

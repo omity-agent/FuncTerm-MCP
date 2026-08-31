@@ -1,76 +1,20 @@
-use super::{DriverStartup, InvocationTerminator, ShellDriver, StartupContext, os_strings_lower};
-use crate::runtime::config::Settings;
+use super::{DriverStartup, StartupContext, os_strings_lower};
 use crate::shell::quote;
 use crate::shell::shims::CURRENT_SHELL_ENV;
 use crate::shell::wrappers::{bash_wrapper, zsh_wrapper};
-use anyhow::{Context as _, Result};
-#[derive(Clone, Copy)]
-enum PosixKind {
-    Bash,
-    Zsh,
+use anyhow::Result;
+pub(super) fn interactive_arguments(arguments: &[std::ffi::OsString]) -> bool {
+    let Some(values) = os_strings_lower(arguments) else {
+        return false;
+    };
+    values
+        .iter()
+        .all(|value| matches!(value.as_str(), "-i" | "-l" | "--login"))
 }
-pub(crate) struct PosixDriver {
-    kind: PosixKind,
-}
-impl PosixDriver {
-    pub(crate) const fn bash() -> Self {
-        Self {
-            kind: PosixKind::Bash,
-        }
-    }
-    pub(crate) const fn zsh() -> Self {
-        Self {
-            kind: PosixKind::Zsh,
-        }
-    }
-}
-impl ShellDriver for PosixDriver {
-    fn display_name(&self) -> &'static str {
-        match self.kind {
-            PosixKind::Bash => "Bash",
-            PosixKind::Zsh => "Zsh",
-        }
-    }
-    fn shim_executable_names(&self) -> &'static [&'static str] {
-        match self.kind {
-            PosixKind::Bash => &["bash", "bash.exe"],
-            PosixKind::Zsh => &["zsh"],
-        }
-    }
-    fn shim_env_name(&self) -> &'static str {
-        match self.kind {
-            PosixKind::Bash => "FUNCTERM_REAL_BASH",
-            PosixKind::Zsh => "FUNCTERM_REAL_ZSH",
-        }
-    }
-    fn executable_candidates(&self, settings: &Settings) -> Result<Vec<String>> {
-        Ok(match self.kind {
-            PosixKind::Bash => vec![settings.bash.clone()],
-            PosixKind::Zsh => vec![settings.zsh.clone()],
-        })
-    }
-    fn startup(&self, context: StartupContext<'_>) -> Result<DriverStartup> {
-        match self.kind {
-            PosixKind::Bash => bash_startup(context),
-            PosixKind::Zsh => zsh_startup(context),
-        }
-    }
-    fn invocation_terminator(&self) -> InvocationTerminator {
-        InvocationTerminator::LineFeed
-    }
-    fn interactive_arguments(&self, arguments: &[std::ffi::OsString]) -> bool {
-        let Some(values) = os_strings_lower(arguments) else {
-            return false;
-        };
-        values
-            .iter()
-            .all(|value| matches!(value.as_str(), "-i" | "-l" | "--login"))
-    }
-}
-fn bash_startup(context: StartupContext<'_>) -> Result<DriverStartup> {
+pub(super) fn bash_startup(context: StartupContext<'_>) -> Result<DriverStartup> {
     let init_path = context.startup_directory.join("bash_init.sh");
     let script = initialization_script(context, "bash", &bash_wrapper(), ">")?;
-    std::fs::write(&init_path, script).context("failed to write Bash initialization script")?;
+    fs_err::write(&init_path, script)?;
     Ok(DriverStartup {
         args: vec![
             "--noprofile".to_owned(),
@@ -81,10 +25,10 @@ fn bash_startup(context: StartupContext<'_>) -> Result<DriverStartup> {
         env: Vec::new(),
     })
 }
-fn zsh_startup(context: StartupContext<'_>) -> Result<DriverStartup> {
+pub(super) fn zsh_startup(context: StartupContext<'_>) -> Result<DriverStartup> {
     let init_path = context.startup_directory.join(".zshrc");
     let script = initialization_script(context, "zsh", &zsh_wrapper(), ">|")?;
-    std::fs::write(&init_path, script).context("failed to write Zsh initialization script")?;
+    fs_err::write(&init_path, script)?;
     Ok(DriverStartup {
         args: vec!["-i".to_owned()],
         env: vec![(
@@ -107,12 +51,14 @@ fn initialization_script(
 }
 #[cfg(test)]
 mod tests {
-    use super::PosixDriver;
-    use crate::shell::drivers::ShellDriver as _;
+    use crate::shell::ShellChoice;
     #[test]
     fn invocation_uses_line_feed() {
-        for driver in [PosixDriver::bash(), PosixDriver::zsh()] {
-            let bytes = driver.invocation().unwrap().unwrap().into_bytes();
+        for choice in [ShellChoice::Bash, ShellChoice::Zsh] {
+            let bytes = crate::shell::drivers::invocation(choice)
+                .unwrap()
+                .unwrap()
+                .into_bytes();
             assert_eq!(bytes, b"f\n");
         }
     }

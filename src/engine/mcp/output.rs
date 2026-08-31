@@ -30,98 +30,67 @@ pub(super) struct ViewOutput<'payload> {
     pub(super) note: &'payload str,
 }
 pub(super) fn new_tab(payload: Payload) -> Result<CallToolResult, String> {
-    match payload {
-        Payload::TabCreated { tab_id } => tool_result(
-            tab_created_plain_text(&tab_id),
-            &NewTabOutput { tab_id: &tab_id },
-        ),
-        Payload::Pong
-        | Payload::KeyboardWritten { view: _ }
-        | Payload::CommandAccepted {
-            command_id: _,
-            end_reason: _,
-            view: _,
-        }
-        | Payload::View(_) => Err(unexpected_response()),
-    }
+    let Payload::TabCreated { tab_id } = payload else {
+        return Err(unexpected_response());
+    };
+    tool_result(
+        tab_created_plain_text(&tab_id),
+        &NewTabOutput { tab_id: &tab_id },
+    )
 }
 pub(super) fn manual_write(payload: Payload) -> Result<CallToolResult, String> {
-    match payload {
-        Payload::KeyboardWritten {
-            view:
-                ViewResult::Tab {
-                    shell,
-                    screen,
-                    note,
-                },
-        } => tool_result(
-            tab_plain_text(&shell, &screen, &note, false),
-            &ManualWriteOutput {
-                shell: shell.presentation(false),
-                screen: &screen,
-                note: &note,
-            },
-        ),
-        Payload::KeyboardWritten {
-            view:
-                ViewResult::Command {
-                    shell: _,
-                    command: _,
-                    note: _,
-                },
-        }
-        | Payload::Pong
-        | Payload::TabCreated { tab_id: _ }
-        | Payload::CommandAccepted {
-            command_id: _,
-            end_reason: _,
-            view: _,
-        }
-        | Payload::View(_) => Err(unexpected_response()),
-    }
-}
-pub(super) fn send_command(payload: Payload) -> Result<CallToolResult, String> {
-    match payload {
-        Payload::CommandAccepted {
-            command_id,
-            view:
-                ViewResult::Command {
-                    shell,
-                    command,
-                    note,
-                },
-            end_reason: _,
-        } => tool_result(
-            command_plain_text(&shell, &command, &note, false, Some(&command_id)),
-            &SendCommandOutput {
-                shell: shell.presentation(false),
-                command: command.presentation(Some(&command_id)),
-                note: &note,
-            },
-        ),
-        Payload::CommandAccepted {
-            command_id: _,
-            end_reason: _,
-            view:
-                ViewResult::Tab {
-                    shell: _,
-                    screen: _,
-                    note: _,
-                },
-        }
-        | Payload::Pong
-        | Payload::TabCreated { tab_id: _ }
-        | Payload::KeyboardWritten { view: _ }
-        | Payload::View(_) => Err(unexpected_response()),
-    }
-}
-pub(super) fn view(payload: Payload) -> Result<CallToolResult, String> {
-    match payload {
-        Payload::View(ViewResult::Tab {
+    let Payload::KeyboardWritten {
+        view: ViewResult::Tab {
             shell,
             screen,
             note,
-        }) => tool_result(
+        },
+    } = payload
+    else {
+        return Err(unexpected_response());
+    };
+    tool_result(
+        tab_plain_text(&shell, &screen, &note, false),
+        &ManualWriteOutput {
+            shell: shell.presentation(false),
+            screen: &screen,
+            note: &note,
+        },
+    )
+}
+pub(super) fn send_command(payload: Payload) -> Result<CallToolResult, String> {
+    let Payload::CommandAccepted {
+        command_id,
+        view:
+            ViewResult::Command {
+                shell,
+                command,
+                note,
+            },
+        end_reason: _,
+    } = payload
+    else {
+        return Err(unexpected_response());
+    };
+    tool_result(
+        command_plain_text(&shell, &command, &note, false, Some(&command_id)),
+        &SendCommandOutput {
+            shell: shell.presentation(false),
+            command: command.presentation(Some(&command_id)),
+            note: &note,
+        },
+    )
+}
+pub(super) fn view(payload: Payload) -> Result<CallToolResult, String> {
+    let Payload::View(view) = payload else {
+        return Err(unexpected_response());
+    };
+    match view {
+        ViewResult::Tab {
+            shell,
+            screen,
+            note,
+        } => tool_result(
             tab_plain_text(&shell, &screen, &note, true),
             &ViewOutput {
                 shell: shell.presentation(true),
@@ -130,11 +99,11 @@ pub(super) fn view(payload: Payload) -> Result<CallToolResult, String> {
                 note: &note,
             },
         ),
-        Payload::View(ViewResult::Command {
+        ViewResult::Command {
             shell,
             command,
             note,
-        }) => tool_result(
+        } => tool_result(
             command_plain_text(&shell, &command, &note, true, None),
             &ViewOutput {
                 shell: shell.presentation(true),
@@ -143,14 +112,6 @@ pub(super) fn view(payload: Payload) -> Result<CallToolResult, String> {
                 note: &note,
             },
         ),
-        Payload::Pong
-        | Payload::TabCreated { tab_id: _ }
-        | Payload::KeyboardWritten { view: _ }
-        | Payload::CommandAccepted {
-            command_id: _,
-            end_reason: _,
-            view: _,
-        } => Err(unexpected_response()),
     }
 }
 fn tool_result<T>(content: String, structured_content: &T) -> Result<CallToolResult, String>

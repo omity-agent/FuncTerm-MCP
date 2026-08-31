@@ -35,7 +35,7 @@ impl ShellChoice {
     ) -> Result<std::path::PathBuf> {
         executable::select_available_executable(
             self,
-            &self.driver().executable_candidates(settings)?,
+            self.executable_candidates(settings),
             environment,
             cwd,
         )
@@ -43,24 +43,17 @@ impl ShellChoice {
     pub(crate) fn startup(self, cwd: &Path, session_root: &Path) -> Result<ShellStartup> {
         let state_directory = session_root.join("state");
         let startup_directory = session_root.join("startup");
-        std::fs::create_dir_all(&state_directory).with_context(|| {
-            format!(
-                "failed to create shell session state directory {}",
-                state_directory.display()
-            )
-        })?;
-        std::fs::create_dir_all(&startup_directory).with_context(|| {
-            format!(
-                "failed to create shell startup directory {}",
-                startup_directory.display()
-            )
-        })?;
+        fs_err::create_dir_all(&state_directory)?;
+        fs_err::create_dir_all(&startup_directory)?;
         let ready_file = state_directory.join("ready");
-        let startup = self.driver().startup(drivers::StartupContext {
-            cwd,
-            startup_directory: &startup_directory,
-            ready_file: &ready_file,
-        })?;
+        let startup = drivers::startup(
+            self,
+            drivers::StartupContext {
+                cwd,
+                startup_directory: &startup_directory,
+                ready_file: &ready_file,
+            },
+        )?;
         let args = startup.args;
         let env = startup
             .env
@@ -74,13 +67,13 @@ impl ShellChoice {
         })
     }
     pub(crate) fn invocation(self) -> Result<Option<drivers::ShellInvocation>> {
-        self.driver().invocation()
+        drivers::invocation(self)
     }
     pub(crate) fn command_script(self, command: &str) -> String {
-        self.driver().command_script(command)
+        drivers::command_script(self, command)
     }
     pub(crate) fn keyboard_bytes(self, bytes: &[u8]) -> Cow<'_, [u8]> {
-        self.driver().keyboard_bytes(bytes)
+        drivers::keyboard_bytes(self, bytes)
     }
     pub(crate) fn from_canonical_name(value: &str) -> Result<Self> {
         let parsed = value
@@ -96,23 +89,11 @@ impl ShellChoice {
     pub(crate) fn from_shim_name(value: &str) -> Option<Self> {
         drivers::from_shim_name(value)
     }
-    pub(crate) fn display_name(self) -> &'static str {
-        self.driver().display_name()
-    }
-    pub(crate) fn shim_env_name(self) -> &'static str {
-        self.driver().shim_env_name()
-    }
-    pub(crate) fn shim_executable_names(self) -> &'static [&'static str] {
-        self.driver().shim_executable_names()
-    }
     pub(crate) const fn all() -> &'static [Self] {
         <Self as strum::VariantArray>::VARIANTS
     }
     pub(crate) fn interactive_arguments(self, arguments: &[std::ffi::OsString]) -> bool {
-        self.driver().interactive_arguments(arguments)
-    }
-    fn driver(self) -> &'static dyn drivers::ShellDriver {
-        drivers::driver(self)
+        drivers::interactive_arguments(self, arguments)
     }
 }
 #[cfg(test)]

@@ -8,8 +8,8 @@ use crate::shell::ShellChoice;
 mod wait;
 use anyhow::{Context as _, Result, bail};
 use core::time::Duration;
+use fs_err as fs;
 use serde::{Deserialize, Serialize};
-use std::fs;
 use std::path::{Path, PathBuf};
 pub(crate) use wait::wait_for_path;
 pub(super) use wait::{wait_for_done, wait_for_start_or_done};
@@ -47,15 +47,14 @@ pub(super) fn create_record(
     let input_dir = command_dir.join(COMMAND_INPUT_DIRECTORY);
     let output_dir = command_dir.join(COMMAND_OUTPUT_DIRECTORY);
     let state_dir = command_dir.join(COMMAND_STATE_DIRECTORY);
-    fs::create_dir_all(&input_dir).context("failed to create command input directory")?;
-    fs::create_dir_all(&output_dir).context("failed to create command output directory")?;
-    fs::create_dir_all(&state_dir).context("failed to create command state directory")?;
+    fs::create_dir_all(&input_dir)?;
+    fs::create_dir_all(&output_dir)?;
+    fs::create_dir_all(&state_dir)?;
     let working_directory = input_dir.join(COMMAND_WORKING_DIRECTORY_FILE);
     fs::write(
         &working_directory,
         crate::text::path_text(initial_cwd, "command working directory")?,
-    )
-    .context("failed to write command working directory")?;
+    )?;
     Ok(CommandRecord {
         directory: command_dir,
         initial_cwd: initial_cwd.to_path_buf(),
@@ -123,12 +122,7 @@ pub(super) fn remove_record_directory(record: &CommandRecord) -> Result<()> {
     match fs::remove_dir_all(&record.directory) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error).with_context(|| {
-            format!(
-                "failed to remove command directory {}",
-                record.directory.display()
-            )
-        }),
+        Err(error) => Err(error.into()),
     }
 }
 pub(super) fn write_failed_result(
@@ -137,8 +131,7 @@ pub(super) fn write_failed_result(
     _message: &str,
 ) -> Result<()> {
     if let Some(parent) = record.stderr.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("failed to create command directory {}", parent.display()))?;
+        fs::create_dir_all(parent)?;
     }
     let done = FailedDoneFile {
         command_id,
@@ -189,9 +182,7 @@ fn read_if_present(path: &Path, label: &str) -> Result<Option<Vec<u8>>> {
     match fs::read(path) {
         Ok(bytes) => Ok(Some(bytes)),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => {
-            Err(error).with_context(|| format!("failed to read {label} {}", path.display()))
-        }
+        Err(error) => Err(error).with_context(|| format!("failed to read {label}")),
     }
 }
 #[cfg(test)]

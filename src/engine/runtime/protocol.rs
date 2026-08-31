@@ -10,7 +10,9 @@ mod presentation;
 mod time_consumption;
 pub(crate) use environment::EnvironmentSnapshot;
 pub(crate) use presentation::{CommandPresentation, ShellPresentation};
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, strum :: EnumDiscriminants)]
+#[strum_discriminants(name(RequestKind), derive(strum::Display))]
+#[strum_discriminants(strum(serialize_all = "kebab-case"))]
 pub(crate) enum Request {
     Ping,
     NewTab {
@@ -44,7 +46,8 @@ pub(crate) enum Response {
     Err { message: String },
 }
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, strum :: EnumDiscriminants)]
-#[strum_discriminants(name(PayloadKind))]
+#[strum_discriminants(name(PayloadKind), derive(strum::Display))]
+#[strum_discriminants(strum(serialize_all = "kebab-case"))]
 pub(crate) enum Payload {
     Pong,
     TabCreated {

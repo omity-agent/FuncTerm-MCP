@@ -94,6 +94,7 @@ blake3 = "*"
 clap = { version = "*", features = ["derive"] }
 dashmap = "*"
 encoding_rs = "*"
+fs-err = "*"
 humantime = "*"
 interprocess = "*"
 kill_tree = "*"

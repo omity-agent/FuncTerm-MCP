@@ -16,20 +16,20 @@ shell_startup_timeout_seconds = 30.0
 # PowerShell 可执行文件候选
 powershell = ["pwsh", "powershell"]
 
-# Bash 可执行文件名称。
-bash = "bash"
+# Bash 可执行文件候选。
+bash = ["bash"]
 
-# NuShell 可执行文件名称。
-nushell = "nu"
+# NuShell 可执行文件候选。
+nushell = ["nu"]
 
-# Zsh 可执行文件名称。
-zsh = "zsh"
+# Zsh 可执行文件候选。
+zsh = ["zsh"]
 
-# Windows CMD 可执行文件名称。
-cmd = "cmd"
+# Windows CMD 可执行文件候选。
+cmd = ["cmd"]
 
-# Bun 可执行文件名称。
-bun = "bun"
+# Bun 可执行文件候选。
+bun = ["bun"]
 
 # Python 可执行文件候选。
 python = ["python3", "python"]
