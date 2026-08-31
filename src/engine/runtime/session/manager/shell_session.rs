@@ -1,7 +1,6 @@
 mod cleanup;
-use super::{process, process_tree};
-use crate::runtime::protocol::KeyboardInput;
-use crate::runtime::session::keyboard;
+mod input;
+use super::{command::ManagedCommand, process, process_tree};
 use crate::runtime::session::records::{CommandRecord, read_done};
 use crate::runtime::session::terminal::{CommandTitle, Terminal};
 use crate::shell::{ShellChoice, shims};
@@ -18,7 +17,7 @@ pub(super) struct ShellSession {
     cwd: Mutex<PathBuf>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     screen: Arc<Terminal>,
-    busy: Mutex<Option<String>>,
+    busy: Mutex<Option<Arc<ManagedCommand>>>,
     command_root: PathBuf,
     dispatch_file: PathBuf,
     active_shell_file: PathBuf,
@@ -28,21 +27,13 @@ pub(super) struct ShellSession {
     slave: Mutex<Option<Box<dyn SlavePty + Send>>>,
     reader: Option<JoinHandle<()>>,
 }
-#[derive(Debug, thiserror :: Error)]
-pub(super) enum KeyboardWriteFailure {
-    #[error(
-        "manual_write is unavailable while the prompt is idle; use send_command for prompt commands"
-    )]
-    IdlePrompt,
-    #[error(transparent)]
-    Write(#[from] anyhow::Error),
-}
+pub(in crate::engine::runtime::session::manager) use input::KeyboardWriteFailure;
 pub(super) struct ShellSessionParts {
     pub(super) choice: ShellChoice,
     pub(super) cwd: PathBuf,
     pub(super) writer: Arc<Mutex<Box<dyn Write + Send>>>,
     pub(super) screen: Arc<Terminal>,
-    pub(super) busy: Option<String>,
+    pub(super) busy: Option<Arc<ManagedCommand>>,
     pub(super) command_root: PathBuf,
     pub(super) dispatch_file: PathBuf,
     pub(super) active_shell_file: PathBuf,
@@ -100,37 +91,6 @@ impl ShellSession {
     pub(super) fn is_alive(&self) -> Result<bool> {
         process::is_alive(self.child.lock().as_mut())
     }
-    pub(super) fn write_keyboard_for_running_command(
-        &self,
-        input: KeyboardInput,
-        waiting: Duration,
-    ) -> Result<(), KeyboardWriteFailure> {
-        let busy = self.busy.lock();
-        if busy.is_none() {
-            return Err(KeyboardWriteFailure::IdlePrompt);
-        }
-        let revision = self.screen.output_revision()?;
-        let write_result = self.write_keyboard(input);
-        drop(busy);
-        write_result?;
-        self.screen.wait_for_output(revision, waiting)?;
-        Ok(())
-    }
-    fn write_keyboard(&self, input: KeyboardInput) -> Result<()> {
-        let shell_bytes = match input {
-            KeyboardInput::Text(text) => self
-                .current_choice()
-                .keyboard_bytes(text.as_bytes())
-                .into_owned(),
-            KeyboardInput::Bytes(bytes) => bytes,
-        };
-        let physical_bytes = keyboard::user_bytes(&shell_bytes);
-        let mut writer = self.writer.lock();
-        writer
-            .write_all(physical_bytes.as_ref())
-            .context("failed to write to pty")?;
-        writer.flush().context("failed to flush pty writer")
-    }
     pub(super) fn write_invocation(
         &self,
         command_id: &str,
@@ -169,25 +129,5 @@ impl ShellSession {
             "shell did not start command within {:?}",
             self.command_start_timeout
         );
-    }
-    pub(super) fn reserve(&self, tab_id: &str, command_id: &str) -> Result<()> {
-        let mut busy = self.busy.lock();
-        if let Some(existing_id) = busy.as_deref() {
-            anyhow::bail!(
-                "The command was not executed because `{tab_id}` is busy with `{existing_id}`"
-            );
-        }
-        *busy = Some(command_id.to_owned());
-        drop(busy);
-        Ok(())
-    }
-    pub(super) fn release(&self, command_id: &str) {
-        let mut busy = self.busy.lock();
-        if busy.as_deref() == Some(command_id) {
-            *busy = None;
-        }
-    }
-    pub(super) fn busy_command_id(&self) -> Option<String> {
-        self.busy.lock().clone()
     }
 }

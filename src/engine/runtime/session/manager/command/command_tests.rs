@@ -5,11 +5,13 @@ use std::sync::{Barrier, mpsc};
 use std::thread;
 #[path = "test_support.rs"]
 mod support;
-use support::{test_shell, test_shell_with_flush, test_shell_with_writer};
+use support::{test_command, test_shell, test_shell_with_flush, test_shell_with_writer};
 #[test]
 fn busy_state_rejects_conflicting_reservation() {
     let shell = test_shell(Some("command-current"));
-    let error = shell.reserve("tab-current", "command-next").unwrap_err();
+    let error = shell
+        .reserve("tab-current", test_command("command-next"))
+        .unwrap_err();
     assert_eq!(
         error.to_string(),
         "The command was not executed because `tab-current` is busy with `command-current`"
@@ -35,7 +37,7 @@ fn busy_state_allows_only_one_concurrent_reservation() {
             let command_id = format!("command-{index}");
             worker_barrier.wait();
             worker_shell
-                .reserve("tab-current", &command_id)
+                .reserve("tab-current", test_command(&command_id))
                 .map(|()| command_id)
         }));
     }
@@ -127,4 +129,18 @@ fn output_wait_does_not_hold_the_busy_state_lock() {
     terminal.reader_closed();
     writer.join().unwrap().unwrap();
     releaser.join().unwrap();
+}
+#[test]
+fn interrupt_delivery_normalizes_nonzero_exit_code() {
+    let batch = crate::runtime::session::keyboard::InputBatch::from_bytes(&[3_u8]);
+    let mut history = super::outcome::CommandInputHistory::default();
+    history.observe(batch.delivery());
+    assert_eq!(history.normalized_exit_code(-1_i32), 130_i32);
+}
+#[test]
+fn handled_interrupt_preserves_successful_exit_code() {
+    let batch = crate::runtime::session::keyboard::InputBatch::from_bytes(&[3_u8]);
+    let mut history = super::outcome::CommandInputHistory::default();
+    history.observe(batch.delivery());
+    assert_eq!(history.normalized_exit_code(0_i32), 0_i32);
 }

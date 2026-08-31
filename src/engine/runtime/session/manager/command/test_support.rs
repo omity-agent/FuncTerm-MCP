@@ -1,4 +1,6 @@
+use crate::runtime::session::manager::command::ManagedCommand;
 use crate::runtime::session::manager::shell_session::{ShellSession, ShellSessionParts};
+use crate::runtime::session::records::create_record;
 use crate::runtime::session::terminal::Terminal;
 use crate::shell::ShellChoice;
 use alloc::sync::Arc;
@@ -20,6 +22,27 @@ pub(super) fn test_shell_with_flush(
     let (flushed_tx, flushed_rx) = mpsc::channel();
     let (shell, _written, terminal) = build_shell(busy, Some(flushed_tx));
     (shell, terminal, flushed_rx)
+}
+pub(super) fn test_command(id: &str) -> Arc<ManagedCommand> {
+    let terminal = Arc::new(
+        Terminal::new(
+            TerminalSize {
+                rows: 30,
+                cols: 120,
+            },
+            0,
+            "FuncTerm",
+        )
+        .unwrap(),
+    );
+    let record = create_record(
+        &crate::test_fs::temp_dir("managed-command"),
+        id,
+        &crate::test_fs::temp_root(),
+    )
+    .unwrap();
+    let title = terminal.capture_title(id).unwrap();
+    Arc::new(ManagedCommand::new(id.to_owned(), record, title))
 }
 fn build_shell(
     busy: Option<&str>,
@@ -46,7 +69,7 @@ fn build_shell(
         cwd: crate::test_fs::temp_root(),
         writer: Arc::new(Mutex::new(writer)),
         screen: Arc::clone(&terminal),
-        busy: busy.map(str::to_owned),
+        busy: busy.map(test_command),
         command_root: crate::test_fs::temp_dir("command-manager"),
         dispatch_file: crate::test_fs::temp_dir("command-manager-dispatch").join("dispatch"),
         active_shell_file: crate::test_fs::temp_dir("command-manager-active")

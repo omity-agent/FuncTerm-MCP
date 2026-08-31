@@ -1,4 +1,6 @@
+use super::outcome::CommandInputHistory;
 use crate::runtime::protocol::CommandSnapshot;
+use crate::runtime::session::keyboard::InputDelivery;
 use crate::runtime::session::records::{
     CommandRecord, command_note, read_and_clear_command_result, read_command_result,
     remove_record_directory, wait_for_done, write_failed_result,
@@ -19,12 +21,20 @@ pub(in crate::engine::runtime::session::manager) struct ManagedCommand {
 struct ManagedCommandState {
     wait: CommandWait,
     cached_view: Option<CommandSnapshot>,
+    input: CommandInputHistory,
 }
 #[derive(Clone, Copy)]
 pub(in crate::engine::runtime::session::manager) enum CommandWait {
     Running,
     Finished,
     Failed,
+}
+#[derive(Debug, thiserror :: Error)]
+pub(in crate::engine::runtime::session::manager) enum CommandInputFailure {
+    #[error("manual_write target command ended before input could be written")]
+    CommandEnded,
+    #[error(transparent)]
+    Write(#[from] anyhow::Error),
 }
 impl ManagedCommand {
     pub(super) fn new(id: String, record: CommandRecord, title: Arc<CommandTitle>) -> Self {
@@ -35,6 +45,7 @@ impl ManagedCommand {
             state: Mutex::new(ManagedCommandState {
                 wait: CommandWait::Running,
                 cached_view: None,
+                input: CommandInputHistory::default(),
             }),
             title,
         }
@@ -44,6 +55,19 @@ impl ManagedCommand {
     }
     pub(super) const fn record(&self) -> &CommandRecord {
         &self.record
+    }
+    pub(in crate::engine::runtime::session::manager) fn deliver_input(
+        &self,
+        write: impl FnOnce() -> Result<InputDelivery>,
+    ) -> Result<(), CommandInputFailure> {
+        let mut state = self.state.lock();
+        if !matches!(state.wait, CommandWait::Running) {
+            return Err(CommandInputFailure::CommandEnded);
+        }
+        let delivery = write()?;
+        state.input.observe(delivery);
+        drop(state);
+        Ok(())
     }
     pub(in crate::engine::runtime::session::manager) fn wait(
         &self,
@@ -84,7 +108,8 @@ impl ManagedCommand {
             return Ok(());
         }
         let title = self.title.wait_finished()?;
-        let view = read_and_clear_command_result(&self.record, self.time_consumption(), title)?;
+        let mut view = read_and_clear_command_result(&self.record, self.time_consumption(), title)?;
+        state.input.normalize(&mut view);
         state.cached_view = Some(view);
         state.wait = CommandWait::Finished;
         Ok(())

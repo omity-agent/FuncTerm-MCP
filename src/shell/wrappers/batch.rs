@@ -92,7 +92,16 @@ call :restore_command_environment
 exit /b %@VAR_exit_code@%
 :prepend_shim_path
 if "%FUNCTERM_SHIM_DIR%"=="" exit /b 0
-set "PATH=%FUNCTERM_SHIM_DIR%;%PATH%"
+set "@VAR_new_path@=%FUNCTERM_SHIM_DIR%"
+set "@VAR_remaining_path@=%PATH%"
+:prepend_shim_path_entry
+if not defined @VAR_remaining_path@ goto prepend_shim_path_done
+for /f "tokens=1* delims=;" %%a in ("%@VAR_remaining_path@%") do set "@VAR_path_entry@=%%~a" & set "@VAR_remaining_path@=%%b"
+if /i "%@VAR_path_entry@%"=="%FUNCTERM_SHIM_DIR%" goto prepend_shim_path_entry
+if defined @VAR_path_entry@ set "@VAR_new_path@=%@VAR_new_path@%;%@VAR_path_entry@%"
+goto prepend_shim_path_entry
+:prepend_shim_path_done
+set "PATH=%@VAR_new_path@%"
 exit /b 0
 :publish_done
 if exist "%@VAR_done_file@%" exit /b 0
@@ -110,9 +119,8 @@ if "%@HELPER_ENV@%"=="" (
 "%@HELPER_ENV@%" internal-write-start --command-id "%@VAR_command_id@%" --directory "%@VAR_directory@%"
 exit /b %ERRORLEVEL%
 :command_time_millis
-for /f "tokens=1-4 delims=:. ," %%a in ("%TIME%") do (
-    set /a "@VAR_time_millis@=(((1%%a %% 100) * 60 + 1%%b %% 100) * 60 + 1%%c %% 100) * 1000 + 1%%d0 %% 1000"
-)
+set "@VAR_time_value@=%TIME: =0%"
+set /a "@VAR_time_millis@=((1%@VAR_time_value@:~0,2% %% 100 * 60 + 1%@VAR_time_value@:~3,2% %% 100) * 60 + 1%@VAR_time_value@:~6,2% %% 100) * 1000 + 1%@VAR_time_value@:~9,2% %% 100 * 10"
 exit /b %@VAR_time_millis@%
 :restore_command_environment
 if defined @VAR_had_previous_command_id@ (

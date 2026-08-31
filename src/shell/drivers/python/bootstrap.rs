@@ -66,7 +66,14 @@ pub(super) fn script(context: StartupContext<'_>) -> Result<String> {
 	                with @VAR_contextlib@.redirect_stdout(@VAR_stdout@), @VAR_contextlib@.redirect_stderr(@VAR_stderr@):
 	                    try:
 	                        @VAR_execute@(@VAR_source@, globals())
-	                    except SystemExit:
+	                    except SystemExit as @VAR_system_exit@:
+	                        @VAR_system_exit_code@ = @VAR_system_exit@.code
+	                        if @VAR_system_exit_code@ is None:
+	                            @VAR_exit_code@ = 0
+	                        elif isinstance(@VAR_system_exit_code@, int):
+	                            @VAR_exit_code@ = @VAR_system_exit_code@
+	                        else:
+	                            @VAR_exit_code@ = 1
 	                        raise
 	                    except BaseException:
 	                        @VAR_exit_code@ = 1

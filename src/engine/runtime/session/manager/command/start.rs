@@ -30,11 +30,22 @@ impl Tab {
         }
         session.refresh_choice()?;
         self.remember(&session)?;
-        let reservation = ShellReservation::new(&session, self.id(), &command_id)?;
         let initial_cwd = session.cwd();
         let record = create_record(session.command_root(), &command_id, &initial_cwd)?;
         let title = session.capture_title(&command_id)?;
-        let managed = Arc::new(ManagedCommand::new(command_id, record, title));
+        let managed = Arc::new(ManagedCommand::new(command_id, record, Arc::clone(&title)));
+        let reservation = match ShellReservation::new(&session, self.id(), Arc::clone(&managed)) {
+            Ok(reservation) => reservation,
+            Err(error) => {
+                if let Err(cancel_error) = title.cancel() {
+                    eprintln!("{cancel_error:#}");
+                }
+                if let Err(remove_error) = remove_record_directory(managed.record()) {
+                    eprintln!("{remove_error:#}");
+                }
+                return Err(error);
+            }
+        };
         self.insert_command(Arc::clone(&managed));
         if let Err(error) = session.write_invocation(managed.id(), command_text, managed.record()) {
             self.abandon_start(&managed, &session)?;
@@ -109,11 +120,16 @@ impl StartedCommand {
     }
 }
 impl ShellReservation {
-    fn new(session: &Arc<ShellSession>, tab_id: &str, command_id: &str) -> Result<Self> {
-        session.reserve(tab_id, command_id)?;
+    fn new(
+        session: &Arc<ShellSession>,
+        tab_id: &str,
+        command: Arc<ManagedCommand>,
+    ) -> Result<Self> {
+        let command_id = command.id().to_owned();
+        session.reserve(tab_id, command)?;
         Ok(Self {
             session: Arc::clone(session),
-            command_id: command_id.to_owned(),
+            command_id,
             released: false,
         })
     }

@@ -33,9 +33,12 @@ mod tests {
             "native process did not stop after Ctrl+C; stdout: {}; stderr: {}",
             interrupted.stdout, interrupted.stderr
         );
-        assert!(
-            interrupted.exit_code.is_some(),
-            "interrupted command must publish an exit code"
+        assert_eq!(
+            interrupted.exit_code,
+            Some(130_i32),
+            "Ctrl+C should publish the conventional interrupted exit code; stdout: {}; stderr: {}",
+            interrupted.stdout,
+            interrupted.stderr
         );
         let follow_up = parse_command_result(&send_command(
             &tab.tab_id,

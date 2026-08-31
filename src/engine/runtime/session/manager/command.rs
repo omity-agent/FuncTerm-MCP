@@ -1,4 +1,5 @@
 mod lifecycle;
+mod outcome;
 mod result_view;
 mod start;
 #[cfg(test)]
@@ -9,6 +10,7 @@ use crate::runtime::protocol::{EndReason, KeyboardInput, ViewResult};
 use alloc::sync::Arc;
 use anyhow::Result;
 use core::time::Duration;
+pub(in crate::engine::runtime::session::manager) use lifecycle::CommandInputFailure;
 pub(super) use lifecycle::{CommandWait, ManagedCommand};
 impl Manager {
     pub(crate) fn manual_write(

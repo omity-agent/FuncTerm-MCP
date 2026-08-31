@@ -27,7 +27,9 @@ impl Tab {
                     Ok(self.snapshot_view())
                 }
             }
-            Err(error @ KeyboardWriteFailure::IdlePrompt) => Err(error.into()),
+            Err(
+                error @ (KeyboardWriteFailure::IdlePrompt | KeyboardWriteFailure::CommandEnded),
+            ) => Err(error.into()),
             Err(KeyboardWriteFailure::Write(error)) => {
                 self.close_session(&session)?;
                 Err(error)

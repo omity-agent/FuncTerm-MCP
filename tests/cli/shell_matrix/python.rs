@@ -67,6 +67,19 @@ fn cli_tools_work_with_python_repl() {
     );
 }
 #[test]
+fn python_system_exit_reports_the_requested_code() {
+    let executable = required_executable(&PYTHON);
+    let _guard = locked_with_env(&[(PYTHON.env_var, &executable)]);
+    let created = create_tab(&case_dir(PYTHON.name, "system exit"), PYTHON.name);
+    let exited = parse_command_result(&send_command(
+        &created.tab_id,
+        "import sys; sys.exit(7)",
+        10.0,
+    ));
+    assert!(exited.finished, "sys.exit should finish its command record");
+    assert_eq!(exited.exit_code, Some(7_i32));
+}
+#[test]
 fn python_shim_returns_to_parent_shell_after_exit() {
     let python = required_executable(&PYTHON);
     let parent_case = parent_shell();

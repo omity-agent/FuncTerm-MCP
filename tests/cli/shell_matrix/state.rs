@@ -1,5 +1,7 @@
 use super::matrix::{case_dir, required_executable, shell_cases};
-use crate::support::{create_tab, locked_with_env, parse_command_result, send_command};
+use crate::support::{
+    create_tab, locked_with_env, parse_command_result, parse_tab_view, run_cli, send_command,
+};
 #[test]
 fn cli_preserves_shell_state_between_commands() {
     for case in shell_cases() {
@@ -75,6 +77,48 @@ fn powershell_user_variables_do_not_overwrite_wrapper_state() {
     );
     assert!(command.stdout.contains("MCP_PTY_COLLISION_SAFE"));
     assert!(!directory.join("state").join("done.json").exists());
+}
+#[cfg(windows)]
+#[test]
+fn cmd_deduplicates_the_shim_path_without_screen_errors() {
+    let case = shell_cases()
+        .iter()
+        .find(|case| case.name == "cmd")
+        .unwrap();
+    let executable = required_executable(case);
+    let _guard = locked_with_env(&[(case.env_var, &executable)]);
+    let created = create_tab(&case_dir(case.name, "shim path deduplication"), case.name);
+    for _ in 0_u8..3 {
+        let command = parse_command_result(&send_command(
+            &created.tab_id,
+            "echo %FUNCTERM_SHIM_DIR%& echo %PATH%",
+            10.0,
+        ));
+        assert_eq!(
+            command.exit_code,
+            Some(0_i32),
+            "stdout: {}\nstderr: {}",
+            command.stdout,
+            command.stderr
+        );
+        let mut lines = command
+            .stdout
+            .lines()
+            .filter(|line| !line.trim().is_empty());
+        let shim = lines.next().unwrap().trim();
+        let path = lines.next().unwrap();
+        let shim_count = path
+            .split(';')
+            .filter(|entry| entry.eq_ignore_ascii_case(shim))
+            .count();
+        assert_eq!(shim_count, 1, "PATH contains repeated shim entries: {path}");
+    }
+    let view = parse_tab_view(&run_cli(&["view", &created.tab_id]));
+    assert!(
+        !view.screen.contains("was unexpected at this time"),
+        "CMD wrapper left a parser error on screen: {}",
+        view.screen
+    );
 }
 fn definition_command(shell: &str) -> &'static str {
     match shell {
