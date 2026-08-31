@@ -10,6 +10,21 @@ pub(crate) const ACTIVE_SHELL_FILE_ENV: &str = "FUNCTERM_ACTIVE_SHELL_FILE";
 pub(crate) const CURRENT_SHELL_ENV: &str = "FUNCTERM_CURRENT_SHELL";
 pub(crate) const SESSION_ROOT_ENV: &str = "FUNCTERM_SESSION_ROOT";
 pub(crate) const SHIM_DIR_ENV: &str = "FUNCTERM_SHIM_DIR";
+pub(crate) const PROTECTED_ENVIRONMENT_NAMES: [&str; 13] = [
+    "PATH",
+    SHIM_DIR_ENV,
+    SESSION_ROOT_ENV,
+    ACTIVE_SHELL_FILE_ENV,
+    HELPER_EXECUTABLE_ENV,
+    CURRENT_SHELL_ENV,
+    "FUNCTERM_REAL_POWERSHELL",
+    "FUNCTERM_REAL_BASH",
+    "FUNCTERM_REAL_NUSHELL",
+    "FUNCTERM_REAL_ZSH",
+    "FUNCTERM_REAL_CMD",
+    "FUNCTERM_REAL_BUN",
+    "FUNCTERM_REAL_PYTHON",
+];
 pub(crate) use crate::contract::{COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV};
 pub(crate) fn environment(
     settings: &Settings,
@@ -105,22 +120,12 @@ fn prepend_path(
     std::env::join_paths(parts).context("failed to join PATH entries")
 }
 fn is_managed_name(name: &OsStr) -> bool {
-    let fixed = [
-        "PATH",
-        SHIM_DIR_ENV,
-        SESSION_ROOT_ENV,
-        ACTIVE_SHELL_FILE_ENV,
-        HELPER_EXECUTABLE_ENV,
-        CURRENT_SHELL_ENV,
-        COMMAND_ID_ENV,
-        COMMAND_DIRECTORY_ENV,
-    ];
-    fixed
+    PROTECTED_ENVIRONMENT_NAMES
         .iter()
         .any(|expected| environment_name_equals(name, expected))
-        || ShellChoice::all()
+        || [COMMAND_ID_ENV, COMMAND_DIRECTORY_ENV]
             .iter()
-            .any(|shell| environment_name_equals(name, shell.shim_env_name()))
+            .any(|expected| environment_name_equals(name, expected))
 }
 #[cfg(windows)]
 fn environment_name_equals(actual: &OsStr, expected: &str) -> bool {

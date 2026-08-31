@@ -5,6 +5,9 @@ mod basic;
 #[path = "shell_matrix/bun.rs"]
 mod bun;
 #[cfg(test)]
+#[path = "shell_matrix/environment.rs"]
+mod environment;
+#[cfg(test)]
 #[path = "shell_matrix/matrix_support.rs"]
 mod matrix;
 #[cfg(test)]

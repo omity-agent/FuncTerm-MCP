@@ -44,6 +44,12 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
 	    @VAR_writeFileSync@(@VAR_join@(@VAR_command@.output, "{stdout_file}"), Buffer.concat(@VAR_command@.capture.stdout));
 	    @VAR_writeFileSync@(@VAR_join@(@VAR_command@.output, "{stderr_file}"), Buffer.concat(@VAR_command@.capture.stderr));
 	    const @VAR_elapsed@ = `${{Math.max(1, Math.ceil(performance.now() - @VAR_command@.started))}}ms`;
+	    const @VAR_environmentWasCleared@ = Object.keys(process.env).length === 0;
+	    for (const [@VAR_name@, @VAR_value@] of Object.entries(@VAR_command@.protectedEnvironment)) {{
+	        if (@VAR_environmentWasCleared@ || [@BUN_PROTECTED_ENVIRONMENT@].includes(@VAR_name@.toUpperCase())) {{
+	            process.env[@VAR_name@] = @VAR_value@;
+	        }}
+	    }}
 	    @VAR_runHelper@(["internal-write-done", "--command-id", @VAR_command@.id, "--exit-code", @VAR_command@.failed ? "1" : "0", "--time-consumption", @VAR_elapsed@, "--cwd", process.cwd(), "--directory", @VAR_command@.directory]);
 	    @VAR_restoreEnvironment@("{command_id_env}", @VAR_command@.previousId);
 	    @VAR_restoreEnvironment@("{command_directory_env}", @VAR_command@.previousDirectory);
@@ -116,6 +122,7 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
 	        const @VAR_workingDirectory@ = @VAR_readFileSync@(@VAR_join@(@VAR_input@, "{working_directory_file}"), "utf8");
 	        const @VAR_previousId@ = process.env.{command_id_env};
 	        const @VAR_previousDirectory@ = process.env.{command_directory_env};
+	        const @VAR_protectedEnvironment@ = {{ ...process.env }};
 	        const @VAR_previousError@ = @VAR_server@.context._error;
 	        process.env.{command_id_env} = @VAR_commandId@;
 	        process.env.{command_directory_env} = @VAR_directory@;
@@ -128,6 +135,7 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
 	        @VAR_activeCommand@ = {{
 	            id: @VAR_commandId@, directory: @VAR_directory@, output: @VAR_output@,
 	            previousId: @VAR_previousId@, previousDirectory: @VAR_previousDirectory@,
+	            protectedEnvironment: @VAR_protectedEnvironment@,
 	            previousError: @VAR_previousError@, previousWriter: @VAR_previousWriter@,
 	            started: performance.now(), failed: false, readingInput: true,
 	            nativeInput: @VAR_source@.trimStart().startsWith("."), capture: @VAR_captureOutput@()
@@ -174,5 +182,9 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
         stderr_file = STDERR_FILE,
         output_capture = output_capture::SCRIPT,
     );
-    crate::shell::wrappers::VariableNamespace::new().render(&bootstrap)
+    let protected = bootstrap.replace(
+        "@BUN_PROTECTED_ENVIRONMENT@",
+        &crate::shell::wrappers::quoted_protected_environment_names(),
+    );
+    crate::shell::wrappers::VariableNamespace::new().render(&protected)
 }

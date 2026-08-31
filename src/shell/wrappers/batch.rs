@@ -1,6 +1,14 @@
 use super::template;
 pub(in crate::shell) fn wrapper() -> String {
-    super::VariableNamespace::new().render(&template::render_script(TEMPLATE))
+    let protected = TEMPLATE.replace(
+        "@CMD_PROTECTED_ENVIRONMENT_RESTORE@",
+        &super::variables::cmd_environment_restore(),
+    );
+    let captured = protected.replace(
+        "@CMD_PROTECTED_ENVIRONMENT_CAPTURE@",
+        &super::variables::cmd_environment_capture(),
+    );
+    super::VariableNamespace::new().render(&template::render_script(&captured))
 }
 const TEMPLATE: &str = r#"@echo off
 set "@VAR_command_id@=%~1"
@@ -54,8 +62,20 @@ if errorlevel 1 (
 )
 call :command_time_millis
 set "@VAR_command_started_at@=%ERRORLEVEL%"
-call "%@VAR_script_file@%" > "%@VAR_stdout_file@%" 2> "%@VAR_stderr_file@%"
-set "@VAR_exit_code@=%ERRORLEVEL%"
+set > "%~dp0@VAR_environment_before_file@.txt"
+setlocal DisableDelayedExpansion
+call "%~2\@INPUT_DIR@\@SCRIPT@" > "%~2\@OUTPUT_DIR@\@STDOUT@" 2> "%~2\@OUTPUT_DIR@\@STDERR@"
+> "%~dp0@VAR_exit_code_file@.txt" echo %ERRORLEVEL%
+cd > "%~dp0@VAR_cwd_after_file@.txt"
+set > "%~dp0@VAR_environment_after_file@.txt" 2> nul
+endlocal
+@CMD_PROTECTED_ENVIRONMENT_CAPTURE@
+for /f "usebackq delims=" %%e in ("%~dp0@VAR_environment_after_file@.txt") do set "%%e"
+@CMD_PROTECTED_ENVIRONMENT_RESTORE@
+set /p "@VAR_exit_code@="<"%~dp0@VAR_exit_code_file@.txt"
+set /p "@VAR_current_directory@="<"%~dp0@VAR_cwd_after_file@.txt"
+del /q "%~dp0@VAR_environment_before_file@.txt" "%~dp0@VAR_environment_after_file@.txt" "%~dp0@VAR_protected_environment_file@.txt" "%~dp0@VAR_exit_code_file@.txt" "%~dp0@VAR_cwd_after_file@.txt"
+cd /d "%@VAR_current_directory@%"
 call :command_time_millis
 set /a @VAR_command_elapsed@=%ERRORLEVEL% - @VAR_command_started_at@
 if %@VAR_command_elapsed@% LSS 0 set /a @VAR_command_elapsed@+=86400000

@@ -12,7 +12,7 @@ pub(super) use nu::wrapper as nushell_wrapper;
 pub(super) use posix_startup::{bash_wrapper, zsh_wrapper};
 pub(super) use pwsh::wrapper as powershell_wrapper;
 pub(super) use template::cmd_dispatcher;
-pub(in crate::shell) use variables::VariableNamespace;
+pub(in crate::shell) use variables::{VariableNamespace, quoted_protected_environment_names};
 #[cfg(test)]
 mod tests {
     use crate::contract::{

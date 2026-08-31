@@ -43,3 +43,65 @@ fn valid_semantic_prefix(value: &str) -> bool {
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
 }
+pub(super) fn posix_environment_snapshot() -> String {
+    let protected = crate::shell::shims::PROTECTED_ENVIRONMENT_NAMES
+        .iter()
+        .map(|name| format!("    local @VAR_protected_{name}@=\"${{{name}-}}\""))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        "    local @VAR_complete_environment@=\"$(export -p | sed 's/^declare -x /export /')\"\n{protected}"
+    )
+}
+pub(super) fn posix_environment_restore() -> String {
+    let protected = crate::shell::shims::PROTECTED_ENVIRONMENT_NAMES
+        .iter()
+        .map(|name| format!("    export {name}=\"$@VAR_protected_{name}@\""))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        "    if [ -z \"${{PATH+x}}\" ] && [ -z \"${{PWD+x}}\" ]; then\n        eval \"$@VAR_complete_environment@\"\n    fi\n{protected}"
+    )
+}
+pub(super) fn nushell_protected_environment_names() -> String {
+    protected_environment_names().collect::<Vec<_>>().join(" ")
+}
+pub(super) fn cmd_environment_restore() -> String {
+    let cleared = protected_environment_names()
+        .map(|name| format!("set \"{name}=\""))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        "{cleared}\nfor /f \"usebackq delims=\" %%e in (\"%~dp0@VAR_protected_environment_file@.txt\") do set \"%%e\""
+    )
+}
+pub(super) fn cmd_environment_capture() -> String {
+    let patterns = protected_environment_names()
+        .map(|name| format!("/c:\"{name}=\""))
+        .collect::<Vec<_>>()
+        .join(" ");
+    format!(
+        "findstr.exe /b /l {patterns} \"%~dp0@VAR_environment_before_file@.txt\" > \"%~dp0@VAR_protected_environment_file@.txt\""
+    )
+}
+pub(super) fn powershell_protected_environment_names() -> String {
+    protected_environment_names()
+        .map(|name| format!("'{name}'"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+pub(in crate::shell) fn quoted_protected_environment_names() -> String {
+    protected_environment_names()
+        .map(|name| format!("\"{name}\""))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+fn protected_environment_names() -> impl Iterator<Item = &'static str> {
+    crate::shell::shims::PROTECTED_ENVIRONMENT_NAMES
+        .iter()
+        .copied()
+        .chain([
+            crate::contract::COMMAND_ID_ENV,
+            crate::contract::COMMAND_DIRECTORY_ENV,
+        ])
+}

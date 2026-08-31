@@ -24,6 +24,7 @@ pub(super) fn command_function(dialect: PosixDialect) -> String {
 	    local @VAR_previous_command_id@="${{{command_id_env}-}}"
 	    local @VAR_previous_command_directory@="${{{command_dir_env}-}}"
 	{previous_flags}
+	{environment_snapshot}
 	    export {command_id_env}="$@VAR_command_id@"
 	    export {command_dir_env}="$@VAR_directory@"
 	    if ! functerm_ensure_shims; then
@@ -77,6 +78,7 @@ pub(super) fn command_function(dialect: PosixDialect) -> String {
 	    local @VAR_command_started_at@="$(functerm_command_time_millis)" || return 1
 	    {{ eval "$@VAR_script@"; }} > "$@VAR_stdout_file@" 2> "$@VAR_stderr_file@"
 	    local @VAR_exit_code@=$?
+	{environment_restore}
 	    local @VAR_command_finished_at@="$(functerm_command_time_millis)" || return 1
 	    local @VAR_time_consumption@="$((@VAR_command_finished_at@ - @VAR_command_started_at@))ms"
 	    cat "$@VAR_stdout_file@"
@@ -156,6 +158,8 @@ functerm_ensure_shims() {{
         command_id_env = COMMAND_ID_ENV,
         command_dir_env = COMMAND_DIRECTORY_ENV,
         previous_flags = dialect.previous_flags(),
+        environment_snapshot = super::variables::posix_environment_snapshot(),
+        environment_restore = super::variables::posix_environment_restore(),
         cd = dialect.cd(),
         test_one = dialect.test_arg("1"),
         test_three = dialect.test_arg("3"),

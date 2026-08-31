@@ -2,7 +2,11 @@ use super::template;
 use crate::contract::POSIX_COMMAND_FUNCTION;
 pub(in crate::shell) fn wrapper() -> String {
     let stateful = TEMPLATE.replace("@NUSHELL_STATE_FUNCTIONS@", NUSHELL_STATE_FUNCTIONS);
-    let runner = template::render_command_function(&stateful, POSIX_COMMAND_FUNCTION);
+    let protected = stateful.replace(
+        "@NUSHELL_PROTECTED_ENVIRONMENT@",
+        &super::variables::nushell_protected_environment_names(),
+    );
+    let runner = template::render_command_function(&protected, POSIX_COMMAND_FUNCTION);
     let wrapper = format!("{runner}\n{}", super::template::nushell_dispatcher());
     super::VariableNamespace::new().render(&wrapper)
 }
@@ -161,14 +165,20 @@ const NUSHELL_STATE_FUNCTIONS: &str = "def save_nushell_state [
 	    @VAR_declaration_state_file@: path,
 	] {
 	    $env.PWD | save --force --raw $@VAR_cwd_file@
-	    $env
-	        | reject PWD config FUNCTERM_COMMAND_ID FUNCTERM_COMMAND_DIRECTORY
+	    let @VAR_environment_entries@ = $env
+	        | reject --optional PWD config @NUSHELL_PROTECTED_ENVIRONMENT@
 	        | transpose @VAR_name@ @VAR_value@
 	        | where {|@VAR_item@| not (($@VAR_item@.@VAR_value@ | describe) starts-with 'closure') }
-	        | transpose --header-row --as-record
+	    let @VAR_saved_environment@ = if ($@VAR_environment_entries@ | is-empty) {
+	        {}
+	    } else {
+	        $@VAR_environment_entries@ | transpose --header-row --as-record
+	    }
+	    $@VAR_saved_environment@
 	        | to nuon
 	        | save --force --raw $@VAR_env_state_file@
-	    $env.config | reject hooks
+	    let @VAR_saved_config@ = $env.config? | default {}
+	    $@VAR_saved_config@ | reject --optional hooks
 	        | to nuon
 	        | save --force --raw $@VAR_config_state_file@
 	    let @VAR_declarations@ = scope commands

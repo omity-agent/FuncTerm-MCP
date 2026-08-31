@@ -51,6 +51,7 @@ pub(super) fn script(context: StartupContext<'_>) -> Result<String> {
 	    @VAR_done_file@ = @VAR_directory@ / "state" / "{done_file}"
 	    @VAR_previous_id@ = @VAR_os@.environ.get("{command_id_env}")
 	    @VAR_previous_directory@ = @VAR_os@.environ.get("{command_directory_env}")
+	    @VAR_protected_environment@ = dict(@VAR_os@.environ)
 	    @VAR_os@.environ["{command_id_env}"] = @VAR_command_id@
 	    @VAR_os@.environ["{command_directory_env}"] = str(@VAR_directory@)
 	    @VAR_exit_code@ = 0
@@ -74,6 +75,10 @@ pub(super) fn script(context: StartupContext<'_>) -> Result<String> {
 	        print(@VAR_stdout_file@.read_text(encoding="utf-8"), end="")
 	        print(@VAR_stderr_file@.read_text(encoding="utf-8"), end="", file=__import__("sys").stderr)
 	    finally:
+	        @VAR_environment_was_cleared@ = not @VAR_os@.environ
+	        for @VAR_name@, @VAR_value@ in @VAR_protected_environment@.items():
+	            if @VAR_environment_was_cleared@ or @VAR_name@.upper() in {{@PYTHON_PROTECTED_ENVIRONMENT@}}:
+	                @VAR_os@.environ[@VAR_name@] = @VAR_value@
 	        if not @VAR_done_file@.exists():
 	            @VAR_elapsed@ = max(1, round((@VAR_time@.perf_counter() - @VAR_started@) * 1000))
 	            @VAR_helper@(
@@ -94,7 +99,11 @@ pub(super) fn script(context: StartupContext<'_>) -> Result<String> {
 	            @VAR_os@.environ["{command_directory_env}"] = @VAR_previous_directory@
 	@VAR_pathlib@.Path({ready}).touch()
 	"# , helper_env = HELPER_EXECUTABLE_ENV , state_directory = SESSION_STATE_DIRECTORY , dispatch_file = DISPATCH_FILE , commands_directory = SESSION_COMMANDS_DIRECTORY , input_directory = COMMAND_INPUT_DIRECTORY , output_directory = COMMAND_OUTPUT_DIRECTORY , command_file = COMMAND_FILE , working_directory_file = COMMAND_WORKING_DIRECTORY_FILE , stdout_file = STDOUT_FILE , stderr_file = STDERR_FILE , done_file = DONE_FILE , command_id_env = COMMAND_ID_ENV , command_directory_env = COMMAND_DIRECTORY_ENV) . replace ("\n\t" , "\n") ;
-    Ok(crate::shell::wrappers::VariableNamespace::new().render(&bootstrap))
+    let protected = bootstrap.replace(
+        "@PYTHON_PROTECTED_ENVIRONMENT@",
+        &crate::shell::wrappers::quoted_protected_environment_names(),
+    );
+    Ok(crate::shell::wrappers::VariableNamespace::new().render(&protected))
 }
 fn python_string(path: &std::path::Path) -> Result<String> {
     sonic_rs::to_string(&crate::text::path_text(path, "Python bootstrap path")?)

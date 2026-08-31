@@ -118,26 +118,26 @@ call "%FUNCTERM_SESSION_ROOT%\startup\cmd_run.bat" "%@VAR_command_id@%" "%@VAR_d
 exit /b %ERRORLEVEL%
 "#;
 pub (super) const POWERSHELL_STATE_PROMOTION : & str = "        foreach ($@VAR_variable@ in Get-Variable -Scope Local) {
-	            if (
-	                $@VAR_variable@.Name -notin $@VAR_existingVariables@ -and
-	                $@VAR_variable@.Options -notmatch 'ReadOnly|Constant'
-	            ) {
-	                Set-Variable -Scope Global -Name $@VAR_variable@.Name -Value $@VAR_variable@.Value
-	            }
-	        }
-	        foreach ($@VAR_function@ in Get-ChildItem Function:) {
-	            if (
-	                -not $@VAR_existingFunctions@.ContainsKey($@VAR_function@.Name) -or
-	                $@VAR_existingFunctions@[$@VAR_function@.Name] -ne $@VAR_function@.ScriptBlock.ToString()
-	            ) {
-	                Set-Item -LiteralPath ('Function:\\global:' + $@VAR_function@.Name) -Value $@VAR_function@.ScriptBlock
-	            }
-	        }
-	        foreach ($@VAR_alias@ in Get-ChildItem Alias:) {
-	            if (
-	                -not $@VAR_existingAliases@.ContainsKey($@VAR_alias@.Name) -or
-	                $@VAR_existingAliases@[$@VAR_alias@.Name] -ne $@VAR_alias@.Definition
-	            ) {
-	                Set-Alias -Scope Global -Name $@VAR_alias@.Name -Value $@VAR_alias@.Definition
-	            }
-		        }" ;
+            if (
+                $@VAR_variable@.Name -notin $@VAR_existingVariables@ -and
+                $@VAR_variable@.Options -notmatch 'ReadOnly|Constant'
+            ) {
+                Set-Variable -Scope Global -Name $@VAR_variable@.Name -Value $@VAR_variable@.Value
+            }
+        }
+        foreach ($@VAR_function@ in Get-ChildItem Function:) {
+            if (
+                -not $@VAR_existingFunctions@.ContainsKey($@VAR_function@.Name) -or
+                $@VAR_existingFunctions@[$@VAR_function@.Name] -ne $@VAR_function@.ScriptBlock.ToString()
+            ) {
+                Set-Item -LiteralPath ('Function:\\global:' + $@VAR_function@.Name) -Value $@VAR_function@.ScriptBlock
+            }
+        }
+        foreach ($@VAR_alias@ in Get-ChildItem Alias:) {
+            if (
+                -not $@VAR_existingAliases@.ContainsKey($@VAR_alias@.Name) -or
+                $@VAR_existingAliases@[$@VAR_alias@.Name] -ne $@VAR_alias@.Definition
+            ) {
+                Set-Alias -Scope Global -Name $@VAR_alias@.Name -Value $@VAR_alias@.Definition
+            }
+        }" ;
