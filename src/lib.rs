@@ -1,3 +1,4 @@
+#![cfg_attr(unix, feature(process_setsid))]
 #![cfg_attr(windows, feature(windows_process_extensions_raw_attribute))]
 #![cfg_attr(windows, feature(windows_process_extensions_inherit_handles))]
 mod app;

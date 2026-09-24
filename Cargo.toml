@@ -99,7 +99,6 @@ humantime = "*"
 interprocess = "*"
 itertools = "*"
 kill_tree = "*"
-libc = "*"
 mimalloc = { version = "*", features = ["v3"] }
 named-lock = "*"
 nanoid = "*"
@@ -125,6 +124,9 @@ tokio = { version = "*", features = ["macros", "rt-multi-thread"] }
 toml = "*"
 vte = "*"
 which = "*"
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "*", features = ["process"] }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "*", features = [

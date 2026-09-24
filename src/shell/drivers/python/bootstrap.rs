@@ -6,10 +6,6 @@ use crate::contract::{
     STDOUT_FILE,
 };
 use anyhow::{Context as _, Result};
-#[expect(
-    clippy::uninlined_format_args,
-    reason = "explicit aliases keep Rust format fields distinct from embedded Python templates"
-)]
 pub(super) fn script(context: StartupContext<'_>) -> Result<String> {
     let cwd = python_string(context.cwd)?;
     let ready = python_string(context.ready_file)?;
@@ -23,7 +19,7 @@ pub(super) fn script(context: StartupContext<'_>) -> Result<String> {
 	@VAR_os@.environ["FUNCTERM_CURRENT_SHELL"] = "python"
 
 	def @VAR_helper@(*@VAR_arguments@):
-	    @VAR_helper_executable@ = @VAR_os@.environ["{helper_env}"]
+	    @VAR_helper_executable@ = @VAR_os@.environ["{HELPER_EXECUTABLE_ENV}"]
 	    @VAR_subprocess@.run([@VAR_helper_executable@, *@VAR_arguments@], check=True)
 
 	def @VAR_prepend_shim@():
@@ -38,22 +34,22 @@ pub(super) fn script(context: StartupContext<'_>) -> Result<String> {
 
 	def _functerm_dispatch():
 	    @VAR_root@ = @VAR_pathlib@.Path(@VAR_os@.environ["FUNCTERM_SESSION_ROOT"])
-	    @VAR_dispatch@ = @VAR_root@ / "{state_directory}" / "{dispatch_file}"
+	    @VAR_dispatch@ = @VAR_root@ / "{SESSION_STATE_DIRECTORY}" / "{DISPATCH_FILE}"
 	    @VAR_command_id@ = @VAR_dispatch@.read_text(encoding="utf-8")
 	    @VAR_dispatch@.unlink()
-	    @VAR_directory@ = @VAR_root@ / "{commands_directory}" / @VAR_command_id@
-	    @VAR_input_directory@ = @VAR_directory@ / "{input_directory}"
-	    @VAR_output_directory@ = @VAR_directory@ / "{output_directory}"
-	    @VAR_source@ = (@VAR_input_directory@ / "{command_file}").read_text(encoding="utf-8")
-	    @VAR_working_directory@ = (@VAR_input_directory@ / "{working_directory_file}").read_text(encoding="utf-8")
-	    @VAR_stdout_file@ = @VAR_output_directory@ / "{stdout_file}"
-	    @VAR_stderr_file@ = @VAR_output_directory@ / "{stderr_file}"
-	    @VAR_done_file@ = @VAR_directory@ / "state" / "{done_file}"
-	    @VAR_previous_id@ = @VAR_os@.environ.get("{command_id_env}")
-	    @VAR_previous_directory@ = @VAR_os@.environ.get("{command_directory_env}")
+	    @VAR_directory@ = @VAR_root@ / "{SESSION_COMMANDS_DIRECTORY}" / @VAR_command_id@
+	    @VAR_input_directory@ = @VAR_directory@ / "{COMMAND_INPUT_DIRECTORY}"
+	    @VAR_output_directory@ = @VAR_directory@ / "{COMMAND_OUTPUT_DIRECTORY}"
+	    @VAR_source@ = (@VAR_input_directory@ / "{COMMAND_FILE}").read_text(encoding="utf-8")
+	    @VAR_working_directory@ = (@VAR_input_directory@ / "{COMMAND_WORKING_DIRECTORY_FILE}").read_text(encoding="utf-8")
+	    @VAR_stdout_file@ = @VAR_output_directory@ / "{STDOUT_FILE}"
+	    @VAR_stderr_file@ = @VAR_output_directory@ / "{STDERR_FILE}"
+	    @VAR_done_file@ = @VAR_directory@ / "state" / "{DONE_FILE}"
+	    @VAR_previous_id@ = @VAR_os@.environ.get("{COMMAND_ID_ENV}")
+	    @VAR_previous_directory@ = @VAR_os@.environ.get("{COMMAND_DIRECTORY_ENV}")
 	    @VAR_protected_environment@ = dict(@VAR_os@.environ)
-	    @VAR_os@.environ["{command_id_env}"] = @VAR_command_id@
-	    @VAR_os@.environ["{command_directory_env}"] = str(@VAR_directory@)
+	    @VAR_os@.environ["{COMMAND_ID_ENV}"] = @VAR_command_id@
+	    @VAR_os@.environ["{COMMAND_DIRECTORY_ENV}"] = str(@VAR_directory@)
 	    @VAR_exit_code@ = 0
 	    @VAR_started@ = @VAR_time@.perf_counter()
 	    try:
@@ -97,15 +93,15 @@ pub(super) fn script(context: StartupContext<'_>) -> Result<String> {
 	                "--directory", str(@VAR_directory@),
 	            )
 	        if @VAR_previous_id@ is None:
-	            @VAR_os@.environ.pop("{command_id_env}", None)
+	            @VAR_os@.environ.pop("{COMMAND_ID_ENV}", None)
 	        else:
-	            @VAR_os@.environ["{command_id_env}"] = @VAR_previous_id@
+	            @VAR_os@.environ["{COMMAND_ID_ENV}"] = @VAR_previous_id@
 	        if @VAR_previous_directory@ is None:
-	            @VAR_os@.environ.pop("{command_directory_env}", None)
+	            @VAR_os@.environ.pop("{COMMAND_DIRECTORY_ENV}", None)
 	        else:
-	            @VAR_os@.environ["{command_directory_env}"] = @VAR_previous_directory@
+	            @VAR_os@.environ["{COMMAND_DIRECTORY_ENV}"] = @VAR_previous_directory@
 	@VAR_pathlib@.Path({ready}).touch()
-	"# , helper_env = HELPER_EXECUTABLE_ENV , state_directory = SESSION_STATE_DIRECTORY , dispatch_file = DISPATCH_FILE , commands_directory = SESSION_COMMANDS_DIRECTORY , input_directory = COMMAND_INPUT_DIRECTORY , output_directory = COMMAND_OUTPUT_DIRECTORY , command_file = COMMAND_FILE , working_directory_file = COMMAND_WORKING_DIRECTORY_FILE , stdout_file = STDOUT_FILE , stderr_file = STDERR_FILE , done_file = DONE_FILE , command_id_env = COMMAND_ID_ENV , command_directory_env = COMMAND_DIRECTORY_ENV) . replace ("\n\t" , "\n") ;
+	"#) . replace ("\n\t" , "\n") ;
     let protected = bootstrap.replace(
         "@PYTHON_PROTECTED_ENVIRONMENT@",
         &crate::shell::wrappers::quoted_protected_environment_names(),

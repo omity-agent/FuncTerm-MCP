@@ -12,10 +12,6 @@ impl Terminal {
         }
         Ok(state.revision)
     }
-    #[expect(
-        clippy::significant_drop_tightening,
-        reason = "the terminal state guard is required by Condvar while waiting for a revision"
-    )]
     pub(in crate::engine::runtime::session) fn wait_for_output(
         &self,
         revision: u64,
@@ -37,6 +33,7 @@ impl Terminal {
         if let Some(message) = state.reader_failure.as_deref() {
             bail!("terminal reader failed while waiting for output: {message}");
         }
+        drop(state);
         Ok(())
     }
     pub(in crate::engine::runtime::session) fn reader_closed(&self) {

@@ -67,7 +67,7 @@ fn service_slug(service_name: &str) -> String {
 }
 #[cfg(unix)]
 fn daemon_root_name() -> String {
-    let uid = unsafe { libc::geteuid() };
+    let uid = rustix::process::geteuid().as_raw();
     format!("{DAEMON_ROOT}/{DAEMON_ROOT}-{uid}")
 }
 #[cfg(not(unix))]
@@ -102,7 +102,7 @@ fn secure_root(root: &std::path::Path) -> Result<()> {
     if !metadata.file_type().is_dir() {
         anyhow::bail!("temporary root is not a directory: {}", root.display());
     }
-    let uid = unsafe { libc::geteuid() };
+    let uid = rustix::process::geteuid().as_raw();
     if metadata.uid() != uid {
         anyhow::bail!(
             "temporary root is not owned by current user: {}",
