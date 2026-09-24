@@ -1,0 +1,29 @@
+name: functerm
+
+services:
+  dev:
+    build:
+      context: .
+      args:
+        # 在 Linux 宿主机设置以匹配当前用户。
+        DEVELOPER_UID: ${LOCAL_UID:-1000}
+        DEVELOPER_GID: ${LOCAL_GID:-1000}
+    init: true
+    stdin_open: true
+    tty: true
+    environment:
+      # 串行编译和测试，控制开发环境的峰值内存。
+      CARGO_BUILD_JOBS: "1"
+      RUST_TEST_THREADS: "1"
+    volumes:
+      - type: bind
+        source: ..
+        target: /workspaces/FuncTerm
+      # 下载缓存及其锁文件、编译产物放入同一个共享卷。
+      - type: volume
+        source: cache
+        target: /cache
+
+volumes:
+  cache:
+    name: functerm-cache
