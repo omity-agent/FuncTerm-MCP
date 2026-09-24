@@ -10,6 +10,7 @@ pub(crate) const COMMAND_STATE_DIRECTORY: &str = "state";
 pub(crate) const DISPATCH_FILE: &str = "dispatch";
 pub(crate) const DISPATCHER_COMMAND: &str = "f";
 pub(crate) const DONE_FILE: &str = "done.json";
+pub(crate) const EARLY_DONE_DIRECTORY: &str = ".early-done";
 pub(crate) const HELPER_EXECUTABLE_ENV: &str = "FUNCTERM_HELPER_EXECUTABLE";
 pub(crate) const POWERSHELL_COMMAND_FUNCTION: &str = "Invoke-FuncTermCommand";
 pub(crate) const POSIX_COMMAND_FUNCTION: &str = "functerm_run_command";

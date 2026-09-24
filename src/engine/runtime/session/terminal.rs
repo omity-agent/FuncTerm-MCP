@@ -48,7 +48,14 @@ impl Terminal {
         })
     }
     pub(super) fn capture_title(&self, command_id: &str) -> Result<Arc<CommandTitle>> {
-        self.state.lock().captures.register(command_id)
+        let mut state = self.state.lock();
+        if let Some(message) = state.reader_failure.as_deref() {
+            bail!("cannot start command after terminal reader failure: {message}");
+        }
+        if state.reader_closed {
+            bail!("cannot start command after terminal reader closed");
+        }
+        state.captures.register(command_id)
     }
     pub(super) fn contents(&self) -> String {
         self.state.lock().parser.screen().contents()

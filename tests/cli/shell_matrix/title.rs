@@ -5,7 +5,6 @@ use crate::support::{
     create_tab, locked_with_env, parse_command_id, parse_command_result, parse_tab_view, run_cli,
     send_command,
 };
-const MODEL_TITLE: &str = "FuncTerm";
 #[cfg(windows)]
 #[test]
 fn cli_distinguishes_native_host_title_from_command_title() {
@@ -16,12 +15,13 @@ fn cli_distinguishes_native_host_title_from_command_title() {
     let executable = required_executable(case);
     let _guard = locked_with_env(&[(case.env_var, &executable)]);
     let created = create_tab(&case_dir(case.name, "native command title"), case.name);
+    let model_title = parse_tab_view(&run_cli(&["view", &created.tab_id])).title;
     let result = parse_command_result(&send_command(&created.tab_id, "where.exe where.exe", 10.0));
     assert_finished(&result, case.name, "where.exe");
     let tab = parse_tab_view(&run_cli(&["view", &created.tab_id]));
     assert_eq!(
         (result.title.as_str(), tab.title.as_str()),
-        (MODEL_TITLE, MODEL_TITLE),
+        (model_title.as_str(), model_title.as_str()),
         "neither a command nor its tab may expose PowerShell's host window title"
     );
     let intended_title = "MCP_PTY_INTENTIONAL_TITLE";
@@ -42,12 +42,13 @@ fn cli_reports_titles_for_each_command() {
         let executable = required_executable(case);
         let _guard = locked_with_env(&[(case.env_var, &executable)]);
         let created = create_tab(&case_dir(case.name, "command titles"), case.name);
+        let model_title = parse_tab_view(&run_cli(&["view", &created.tab_id])).title;
         let first_output = send_command(&created.tab_id, plain_title_command(case.name), 10.0);
         let first_command_id = parse_command_id(&first_output);
         let first = parse_command_result(&first_output);
         assert_finished(&first, case.name, "MCP_PTY_PLAIN_TITLE");
         assert_eq!(
-            first.title, MODEL_TITLE,
+            first.title, model_title,
             "{} command without a title should use the initial title",
             case.name
         );
@@ -61,13 +62,13 @@ fn cli_reports_titles_for_each_command() {
         assert_command_title(&titled.title, &expected_title, case.name);
         let tab = parse_tab_view(&run_cli(&["view", &created.tab_id]));
         assert_eq!(
-            tab.title, MODEL_TITLE,
+            tab.title, model_title,
             "{} tab title must remain the model title",
             case.name
         );
         let historical = parse_command_result(&run_cli(&["view", &first_command_id]));
         assert_eq!(
-            historical.title, MODEL_TITLE,
+            historical.title, model_title,
             "{} historical command title should not follow the live shell title",
             case.name
         );
@@ -78,7 +79,7 @@ fn cli_reports_titles_for_each_command() {
         ));
         assert_finished(&last, case.name, "MCP_PTY_PLAIN_TITLE");
         assert_eq!(
-            last.title, MODEL_TITLE,
+            last.title, model_title,
             "{} later command without a title should not inherit a prior command title",
             case.name
         );

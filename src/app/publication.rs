@@ -1,15 +1,21 @@
 use anyhow::{Context as _, Result};
-use atomicwrites::{AllowOverwrite, AtomicFile, DisallowOverwrite};
 use std::io::Write as _;
 use std::path::Path;
+use tempfile::NamedTempFile;
 pub(crate) fn write_once(destination: &Path, contents: impl AsRef<[u8]>) -> Result<()> {
     publish_once(destination, |file| file.write_all(contents.as_ref()))
 }
+#[cfg(windows)]
 pub(crate) fn copy_once(source: &Path, destination: &Path) -> Result<()> {
     if destination.exists() {
         return Ok(());
     }
-    let mut source_file = fs_err::File::open(source)?;
+    let mut source_file = std::fs::File::open(source).with_context(|| {
+        format!(
+            "failed to open executable snapshot source {}",
+            source.display()
+        )
+    })?;
     let permissions = source_file.metadata()?.permissions();
     publish_once(destination, |destination_file| {
         std::io::copy(&mut source_file, destination_file)?;
@@ -17,26 +23,29 @@ pub(crate) fn copy_once(source: &Path, destination: &Path) -> Result<()> {
     })
 }
 pub(crate) fn write_replace(destination: &Path, contents: impl AsRef<[u8]>) -> Result<()> {
-    prepare_parent(destination)?;
-    AtomicFile::new(destination, AllowOverwrite)
-        .write::<_, std::io::Error, _>(|file| file.write_all(contents.as_ref()))
-        .with_context(|| {
-            format!(
-                "failed to atomically replace file {}",
-                destination.display()
-            )
-        })
+    let mut temporary = temporary_sibling(destination)?;
+    temporary.write_all(contents.as_ref())?;
+    temporary.persist(destination).with_context(|| {
+        format!(
+            "failed to atomically replace file {}",
+            destination.display()
+        )
+    })?;
+    Ok(())
 }
 fn publish_once(
     destination: &Path,
     operation: impl FnOnce(&mut std::fs::File) -> std::io::Result<()>,
 ) -> Result<()> {
-    prepare_parent(destination)?;
-    match AtomicFile::new(destination, DisallowOverwrite).write(operation) {
-        Ok(()) => Ok(()),
-        Err(atomicwrites::Error::Internal(error))
-            if error.kind() == std::io::ErrorKind::AlreadyExists =>
-        {
+    let mut temporary = temporary_sibling(destination)?;
+    operation(temporary.as_file_mut())?;
+    match temporary.persist_noclobber(destination) {
+        Ok(_file) => Ok(()),
+        Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {
+            error
+                .file
+                .close()
+                .context("failed to remove unpublished temporary file")?;
             Ok(())
         }
         Err(error) => Err(error).with_context(|| {
@@ -47,11 +56,12 @@ fn publish_once(
         }),
     }
 }
-fn prepare_parent(destination: &Path) -> Result<()> {
+fn temporary_sibling(destination: &Path) -> Result<NamedTempFile> {
     let parent = destination
         .parent()
         .context("published file has no parent")?;
-    fs_err::create_dir_all(parent).map_err(Into::into)
+    fs_err::create_dir_all(parent)?;
+    NamedTempFile::new_in(parent).context("failed to create atomic publication file")
 }
 #[cfg(test)]
 #[path = "../../tests/unit/runtime/atomic_writes.rs"]

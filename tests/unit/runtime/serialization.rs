@@ -16,7 +16,10 @@ fn command_output_uses_uppercase_tags_without_escaping_content() {
         note: String::new(),
     }
     .into_plain_text();
+    #[cfg(windows)]
     assert!(text.contains("<CWD>\nF:/workspace/A&B\n</CWD>"));
+    #[cfg(unix)]
+    assert!(text.contains("<CWD>\n/workspace/A&B\n</CWD>"));
     assert!(text.contains("<STDOUT>\nleft < right\n</STDOUT>"));
     assert!(text.contains("<STDERR>\nraw </STDERR> allowed\n</STDERR>"));
     assert!(!text.contains("<STDOUT>left < right"));
@@ -169,7 +172,10 @@ fn shell(alive: bool) -> ShellView {
         alive,
         title: "title".to_owned(),
         shell_type: ShellChoice::PowerShell,
+        #[cfg(windows)]
         cwd: "F:\\workspace\\A&B".to_owned(),
+        #[cfg(unix)]
+        cwd: "/workspace/A&B".to_owned(),
         idle: true,
     }
 }

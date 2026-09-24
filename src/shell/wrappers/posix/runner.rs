@@ -82,8 +82,12 @@ pub(super) fn command_function(dialect: PosixDialect) -> String {
 	{environment_restore}
 	    local @VAR_command_finished_at@="$(functerm_command_time_millis)" || return 1
 	    local @VAR_time_consumption@="$((@VAR_command_finished_at@ - @VAR_command_started_at@))ms"
-	    cat "$@VAR_stdout_file@"
-	    cat "$@VAR_stderr_file@" >&2
+	    if [ -f "$@VAR_stdout_file@" ]; then
+	        cat "$@VAR_stdout_file@" || return 1
+	    fi
+	    if [ -f "$@VAR_stderr_file@" ]; then
+	        cat "$@VAR_stderr_file@" >&2 || return 1
+	    fi
 	    {mkdir} "$@VAR_state_dir@" || return 1
 	    if ! functerm_publish_done "$@VAR_command_id@" "$@VAR_exit_code@" "$@VAR_time_consumption@" "$PWD" "$@VAR_native_directory@"; then
 	        functerm_restore_command_environment \

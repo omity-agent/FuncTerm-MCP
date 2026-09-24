@@ -42,6 +42,7 @@ pub(crate) fn parse_tab_view(output: &Output) -> TabView {
         screen: element(&text, "SCREEN"),
     }
 }
+#[cfg(windows)]
 pub(crate) fn assert_powershell_primary_prompt(view: &TabView) {
     assert!(
         !view.screen.lines().any(|line| line.trim() == ">>"),

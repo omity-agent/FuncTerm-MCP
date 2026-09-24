@@ -89,16 +89,37 @@ pub(crate) fn environment(
 pub(crate) fn ensure_directory(shim_dir: &Path) -> Result<()> {
     fs::create_dir_all(shim_dir)?;
     let current_exe = std::env::current_exe().context("failed to resolve current executable")?;
+    #[cfg(windows)]
+    let alias_source = {
+        let snapshot = shim_dir.join("dispatcher.exe");
+        crate::publication::copy_once(&current_exe, &snapshot)?;
+        snapshot
+    };
+    #[cfg(unix)]
+    let alias_source = current_exe;
     for &shell in ShellChoice::all() {
         for alias in shell.shim_executable_names() {
-            create_shim_alias(&current_exe, &shim_dir.join(alias), alias)?;
+            create_shim_alias(&alias_source, &shim_dir.join(alias), alias)?;
         }
     }
     Ok(())
 }
 fn create_shim_alias(current_exe: &Path, alias_path: &Path, alias: &str) -> Result<()> {
-    crate::publication::copy_once(current_exe, alias_path)
-        .with_context(|| format!("failed to create shell shim {alias}"))
+    #[cfg(unix)]
+    let created = std::os::unix::fs::symlink(current_exe, alias_path);
+    #[cfg(windows)]
+    let created = std::fs::hard_link(current_exe, alias_path);
+    match created {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            anyhow::ensure!(
+                same_file::is_same_file(current_exe, alias_path)?,
+                "shell shim {alias} does not reference the current executable"
+            );
+            Ok(())
+        }
+        Err(error) => Err(error).with_context(|| format!("failed to create shell shim {alias}")),
+    }
 }
 pub(crate) fn write_active_shell(path: &Path, shell: ShellChoice) -> Result<()> {
     crate::publication::write_replace(path, shell.canonical_name())

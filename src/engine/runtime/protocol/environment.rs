@@ -31,6 +31,10 @@ impl EnvironmentSnapshot {
         windows::capture_user_environment()
     }
     #[cfg(not(windows))]
+    #[expect(
+        clippy::unnecessary_wraps,
+        reason = "the same launch interface returns errors when Windows environment capture fails"
+    )]
     pub(crate) fn tab_launch_environment(client_environment: &Self) -> anyhow::Result<Self> {
         Ok(client_environment.clone())
     }

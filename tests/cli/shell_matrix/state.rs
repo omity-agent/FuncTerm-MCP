@@ -1,7 +1,7 @@
 use super::matrix::{case_dir, required_executable, shell_cases};
-use crate::support::{
-    create_tab, locked_with_env, parse_command_result, parse_tab_view, run_cli, send_command,
-};
+use crate::support::{create_tab, locked_with_env, parse_command_result, send_command};
+#[cfg(windows)]
+use crate::support::{parse_tab_view, run_cli};
 #[test]
 fn cli_preserves_shell_state_between_commands() {
     for case in shell_cases() {

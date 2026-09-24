@@ -120,7 +120,7 @@ mod tests {
         let command_id = parse_command_id(&accepted);
         let completed = wait_for_command_finished(&command_id);
         assert!(completed.stdout.contains("MCP_PTY_TIMEOUT_DONE"));
-        assert_eq!(completed.exit_code, Some(0));
+        assert_eq!(completed.exit_code, Some(0_i32));
     }
     struct KeyboardCase {
         shell: &'static str,

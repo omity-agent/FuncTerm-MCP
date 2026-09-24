@@ -70,3 +70,12 @@ fn invalid_markers_fail_registered_captures_and_reader() {
         drop(screen.output_revision().unwrap_err());
     }
 }
+#[test]
+fn closed_reader_rejects_new_command_capture() {
+    let closed = terminal();
+    closed.reader_closed();
+    assert!(closed.capture_title("after-close").is_err());
+    let failed = terminal();
+    failed.reader_failed("test reader failure");
+    assert!(failed.capture_title("after-failure").is_err());
+}

@@ -12,6 +12,9 @@ services:
     stdin_open: true
     tty: true
     environment:
+      # 缓存卷路径由运行配置显式指定。
+      CARGO_HOME: /cache/cargo
+      CARGO_TARGET_DIR: /cache/build
       # 串行编译和测试，控制开发环境的峰值内存。
       CARGO_BUILD_JOBS: "1"
       RUST_TEST_THREADS: "1"

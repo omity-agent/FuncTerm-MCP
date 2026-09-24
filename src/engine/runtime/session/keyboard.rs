@@ -37,19 +37,20 @@ impl InputDelivery {
         self.interrupted
     }
 }
-pub(super) fn host_reply_bytes(bytes: &[u8], win32_input: bool) -> Result<Cow<'_, [u8]>> {
-    platform_host_reply_bytes(bytes, win32_input)
-}
 #[cfg(not(windows))]
 const fn interrupt_bytes() -> &'static [u8] {
     ETX_BYTES
 }
 #[cfg(not(windows))]
-fn platform_host_reply_bytes(bytes: &[u8], _win32_input: bool) -> Result<Cow<'_, [u8]>> {
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "the cross-platform reply interface can fail during Windows input encoding"
+)]
+pub(super) const fn host_reply_bytes(bytes: &[u8], _win32_input: bool) -> Result<Cow<'_, [u8]>> {
     Ok(Cow::Borrowed(bytes))
 }
 #[cfg(windows)]
-fn platform_host_reply_bytes(bytes: &[u8], win32_input: bool) -> Result<Cow<'_, [u8]>> {
+pub(super) fn host_reply_bytes(bytes: &[u8], win32_input: bool) -> Result<Cow<'_, [u8]>> {
     use core::fmt::Write as _;
     if !win32_input {
         return Ok(Cow::Borrowed(bytes));

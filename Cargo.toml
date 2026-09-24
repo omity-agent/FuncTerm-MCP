@@ -88,7 +88,6 @@ edition = "2024"
 
 [dependencies]
 anyhow = "*"
-atomicwrites = "*"
 base64-turbo = "*"
 blake3 = "*"
 clap = { version = "*", features = ["derive"] }
@@ -106,19 +105,21 @@ named-lock = "*"
 nanoid = "*"
 notify = "*"
 parking_lot = "*"
-portable-pty = "*"
+portable-pty = { git = "https://github.com/wez/wezterm" }
 rmcp = { version = "*", default-features = false, features = [
     "server",
     "macros",
     "transport-io",
 ] }
 schemars = "*"
+same-file = "*"
 serde = { version = "*", features = ["derive", "unstable"] }
 shell-words = "*"
 sonic-rs = "*"
 strum = { version = "*", features = ["derive"] }
 sugar_path = "*"
 tastty-core = "*"
+tempfile = "*"
 thiserror = "*"
 tokio = { version = "*", features = ["macros", "rt-multi-thread"] }
 toml = "*"

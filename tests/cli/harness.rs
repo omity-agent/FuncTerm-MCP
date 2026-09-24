@@ -21,8 +21,7 @@ pub(crate) use daemon::locked;
 pub(crate) use daemon::{TestGuard, locked_with_env};
 pub(crate) use executable::required as required_executable;
 pub(crate) use parse::CommandResult;
-pub(crate) use parse::{
-    TabView, assert_powershell_primary_prompt, parse_command_id, parse_command_result,
-    parse_tab_view,
-};
+#[cfg(windows)]
+pub(crate) use parse::assert_powershell_primary_prompt;
+pub(crate) use parse::{TabView, parse_command_id, parse_command_result, parse_tab_view};
 pub(crate) use temp::{temp_dir, temp_root};

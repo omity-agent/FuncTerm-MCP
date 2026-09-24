@@ -40,13 +40,14 @@ pub(super) fn spawn_detached(
     _process_kind: StartupProcess,
 ) -> Result<std::process::Child> {
     use std::os::unix::process::CommandExt as _;
+    let detach_session = || {
+        if unsafe { libc::setsid() } == -1_i32 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(())
+    };
     unsafe {
-        command.pre_exec(|| {
-            if libc::setsid() == -1 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
+        command.pre_exec(detach_session);
     }
     command.spawn().context("failed to spawn detached process")
 }

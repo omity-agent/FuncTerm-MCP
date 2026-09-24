@@ -1,6 +1,21 @@
 use super::{ensure_directory, environment};
 use crate::runtime::config::Settings;
 use crate::shell::ShellChoice;
+#[test]
+fn shim_aliases_share_storage_and_accept_repeated_creation() {
+    let root = crate::test_fs::temp_dir("alias-storage");
+    let executable = root.join("source");
+    let first = root.join("bash");
+    let second = root.join("python");
+    std::fs::write(&executable, b"shared executable").unwrap();
+    for alias in [&first, &second, &first] {
+        super::create_shim_alias(&executable, alias, "test").unwrap();
+    }
+    assert!(same_file::is_same_file(&first, &second).unwrap());
+    #[cfg(unix)]
+    assert!(std::fs::symlink_metadata(&first).unwrap().is_symlink());
+    std::fs::remove_dir_all(root).unwrap();
+}
 pub(super) fn test_settings() -> Settings {
     Settings {
         daemon_service_name: "functerm/test".to_owned(),

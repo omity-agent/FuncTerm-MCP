@@ -68,7 +68,7 @@ fn recoverable_platform_accept_error(error: &io::Error) -> bool {
     .contains(&unsigned_code)
 }
 #[cfg(not(windows))]
-fn recoverable_platform_accept_error(_error: &io::Error) -> bool {
+const fn recoverable_platform_accept_error(_error: &io::Error) -> bool {
     false
 }
 fn spawn_request_worker(manager: Arc<Manager>, mut stream: LocalSocketStream) {

@@ -32,18 +32,26 @@ fn is_shim_invocation() -> Result<bool> {
     let Some(shim_dir) = std::env::var_os(shims::SHIM_DIR_ENV) else {
         return Ok(false);
     };
-    let executable = std::env::current_exe().context("failed to resolve shim executable")?;
+    let invocation = std::env::args_os()
+        .next()
+        .context("missing executable invocation")?;
+    let executable = which::which(invocation).context("failed to resolve shim invocation")?;
     let executable_dir = executable
         .parent()
         .context("shim executable path has no parent")?;
-    Ok(executable_dir.canonicalize().with_context(|| {
+    let directory_matches = executable_dir.canonicalize().with_context(|| {
         format!(
             "failed to resolve shim executable directory {}",
             executable_dir.display()
         )
     })? == PathBuf::from(shim_dir)
         .canonicalize()
-        .context("failed to resolve shim directory")?)
+        .context("failed to resolve shim directory")?;
+    Ok(directory_matches
+        && same_file::is_same_file(
+            executable,
+            std::env::current_exe().context("failed to resolve shim executable")?,
+        )?)
 }
 fn run_passthrough(choice: ShellChoice, arguments: Vec<std::ffi::OsString>) -> Result<i32> {
     let status = Command::new(real_executable(choice)?)
@@ -99,6 +107,7 @@ fn complete_active_command(cwd: &Path, time_consumption: Duration) -> Result<()>
         cwd: &cwd_text,
     };
     let mut terminal = stdio::terminal_output()?;
+    crate::app::command_state::write_early_done_guard(&command_id_text, &directory_path)?;
     crate::app::command_state::write_done_to(&done, &directory_path, &mut terminal)
         .context("failed to publish early done file")
 }

@@ -101,7 +101,11 @@ fn is_windows_subsystem_bash(
     ))
 }
 #[cfg(not(windows))]
-fn is_windows_subsystem_bash(
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "Windows shell validation uses the same fallible interface"
+)]
+const fn is_windows_subsystem_bash(
     _choice: ShellChoice,
     _path: &Path,
     _environment: &EnvironmentSnapshot,

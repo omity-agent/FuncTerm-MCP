@@ -30,6 +30,12 @@ fn write_start_to(
         .context("failed to publish command started file")
 }
 pub(crate) fn write_done(done: &DoneOutput<'_>, directory: &Path) -> Result<()> {
+    let guard = early_done_guard(done.command_id, directory)?;
+    match fs_err::remove_file(guard) {
+        Ok(()) => return Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error).context("failed to consume early completion guard"),
+    }
     let mut stdout = std::io::stdout().lock();
     write_done_to(done, directory, &mut stdout)
 }
@@ -47,6 +53,19 @@ pub(crate) fn write_done_to(
     let done_path = state_dir.join(crate::contract::DONE_FILE);
     let text = sonic_rs::to_string(done).context("failed to serialize done file")?;
     crate::publication::write_once(&done_path, text).context("failed to publish done file")
+}
+pub(crate) fn write_early_done_guard(command_id: &str, directory: &Path) -> Result<()> {
+    let guard = early_done_guard(command_id, directory)?;
+    crate::publication::write_once(&guard, b"")
+        .context("failed to publish early command completion guard")
+}
+fn early_done_guard(command_id: &str, directory: &Path) -> Result<std::path::PathBuf> {
+    let commands_directory = directory
+        .parent()
+        .context("command directory has no commands parent")?;
+    Ok(commands_directory
+        .join(crate::contract::EARLY_DONE_DIRECTORY)
+        .join(command_id))
 }
 fn write_marker(output: &mut impl Write, phase: &[u8], command_id: &str) -> Result<()> {
     let command_id_bytes = command_id.as_bytes();
