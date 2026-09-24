@@ -75,10 +75,10 @@ fn element(text: &str, name: &str) -> String {
         return inline_element(text, name);
     }
     let open = format!("<{name}>\n");
-    let close = format!("\n</{name}>");
+    let close = format!("</{name}>");
     let (_, after_open) = text.split_once(&open).unwrap();
     let (content, _) = after_open.rsplit_once(&close).unwrap();
-    content.to_owned()
+    content.trim_end_matches('\n').to_owned()
 }
 fn inline_element(text: &str, name: &str) -> String {
     let open = format!("<{name}>");

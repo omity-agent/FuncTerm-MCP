@@ -9,8 +9,8 @@ mod history;
 #[path = "cli/input_flow.rs"]
 mod input_flow;
 #[cfg(windows)]
-#[path = "cli/cases/powershell_template.rs"]
-mod powershell_template;
+#[path = "cli/cases/powershell_contract.rs"]
+mod powershell_contract;
 #[path = "cli/shell_matrix.rs"]
 mod shell_matrix;
 #[path = "cli/harness.rs"]

@@ -115,6 +115,11 @@ function @FUNCTION@ {
             Get-Content -LiteralPath $@VAR_stderrFile@ | ForEach-Object { [Console]::Error.WriteLine($_) }
         }
     }
+    catch [System.Management.Automation.ParseException] {
+        $_.Exception.Message | Out-File -LiteralPath $@VAR_stderrFile@ -Append -Encoding utf8
+        [Console]::Error.WriteLine($_.Exception.Message)
+        $@VAR_exitCode@ = 1
+    }
     catch {
         $_ | Out-File -LiteralPath $@VAR_stderrFile@ -Append -Encoding utf8
         [Console]::Error.WriteLine($_)
