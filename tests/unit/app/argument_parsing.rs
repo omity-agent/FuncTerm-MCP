@@ -1,5 +1,21 @@
 use clap::Parser as _;
 use serde::Deserialize;
+#[test]
+fn close_requires_exactly_one_target() {
+    for arguments in [
+        vec!["functerm", "close", "--tab-id", "tab-target"],
+        vec!["functerm", "close", "--current"],
+    ] {
+        super::Args::try_parse_from(arguments).unwrap();
+    }
+    for arguments in [
+        vec!["functerm", "close"],
+        vec!["functerm", "close", "--tab-id"],
+        vec!["functerm", "close", "--tab-id", "tab-target", "--current"],
+    ] {
+        assert!(super::Args::try_parse_from(arguments).is_err());
+    }
+}
 #[derive(Deserialize)]
 struct WrittenDone {
     command_id: String,

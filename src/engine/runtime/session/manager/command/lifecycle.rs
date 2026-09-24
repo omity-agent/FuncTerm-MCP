@@ -78,7 +78,14 @@ impl ManagedCommand {
             CommandWait::Finished | CommandWait::Failed => return Ok(state),
             CommandWait::Running => {}
         }
-        match wait_for_done(&self.record.done, limit) {
+        let result = wait_for_done(&self.record.done, limit, || {
+            !matches!(self.state.lock().wait, CommandWait::Running)
+        });
+        let current = self.state.lock().wait;
+        if !matches!(current, CommandWait::Running) {
+            return Ok(current);
+        }
+        match result {
             Ok(true) => Ok(CommandWait::Finished),
             Ok(false) => Ok(CommandWait::Running),
             Err(error) => {
@@ -86,6 +93,10 @@ impl ManagedCommand {
                 Err(error)
             }
         }
+    }
+    pub(in crate::engine::runtime::session::manager) fn cancel_title_capture(&self) -> Result<()> {
+        self.title.cancel()?;
+        Ok(())
     }
     pub(super) fn view(&self) -> Result<CommandSnapshot> {
         let cached_view = self.state.lock().cached_view.clone();
@@ -152,7 +163,7 @@ fn failure_view(
     if !snapshot.command.finished {
         snapshot.command.finished = true;
         snapshot.command.exit_code = Some(1_i32);
-        snapshot.note = command_note(&snapshot.command.stdout, &snapshot.command.stderr, message);
     }
+    snapshot.note = command_note(&snapshot.command.stdout, &snapshot.command.stderr, message);
     Ok(snapshot)
 }

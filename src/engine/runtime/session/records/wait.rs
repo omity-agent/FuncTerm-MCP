@@ -9,20 +9,30 @@ use std::time::Instant;
 pub(in crate::engine::runtime::session) fn wait_for_done(
     done: &Path,
     limit: Duration,
+    completed: impl Fn() -> bool,
 ) -> Result<bool> {
-    wait_for_path(done, limit)
+    wait_for_any_path(&[done], limit, completed)
 }
 pub(in crate::engine::runtime::session) fn wait_for_start_or_done(
     record: &CommandRecord,
     limit: Duration,
 ) -> Result<bool> {
-    wait_for_any_path(&[record.started.as_path(), record.done.as_path()], limit)
+    wait_for_any_path(
+        &[record.started.as_path(), record.done.as_path()],
+        limit,
+        || false,
+    )
 }
 pub(crate) fn wait_for_path(path: &Path, limit: Duration) -> Result<bool> {
-    wait_for_any_path(&[path], limit)
+    wait_for_any_path(&[path], limit, || false)
 }
-fn wait_for_any_path(paths: &[&Path], limit: Duration) -> Result<bool> {
-    if paths.iter().any(|path| path.exists()) {
+fn wait_for_any_path(
+    paths: &[&Path],
+    limit: Duration,
+    completed: impl Fn() -> bool,
+) -> Result<bool> {
+    let ready = || completed() || paths.iter().any(|path| path.exists());
+    if ready() {
         return Ok(true);
     }
     if limit.is_zero() {
@@ -42,7 +52,7 @@ fn wait_for_any_path(paths: &[&Path], limit: Duration) -> Result<bool> {
     watcher
         .watch(parent, RecursiveMode::NonRecursive)
         .with_context(|| format!("failed to watch directory {}", parent.display()))?;
-    if paths.iter().any(|path| path.exists()) {
+    if ready() {
         return Ok(true);
     }
     let start = Instant::now();
@@ -52,13 +62,13 @@ fn wait_for_any_path(paths: &[&Path], limit: Duration) -> Result<bool> {
         };
         match rx.recv_timeout(remaining) {
             Ok(Ok(_event)) => {
-                if paths.iter().any(|path| path.exists()) {
+                if ready() {
                     return Ok(true);
                 }
             }
             Ok(Err(error)) => return Err(error).context("filesystem watcher failed"),
             Err(mpsc::RecvTimeoutError::Timeout) => {
-                return Ok(paths.iter().any(|path| path.exists()));
+                return Ok(ready());
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => {
                 bail!("filesystem watcher disconnected");

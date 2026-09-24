@@ -4,6 +4,7 @@ impl Payload {
         match self {
             Self::Pong => element("PONG", ""),
             Self::TabCreated { tab_id } => tab_created_plain_text(&tab_id),
+            Self::TabClosed { tab_id } => element("TAB_CLOSED", &tab_id),
             Self::KeyboardWritten { view } => view.tab_plain_text(false),
             Self::CommandAccepted {
                 command_id,

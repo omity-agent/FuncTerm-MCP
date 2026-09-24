@@ -13,6 +13,9 @@ pub(crate) struct Manager {
     tabs: tab::TabDirectory,
 }
 impl Manager {
+    pub(crate) fn close(&self, tab_id: &str) -> Result<()> {
+        self.tabs.close(tab_id)
+    }
     pub(crate) fn new(settings: Settings) -> Result<Self> {
         Ok(Self {
             launcher: launcher::ShellLauncher::new(settings)?,

@@ -1,3 +1,6 @@
+#[cfg(test)]
+#[path = "cli/closure.rs"]
+mod closure;
 #[cfg(windows)]
 #[path = "cli/cases/control_signal.rs"]
 mod control_signal;

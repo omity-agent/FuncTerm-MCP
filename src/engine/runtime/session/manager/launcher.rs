@@ -56,6 +56,7 @@ impl ShellLauncher {
             &tab_environment,
             starting_directory,
         )?);
+        startup.env.push((shims::TAB_ID_ENV.into(), tab_id.into()));
         let screen = Arc::new(Terminal::new(
             TerminalSize {
                 rows: self.settings.terminal_rows,

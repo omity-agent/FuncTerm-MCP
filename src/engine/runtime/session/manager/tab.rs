@@ -1,3 +1,4 @@
+mod shutdown;
 mod snapshot;
 mod tab_view;
 use self::snapshot::TabSnapshot;
@@ -15,6 +16,7 @@ pub(super) struct TabDirectory {
 }
 pub(super) struct Tab {
     id: String,
+    pub(super) operation: Mutex<()>,
     state: Mutex<TabState>,
     commands: DashMap<String, Arc<ManagedCommand>>,
 }
@@ -28,6 +30,9 @@ const ID_ALPHABET: [char; 36] = [
     'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
 ];
 impl TabDirectory {
+    pub(super) fn close(&self, tab_id: &str) -> Result<()> {
+        self.require_tab(tab_id)?.close()
+    }
     pub(super) fn insert(&self, tab: Tab) {
         self.tabs.insert(tab.id().to_owned(), Arc::new(tab));
     }
@@ -92,6 +97,7 @@ impl Tab {
         let snapshot = TabSnapshot::from_session(&session)?;
         Ok(Self {
             id,
+            operation: Mutex::new(()),
             state: Mutex::new(TabState {
                 session: Some(session),
                 snapshot,

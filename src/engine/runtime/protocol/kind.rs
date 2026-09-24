@@ -24,6 +24,7 @@ impl Request {
                 starting_shell: _,
                 environment: _,
             } => PayloadKind::TabCreated,
+            Self::Close { tab_id: _ } => PayloadKind::TabClosed,
             Self::ManualWrite {
                 tab_id: _,
                 input: _,

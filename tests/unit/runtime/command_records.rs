@@ -8,7 +8,7 @@ use std::path::Path;
 #[test]
 fn zero_wait_does_not_block_for_missing_done_file() {
     let missing_path = Path::new("Z:\\definitely-missing-command.done");
-    assert!(!wait_for_done(missing_path, Duration::from_millis(0)).unwrap());
+    assert!(!wait_for_done(missing_path, Duration::from_millis(0), || false).unwrap());
 }
 #[test]
 fn command_record_separates_input_output_and_state_files() {
@@ -47,7 +47,7 @@ fn failed_result_closes_command_lifecycle() {
     let _final_cleanup = std::fs::remove_dir_all(&root);
     let record = create_record(&root, "command-failed", Path::new("F:\\cwd")).unwrap();
     write_failed_result("command-failed", &record, "shell exited").unwrap();
-    assert!(wait_for_done(&record.done, Duration::from_millis(0)).unwrap());
+    assert!(wait_for_done(&record.done, Duration::from_millis(0), || false).unwrap());
     let result =
         read_command_result(&record, Duration::from_millis(1), "FuncTerm".to_owned()).unwrap();
     assert!(result.command.finished);

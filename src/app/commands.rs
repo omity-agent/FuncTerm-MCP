@@ -3,10 +3,25 @@ use crate::runtime::protocol::{
 };
 use crate::runtime::working_dir;
 use crate::shell::ShellChoice;
-use anyhow::Result;
+use anyhow::{Context as _, Result, ensure};
 use core::time::Duration;
 use std::path::Path;
 type DaemonCall<'callback> = dyn Fn(&Request) -> Result<Payload> + 'callback;
+pub(crate) fn close_target(tab_id: Option<String>) -> Result<String> {
+    if let Some(id) = tab_id {
+        return Ok(id);
+    }
+    let current = std::env::var(crate::shell::shims::TAB_ID_ENV)
+        .context("cannot identify current Tab; run --current inside a FuncTerm Tab")?;
+    ensure!(
+        !current.is_empty(),
+        "cannot identify current Tab; run --current inside a FuncTerm Tab"
+    );
+    Ok(current)
+}
+pub(crate) fn close(call: impl Fn(&Request) -> Result<Payload>, tab_id: String) -> Result<String> {
+    Ok(call_payload(call, &Request::Close { tab_id })?.into_plain_text())
+}
 pub(crate) fn new_tab(
     call: impl Fn(&Request) -> Result<Payload>,
     starting_directory: Option<&Path>,

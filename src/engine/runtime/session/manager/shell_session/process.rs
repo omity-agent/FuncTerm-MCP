@@ -22,8 +22,8 @@ impl ProcessTree {
         Ok(())
     }
     pub(in crate::engine::runtime::session::manager) fn terminate(&self) -> Result<()> {
-        let stored_process_id = *self.process_id.lock();
-        let Some(process_id) = stored_process_id else {
+        let mut stored_process_id = self.process_id.lock();
+        let Some(process_id) = *stored_process_id else {
             return Ok(());
         };
         let config = Config {
@@ -32,6 +32,8 @@ impl ProcessTree {
         };
         kill_tree_with_config(process_id, &config)
             .with_context(|| format!("failed to terminate shell process tree {process_id}"))?;
+        *stored_process_id = None;
+        drop(stored_process_id);
         Ok(())
     }
 }

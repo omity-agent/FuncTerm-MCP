@@ -102,6 +102,10 @@ fn handle_request(manager: &Arc<Manager>, request: Request) -> Response {
 fn dispatch(manager: &Arc<Manager>, request: Request) -> Result<Payload> {
     match request {
         Request::Ping => Ok(Payload::Pong),
+        Request::Close { tab_id } => {
+            manager.close(&tab_id)?;
+            Ok(Payload::TabClosed { tab_id })
+        }
         Request::NewTab {
             starting_directory,
             starting_shell,

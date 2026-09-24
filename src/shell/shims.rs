@@ -1,6 +1,6 @@
 use super::ShellChoice;
 use crate::contract::HELPER_EXECUTABLE_ENV;
-use crate::runtime::config::Settings;
+use crate::runtime::config::{DAEMON_SERVICE_NAME_ENV, Settings};
 use crate::runtime::protocol::EnvironmentSnapshot;
 use anyhow::{Context as _, Result};
 use fs_err as fs;
@@ -10,8 +10,11 @@ pub(crate) const ACTIVE_SHELL_FILE_ENV: &str = "FUNCTERM_ACTIVE_SHELL_FILE";
 pub(crate) const CURRENT_SHELL_ENV: &str = "FUNCTERM_CURRENT_SHELL";
 pub(crate) const SESSION_ROOT_ENV: &str = "FUNCTERM_SESSION_ROOT";
 pub(crate) const SHIM_DIR_ENV: &str = "FUNCTERM_SHIM_DIR";
-pub(crate) const PROTECTED_ENVIRONMENT_NAMES: [&str; 13] = [
+pub(crate) const TAB_ID_ENV: &str = "FUNCTERM_TAB_ID";
+pub(crate) const PROTECTED_ENVIRONMENT_NAMES: [&str; 15] = [
     "PATH",
+    TAB_ID_ENV,
+    DAEMON_SERVICE_NAME_ENV,
     SHIM_DIR_ENV,
     SESSION_ROOT_ENV,
     ACTIVE_SHELL_FILE_ENV,
@@ -39,6 +42,10 @@ pub(crate) fn environment(
     let path = prepend_path(shim_dir, inherited.value("PATH"), inherited_shim.as_deref())?;
     let mut env = vec![
         (OsString::from("PATH"), path),
+        (
+            OsString::from(DAEMON_SERVICE_NAME_ENV),
+            OsString::from(&settings.daemon_service_name),
+        ),
         (
             OsString::from(SHIM_DIR_ENV),
             shim_dir.as_os_str().to_owned(),

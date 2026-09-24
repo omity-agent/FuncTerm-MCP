@@ -23,6 +23,7 @@ impl Tab {
         command_id: String,
         command_text: &str,
     ) -> Result<StartedCommand> {
+        let _operation = self.operation.lock();
         let session = self.live_session()?;
         if !session.is_alive()? {
             self.close_session(&session)?;

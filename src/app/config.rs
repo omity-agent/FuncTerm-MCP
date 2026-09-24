@@ -2,6 +2,7 @@ use alloc::collections::BTreeMap;
 use anyhow::{Context as _, Result};
 use serde::Deserialize;
 const SETTINGS: &str = include_str!("../../settings.toml");
+pub(crate) const DAEMON_SERVICE_NAME_ENV: &str = "FUNCTERM_DAEMON_SERVICE_NAME";
 #[derive(Clone, Debug, Deserialize)]
 pub(crate) struct Settings {
     pub(crate) daemon_service_name: String,
@@ -35,10 +36,7 @@ pub(crate) struct ToolDescription {
 pub(crate) fn load() -> Result<Settings> {
     let mut settings =
         toml::from_str::<Settings>(SETTINGS).context("failed to parse embedded settings")?;
-    apply_string_override(
-        "FUNCTERM_DAEMON_SERVICE_NAME",
-        &mut settings.daemon_service_name,
-    );
+    apply_string_override(DAEMON_SERVICE_NAME_ENV, &mut settings.daemon_service_name);
     for (name, candidates) in [
         ("FUNCTERM_POWERSHELL", &mut settings.powershell),
         ("FUNCTERM_BASH", &mut settings.bash),

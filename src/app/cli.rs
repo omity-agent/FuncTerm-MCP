@@ -21,6 +21,12 @@ enum CliCommand {
         # [arg (long , default_value = "powershell" , value_parser = ShellChoice :: from_canonical_name)]
         starting_shell: ShellChoice,
     },
+    Close {
+        #[arg(long, required_unless_present = "current", conflicts_with = "current")]
+        tab_id: Option<String>,
+        #[arg(long)]
+        current: bool,
+    },
     ManualWrite {
         tab_id: String,
         #[arg(long, required_unless_present = "base64", conflicts_with = "base64")]
@@ -97,6 +103,14 @@ pub(crate) async fn run() -> Result<()> {
         }
         CliCommand::Mcp => crate::mcp::run(config::load()?).await,
         CliCommand::Daemon => crate::runtime::daemon::run(config::load()?),
+        CliCommand::Close { tab_id, current: _ } => {
+            let target = crate::commands::close_target(tab_id)?;
+            let settings = config::load()?;
+            print_result(crate::commands::with_daemon(
+                &settings.daemon_service_name,
+                |call| crate::commands::close(call, target),
+            ))
+        }
         CliCommand::NewTab {
             starting_directory,
             starting_shell,

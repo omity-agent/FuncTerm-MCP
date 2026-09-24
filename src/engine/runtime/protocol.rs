@@ -20,6 +20,9 @@ pub(crate) enum Request {
         starting_shell: ShellChoice,
         environment: EnvironmentSnapshot,
     },
+    Close {
+        tab_id: String,
+    },
     ManualWrite {
         tab_id: String,
         input: KeyboardInput,
@@ -51,6 +54,9 @@ pub(crate) enum Response {
 pub(crate) enum Payload {
     Pong,
     TabCreated {
+        tab_id: String,
+    },
+    TabClosed {
         tab_id: String,
     },
     KeyboardWritten {
