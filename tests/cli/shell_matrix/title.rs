@@ -16,7 +16,10 @@ fn cli_distinguishes_native_host_title_from_command_title() {
     let _guard = locked_with_env(&[(case.env_var, &executable)]);
     let created = create_tab(&case_dir(case.name, "native command title"), case.name);
     let model_title = parse_tab_view(&run_cli(&["view", &created.tab_id])).title;
-    let result = parse_command_result(&send_command(&created.tab_id, "where.exe where.exe", 10.0));
+    let native_command = "Write-Output ('HOST_TITLE_BEFORE=<' + [Console]::Title + '>'); where.exe where.exe; Write-Output ('HOST_TITLE_AFTER=<' + [Console]::Title + '>')";
+    let first_output = send_command(&created.tab_id, native_command, 10.0);
+    let first_command_id = parse_command_id(&first_output);
+    let result = parse_command_result(&first_output);
     assert_finished(&result, case.name, "where.exe");
     let tab = parse_tab_view(&run_cli(&["view", &created.tab_id]));
     assert_eq!(
@@ -24,7 +27,8 @@ fn cli_distinguishes_native_host_title_from_command_title() {
         (model_title.as_str(), model_title.as_str()),
         "neither a command nor its tab may expose PowerShell's host window title"
     );
-    let intended_title = "MCP_PTY_INTENTIONAL_TITLE";
+    assert_native_model_title(&result, &model_title);
+    let intended_title = "MCP_PTY_自定义标题_😀";
     let title_then_native = format!(
         "{}; where.exe where.exe",
         set_title_command(case.name, intended_title)
@@ -35,6 +39,23 @@ fn cli_distinguishes_native_host_title_from_command_title() {
         titled.title, intended_title,
         "an intentional command title must remain observable"
     );
+    let reset = parse_command_result(&send_command(&created.tab_id, native_command, 10.0));
+    assert_finished(&reset, case.name, "where.exe");
+    assert_native_model_title(&reset, &model_title);
+    assert_eq!(reset.title, model_title);
+    let historical = parse_command_result(&run_cli(&["view", &first_command_id]));
+    assert_eq!(historical.title, model_title);
+}
+#[cfg(windows)]
+fn assert_native_model_title(result: &crate::support::CommandResult, model_title: &str) {
+    for phase in ["BEFORE", "AFTER"] {
+        let expected = format!("HOST_TITLE_{phase}=<{model_title}>");
+        assert!(
+            result.stdout.contains(&expected),
+            "the real console title should be restored: expected {expected:?}, stdout: {}",
+            result.stdout
+        );
+    }
 }
 #[test]
 fn cli_reports_titles_for_each_command() {

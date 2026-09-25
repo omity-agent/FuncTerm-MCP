@@ -99,7 +99,7 @@ humantime = "*"
 interprocess = "*"
 itertools = "*"
 kill_tree = "*"
-mimalloc = { version = "*", features = ["v3"] }
+mimalloc = "*"
 named-lock = "*"
 nanoid = "*"
 notify = "*"

@@ -24,8 +24,12 @@ pub(crate) const TERMINAL_MARKER_END: &[u8] = b"end";
 pub(crate) const TERMINAL_MARKER_NAME: &[u8] = b"FuncTerm";
 pub(crate) const TERMINAL_MARKER_START: &[u8] = b"start";
 pub(crate) fn window_title_sequence(title: &str) -> anyhow::Result<String> {
+    validate_window_title(title)?;
+    Ok(format!("\x1b]2;{title}\x1b\\"))
+}
+pub(crate) fn validate_window_title(title: &str) -> anyhow::Result<()> {
     if title.chars().any(char::is_control) {
         anyhow::bail!("terminal_model_title must not contain control characters");
     }
-    Ok(format!("\x1b]2;{title}\x1b\\"))
+    Ok(())
 }

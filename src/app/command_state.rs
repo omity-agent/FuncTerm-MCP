@@ -11,17 +11,25 @@ pub(crate) struct DoneOutput<'value> {
 }
 pub(crate) fn write_start(command_id: &str, directory: &Path, model_title: &str) -> Result<()> {
     let mut stdout = std::io::stdout().lock();
-    write_start_to(command_id, directory, model_title, &mut stdout)
+    restore_model_title(&mut stdout, model_title)?;
+    write_start_to(command_id, directory, &mut stdout)
 }
-fn write_start_to(
-    command_id: &str,
-    directory: &Path,
-    model_title: &str,
-    output: &mut impl Write,
-) -> Result<()> {
+#[cfg(windows)]
+fn restore_model_title(_output: &mut impl Write, title: &str) -> Result<()> {
+    use windows::Win32::System::Console::SetConsoleTitleW;
+    use windows::core::PCWSTR;
+    crate::contract::validate_window_title(title)?;
+    let wide_title: Vec<u16> = title.encode_utf16().chain(core::iter::once(0)).collect();
+    unsafe { SetConsoleTitleW(PCWSTR(wide_title.as_ptr())) }
+        .context("failed to restore terminal model title")
+}
+#[cfg(unix)]
+fn restore_model_title(output: &mut impl Write, title: &str) -> Result<()> {
     output
-        .write_all(crate::contract::window_title_sequence(model_title)?.as_bytes())
-        .context("failed to restore terminal model title")?;
+        .write_all(crate::contract::window_title_sequence(title)?.as_bytes())
+        .context("failed to restore terminal model title")
+}
+fn write_start_to(command_id: &str, directory: &Path, output: &mut impl Write) -> Result<()> {
     write_marker(output, crate::contract::TERMINAL_MARKER_START, command_id)?;
     let started_path = directory
         .join(crate::contract::COMMAND_STATE_DIRECTORY)
