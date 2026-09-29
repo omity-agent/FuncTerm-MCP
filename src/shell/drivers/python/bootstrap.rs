@@ -82,6 +82,7 @@ pub(super) fn script(context: StartupContext<'_>) -> Result<String> {
 	        for @VAR_name@, @VAR_value@ in @VAR_protected_environment@.items():
 	            if @VAR_environment_was_cleared@ or @VAR_name@.upper() in {{@PYTHON_PROTECTED_ENVIRONMENT@}}:
 	                @VAR_os@.environ[@VAR_name@] = @VAR_value@
+	        @VAR_prepend_shim@()
 	        if not @VAR_done_file@.exists():
 	            @VAR_elapsed@ = max(1, round((@VAR_time@.perf_counter() - @VAR_started@) * 1000))
 	            @VAR_helper@(

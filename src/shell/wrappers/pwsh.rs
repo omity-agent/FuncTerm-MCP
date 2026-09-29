@@ -138,6 +138,7 @@ function @FUNCTION@ {
                 )
             }
         }
+        Set-FuncTermShimPath
         if (-not [IO.File]::Exists($@VAR_doneFile@)) {
             $null = [IO.Directory]::CreateDirectory($@VAR_stateDir@)
             if ([string]::IsNullOrEmpty($env:@HELPER_ENV@)) {

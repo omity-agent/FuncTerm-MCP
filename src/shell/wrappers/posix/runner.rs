@@ -39,7 +39,7 @@ pub(super) fn command_function(dialect: PosixDialect) -> String {
 	        fi
 	        return 1
 	    fi
-	    functerm_prepend_shim_path || return 1
+		    functerm_ensure_shim_path || return 1
 	    local @VAR_script@
 	    if ! @VAR_script@="$(cat "$@VAR_command_file@" 2> "$@VAR_stderr_file@")"; then
 	        local @VAR_publish_result@=0

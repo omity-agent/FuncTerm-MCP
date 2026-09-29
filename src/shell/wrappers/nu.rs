@@ -158,13 +158,16 @@ const TEMPLATE : & str = "def --env @FUNCTION@ [@VAR_command_id@: string, @VAR_d
 	    }
 	}
 	" ;
-const NUSHELL_STATE_FUNCTIONS: &str = "def save_nushell_state [
+const NUSHELL_STATE_FUNCTIONS : & str = "def save_nushell_state [
 	    @VAR_cwd_file@: path,
 	    @VAR_env_state_file@: path,
-	    @VAR_config_state_file@: path,
-	    @VAR_declaration_state_file@: path,
+		    @VAR_config_state_file@: path,
+		    @VAR_declaration_state_file@: path,
 	] {
-	    $env.PWD | save --force --raw $@VAR_cwd_file@
+		    if not ($env.FUNCTERM_SHIM_DIR? | is-empty) {
+		        $env.PATH = ($env.PATH | where {|@VAR_entry@| $@VAR_entry@ != $env.FUNCTERM_SHIM_DIR } | prepend $env.FUNCTERM_SHIM_DIR)
+		    }
+		    $env.PWD | save --force --raw $@VAR_cwd_file@
 	    let @VAR_environment_entries@ = $env
 	        | reject --optional PWD config @NUSHELL_PROTECTED_ENVIRONMENT@
 	        | transpose @VAR_name@ @VAR_value@
@@ -193,4 +196,4 @@ const NUSHELL_STATE_FUNCTIONS: &str = "def save_nushell_state [
 	        $@VAR_source@ | str join (char newline)
 	            | save --force --raw $@VAR_declaration_state_file@
     }
-}";
+}" ;

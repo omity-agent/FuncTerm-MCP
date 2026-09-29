@@ -65,7 +65,8 @@ pub(super) fn parse_tab_created(output: &Output) -> TabCreated {
 fn checked_stdout(output: &Output) -> String {
     assert!(
         output.status.success(),
-        "stdout: {}\nstderr: {}",
+        "status: {}\nstdout: {}\nstderr: {}",
+        output.status,
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );

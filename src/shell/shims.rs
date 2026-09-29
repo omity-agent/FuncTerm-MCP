@@ -8,11 +8,11 @@ use std::ffi::{OsStr, OsString};
 use std::path::Path;
 pub(crate) const ACTIVE_SHELL_FILE_ENV: &str = "FUNCTERM_ACTIVE_SHELL_FILE";
 pub(crate) const CURRENT_SHELL_ENV: &str = "FUNCTERM_CURRENT_SHELL";
+pub(crate) const PATH_ENV: &str = "PATH";
 pub(crate) const SESSION_ROOT_ENV: &str = "FUNCTERM_SESSION_ROOT";
 pub(crate) const SHIM_DIR_ENV: &str = "FUNCTERM_SHIM_DIR";
 pub(crate) const TAB_ID_ENV: &str = "FUNCTERM_TAB_ID";
-pub(crate) const PROTECTED_ENVIRONMENT_NAMES: [&str; 15] = [
-    "PATH",
+pub(crate) const PROTECTED_ENVIRONMENT_NAMES: [&str; 14] = [
     TAB_ID_ENV,
     DAEMON_SERVICE_NAME_ENV,
     SHIM_DIR_ENV,
@@ -39,9 +39,13 @@ pub(crate) fn environment(
 ) -> Result<Vec<(OsString, OsString)>> {
     let current_exe = std::env::current_exe().context("failed to resolve current executable")?;
     let inherited_shim = inherited.value(SHIM_DIR_ENV);
-    let path = prepend_path(shim_dir, inherited.value("PATH"), inherited_shim.as_deref())?;
+    let path = prepend_path(
+        shim_dir,
+        inherited.value(PATH_ENV),
+        inherited_shim.as_deref(),
+    )?;
     let mut env = vec![
-        (OsString::from("PATH"), path),
+        (OsString::from(PATH_ENV), path),
         (
             OsString::from(DAEMON_SERVICE_NAME_ENV),
             OsString::from(&settings.daemon_service_name),
@@ -148,9 +152,10 @@ fn prepend_path(
     std::env::join_paths(parts).context("failed to join PATH entries")
 }
 fn is_managed_name(name: &OsStr) -> bool {
-    PROTECTED_ENVIRONMENT_NAMES
-        .iter()
-        .any(|expected| environment_name_equals(name, expected))
+    environment_name_equals(name, PATH_ENV)
+        || PROTECTED_ENVIRONMENT_NAMES
+            .iter()
+            .any(|expected| environment_name_equals(name, expected))
         || [COMMAND_ID_ENV, COMMAND_DIRECTORY_ENV]
             .iter()
             .any(|expected| environment_name_equals(name, expected))

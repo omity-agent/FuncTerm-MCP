@@ -178,9 +178,9 @@ checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
 name = "cc"
-version = "1.4.7"
+version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54413ede23c2daf518f35156dfde027feb2374004d63bd497f983c8db9c0e313"
+checksum = "f360145194ee8e21db5ee7f3fcd4fe52210864c75c985dae33218202c8bbe040"
 dependencies = [
  "find-msvc-tools",
  "shlex 2.0.1",
@@ -233,8 +233,7 @@ dependencies = [
 [[package]]
 name = "clap"
 version = "4.6.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa8876b300ab35ba921adea3dfd70157a46249b33f95c9084ae5709785478946"
+source = "git+https://github.com/clap-rs/clap.git#6cde7384bc47913bdbf456cd2f0e3ebb94cb3557"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -243,8 +242,7 @@ dependencies = [
 [[package]]
 name = "clap_builder"
 version = "4.6.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec0797fb7aeb1406c84efac526901f7ec3ead2124f946b494e72879d4b54704d"
+source = "git+https://github.com/clap-rs/clap.git#6cde7384bc47913bdbf456cd2f0e3ebb94cb3557"
 dependencies = [
  "anstream",
  "anstyle",
@@ -255,8 +253,7 @@ dependencies = [
 [[package]]
 name = "clap_derive"
 version = "4.6.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9c751b79415d4e559e3d1fcf128e09e720eb673a06d26cf6f392d37d75b66e0"
+source = "git+https://github.com/clap-rs/clap.git#6cde7384bc47913bdbf456cd2f0e3ebb94cb3557"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -267,8 +264,16 @@ dependencies = [
 [[package]]
 name = "clap_lex"
 version = "1.1.1"
+source = "git+https://github.com/clap-rs/clap.git#6cde7384bc47913bdbf456cd2f0e3ebb94cb3557"
+
+[[package]]
+name = "cmake"
+version = "0.1.58"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c133bc6a41be0d194c306b5506d15e6feeea7b1d6604bd3f8310dfb2ca96486"
+checksum = "c0f78a02292a74a88ac736019ab962ece0bc380e3f977bf72e376c5d78ff0678"
+dependencies = [
+ "cc",
+]
 
 [[package]]
 name = "colorchoice"
@@ -441,7 +446,7 @@ dependencies = [
 [[package]]
 name = "filedescriptor"
 version = "0.8.3"
-source = "git+https://github.com/wez/wezterm#b09b56c29c1e367e598b60ca266e2cc9038751e0"
+source = "git+https://github.com/wez/wezterm.git#cab25161054c50fd6c705db4ceefef0f1e5a9575"
 dependencies = [
  "libc",
  "thiserror 2.0.21",
@@ -450,9 +455,9 @@ dependencies = [
 
 [[package]]
 name = "find-msvc-tools"
-version = "0.1.13"
+version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef25905e51abafe4dcea6c15fec58c57b601cdbd0ee53d22ea1d3016c587d39b"
+checksum = "aedcfb3409746eddb02b9e19ebda1c3394f759a152e48ee875a0844d1b955484"
 
 [[package]]
 name = "fs-err"
@@ -488,7 +493,6 @@ dependencies = [
  "interprocess",
  "itertools 0.15.0",
  "kill_tree",
- "mimalloc",
  "named-lock",
  "nanoid",
  "notify",
@@ -500,6 +504,7 @@ dependencies = [
  "schemars",
  "serde",
  "shell-words",
+ "snmalloc-rs",
  "sonic-rs",
  "strum",
  "sugar_path",
@@ -508,7 +513,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "toml",
- "vte",
+ "vte 0.15.0 (git+https://github.com/alacritty/vte.git)",
  "which 8.0.6",
  "windows 0.62.2",
 ]
@@ -776,9 +781,9 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "js-sys"
-version = "0.3.105"
+version = "0.3.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce57d20d1ea864ce2ac172ab472d409214f4fd359f0b2a2775abdf522e2af99e"
+checksum = "7883d941dae510fb2d978fc3fe018c71c9e2892fd38854de3e8b92c2e5ad9cc5"
 dependencies = [
  "cfg-if",
  "futures-util",
@@ -846,15 +851,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libmimalloc-sys"
-version = "0.1.49"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a45a52f43e1c16f667ccfe4dd8c85b7f7c204fd5e3bf46c5b0db9a5c3c0b8e9"
-dependencies = [
- "cc",
-]
-
-[[package]]
 name = "linux-raw-sys"
 version = "0.4.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -886,15 +882,6 @@ name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
-
-[[package]]
-name = "mimalloc"
-version = "0.1.52"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d4139bb28d14ad1facf21d5eb8825051b326e172d216b39f6d31df53cc97862"
-dependencies = [
- "libmimalloc-sys",
-]
 
 [[package]]
 name = "minimal-lexical"
@@ -1081,7 +1068,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 [[package]]
 name = "portable-pty"
 version = "0.9.0"
-source = "git+https://github.com/wez/wezterm#b09b56c29c1e367e598b60ca266e2cc9038751e0"
+source = "git+https://github.com/wez/wezterm.git#cab25161054c50fd6c705db4ceefef0f1e5a9575"
 dependencies = [
  "anyhow",
  "bitflags 1.3.2",
@@ -1306,9 +1293,8 @@ dependencies = [
 
 [[package]]
 name = "rmcp"
-version = "3.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b6317cd8c13e3ec9033cf2aa5aa92cd743f0f4f8a93cddc42ea0ae6ce3b8898"
+version = "3.5.0"
+source = "git+https://github.com/modelcontextprotocol/rust-sdk.git#ae2f9c9b45a2c98d24ee345406e79f507c9f9282"
 dependencies = [
  "chrono",
  "futures",
@@ -1328,9 +1314,8 @@ dependencies = [
 
 [[package]]
 name = "rmcp-macros"
-version = "3.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2ee366004e5f87c103be91c6c09337811517ae8d2f919ece9da7c21444b85c5"
+version = "3.5.0"
+source = "git+https://github.com/modelcontextprotocol/rust-sdk.git#ae2f9c9b45a2c98d24ee345406e79f507c9f9282"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -1539,6 +1524,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9395f0f0eee849a9b707b2f06bb92a6a422090e2123bb2ef8e87a0e61892a8e"
 
 [[package]]
+name = "snmalloc-rs"
+version = "0.7.5"
+source = "git+https://github.com/microsoft/snmalloc.git#e9f7b2ebd11fcadd5913c95d90770902e8126646"
+dependencies = [
+ "snmalloc-sys",
+]
+
+[[package]]
+name = "snmalloc-sys"
+version = "0.7.5"
+source = "git+https://github.com/microsoft/snmalloc.git#e9f7b2ebd11fcadd5913c95d90770902e8126646"
+dependencies = [
+ "cmake",
+]
+
+[[package]]
 name = "sonic-number"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1649,7 +1650,7 @@ dependencies = [
  "tracing",
  "unicode-segmentation",
  "unicode-width",
- "vte",
+ "vte 0.15.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1879,6 +1880,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "vte"
+version = "0.15.0"
+source = "git+https://github.com/alacritty/vte.git#abeae765dd546dfff60b278f0757dcc71beb8ab1"
+dependencies = [
+ "arrayvec",
+ "memchr",
+]
+
+[[package]]
 name = "walkdir"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1905,9 +1915,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen"
-version = "0.2.128"
+version = "0.2.129"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aecb87a33d3b0c5e3b7aa46336eaf486cffafbd281b195e4c8b80d50df2351bf"
+checksum = "9bb54f33acc68fd454578d9820b0bde1a1a3d17aa17bb7b6595806d02886d409"
 dependencies = [
  "cfg-if",
  "once_cell",
@@ -1918,9 +1928,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro"
-version = "0.2.128"
+version = "0.2.129"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a690d511e3c1a8b3a55e33511e3c2c00c78415cd23650f32b808627f5696b9ed"
+checksum = "2e29d0c35b16e224a7eeb5cd2d25e3e1968fbd65604117b44d3b789d00ee8535"
 dependencies = [
  "quote",
  "wasm-bindgen-macro-support",
@@ -1928,9 +1938,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro-support"
-version = "0.2.128"
+version = "0.2.129"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "411e4887f0071ef2d2164a9d5fdf2d20efbef78fccd3a78b0c10a1dc5295e48a"
+checksum = "6f501a8bc3719dba86ef8ae4728879c08001bea749eb1333ac5b91e040e2a6b7"
 dependencies = [
  "bumpalo",
  "proc-macro2",
@@ -1941,9 +1951,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-shared"
-version = "0.2.128"
+version = "0.2.129"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81941cd78d0c92026c33e5e01312845a4cb1e9af3407f9134b100dd03144103e"
+checksum = "23f0c9c52aa7cd7d77769a4cfe2a9adb1b331f489a41d912ce14513d5ab995c6"
 dependencies = [
  "unicode-ident",
 ]
@@ -2343,18 +2353,18 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "zerocopy"
-version = "0.8.58"
+version = "0.8.59"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c17e8fafad82b542ff3717217ecdc736231b59e387768c9630123b4ce4d2db44"
+checksum = "6df92bf3d9227be3d53173901ddbffac2babc27ae50f397776ffd6dc33f800cb"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.58"
+version = "0.8.59"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "595f56e044df4f46a0c9a626f65c3d99eb8488f7e8a8baa12dd76326d9710bf2"
+checksum = "ac4f328cf2f05d084e496c3e9c3f33ed0a183656a16e1fcec4d464d8373aec82"
 dependencies = [
  "proc-macro2",
  "quote",

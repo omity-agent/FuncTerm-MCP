@@ -46,11 +46,12 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
 	    const @VAR_elapsed@ = `${{Math.max(1, Math.ceil(performance.now() - @VAR_command@.started))}}ms`;
 	    const @VAR_environmentWasCleared@ = Object.keys(process.env).length === 0;
 	    for (const [@VAR_name@, @VAR_value@] of Object.entries(@VAR_command@.protectedEnvironment)) {{
-	        if (@VAR_environmentWasCleared@ || [@BUN_PROTECTED_ENVIRONMENT@].includes(@VAR_name@.toUpperCase())) {{
-	            process.env[@VAR_name@] = @VAR_value@;
-	        }}
-	    }}
-	    @VAR_runHelper@(["internal-write-done", "--command-id", @VAR_command@.id, "--exit-code", @VAR_command@.failed ? "1" : "0", "--time-consumption", @VAR_elapsed@, "--cwd", process.cwd(), "--directory", @VAR_command@.directory]);
+		        if (@VAR_environmentWasCleared@ || [@BUN_PROTECTED_ENVIRONMENT@].includes(@VAR_name@.toUpperCase())) {{
+		            process.env[@VAR_name@] = @VAR_value@;
+		        }}
+		    }}
+		    @VAR_prependShimPath@();
+		    @VAR_runHelper@(["internal-write-done", "--command-id", @VAR_command@.id, "--exit-code", @VAR_command@.failed ? "1" : "0", "--time-consumption", @VAR_elapsed@, "--cwd", process.cwd(), "--directory", @VAR_command@.directory]);
 	    @VAR_restoreEnvironment@("{command_id_env}", @VAR_command@.previousId);
 	    @VAR_restoreEnvironment@("{command_directory_env}", @VAR_command@.previousDirectory);
 	}};

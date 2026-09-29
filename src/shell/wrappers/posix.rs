@@ -10,7 +10,7 @@ export HISTSIZE=0
 export HISTFILESIZE=0
 history -c
 	{path}
-	{shim_path}
+    {shim_path}
 	{command}
 	{dispatcher}
 	",
@@ -73,7 +73,7 @@ pub(super) fn shim_path_function(zsh: bool) -> String {
         ""
     };
     format!(
-        r#"functerm_prepend_shim_path() {{{local_options}
+        r#"functerm_ensure_shim_path() {{{local_options}
     if [ -z "${{{SHIM_DIR_ENV}-}}" ]; then
         return 0
     fi
@@ -91,6 +91,6 @@ pub(super) fn shim_path_function(zsh: bool) -> String {
 	    IFS="$@VAR_old_ifs@"
 	    export PATH="$@VAR_new_path@"
 }}
-functerm_prepend_shim_path"#
+	functerm_ensure_shim_path"#
     )
 }

@@ -50,7 +50,7 @@ if not "%FUNCTERM_SHIM_DIR%"=="" (
         exit /b 1
     )
 )
-call :prepend_shim_path
+call :prepend_functerm_paths
 cd /d "%@VAR_working_directory@%"
 if errorlevel 1 (
     call :publish_done 1
@@ -79,6 +79,7 @@ if not exist "%~dp0@VAR_environment_after_file@.txt" (
 @CMD_PROTECTED_ENVIRONMENT_CAPTURE@
 for /f "usebackq delims=" %%e in ("%~dp0@VAR_environment_after_file@.txt") do set "%%e"
 @CMD_PROTECTED_ENVIRONMENT_RESTORE@
+call :prepend_functerm_paths
 set /p "@VAR_exit_code@="<"%~dp0@VAR_exit_code_file@.txt"
 set /p "@VAR_current_directory@="<"%~dp0@VAR_cwd_after_file@.txt"
 del /q "%~dp0@VAR_environment_before_file@.txt" "%~dp0@VAR_environment_after_file@.txt" "%~dp0@VAR_protected_environment_file@.txt" "%~dp0@VAR_exit_code_file@.txt" "%~dp0@VAR_cwd_after_file@.txt"
@@ -103,17 +104,19 @@ call "%~2\@INPUT_DIR@\@SCRIPT@"
 cd > "%~dp0@VAR_cwd_after_file@.txt"
 set > "%~dp0@VAR_environment_after_file@.txt" 2> nul
 exit /b 0
-:prepend_shim_path
+:prepend_functerm_paths
 if "%FUNCTERM_SHIM_DIR%"=="" exit /b 0
-set "@VAR_new_path@=%FUNCTERM_SHIM_DIR%"
+set "@VAR_startup_path@=%FUNCTERM_SESSION_ROOT%\startup"
+set "@VAR_new_path@=%FUNCTERM_SHIM_DIR%;%@VAR_startup_path@%"
 set "@VAR_remaining_path@=%PATH%"
-:prepend_shim_path_entry
-if not defined @VAR_remaining_path@ goto prepend_shim_path_done
+:prepend_functerm_path_entry
+if not defined @VAR_remaining_path@ goto prepend_functerm_path_done
 for /f "tokens=1* delims=;" %%a in ("%@VAR_remaining_path@%") do set "@VAR_path_entry@=%%~a" & set "@VAR_remaining_path@=%%b"
-if /i "%@VAR_path_entry@%"=="%FUNCTERM_SHIM_DIR%" goto prepend_shim_path_entry
+if /i "%@VAR_path_entry@%"=="%FUNCTERM_SHIM_DIR%" goto prepend_functerm_path_entry
+if /i "%@VAR_path_entry@%"=="%@VAR_startup_path@%" goto prepend_functerm_path_entry
 if defined @VAR_path_entry@ set "@VAR_new_path@=%@VAR_new_path@%;%@VAR_path_entry@%"
-goto prepend_shim_path_entry
-:prepend_shim_path_done
+goto prepend_functerm_path_entry
+:prepend_functerm_path_done
 set "PATH=%@VAR_new_path@%"
 exit /b 0
 :publish_done

@@ -87,10 +87,10 @@ version = "0.0.0"
 edition = "2024"
 
 [dependencies]
-anyhow = "*"
+anyhow = { version = "*", public = true }
 base64-turbo = "*"
 blake3 = "*"
-clap = { version = "*", features = ["derive"] }
+clap = { git = "https://github.com/clap-rs/clap.git", features = ["derive"] }
 dashmap = "*"
 encoding_rs = "*"
 fast-strip-ansi = "*"
@@ -99,13 +99,12 @@ humantime = "*"
 interprocess = "*"
 itertools = "*"
 kill_tree = "*"
-mimalloc = "*"
 named-lock = "*"
 nanoid = "*"
 notify = "*"
 parking_lot = "*"
-portable-pty = { git = "https://github.com/wez/wezterm" }
-rmcp = { version = "*", default-features = false, features = [
+portable-pty = { git = "https://github.com/wez/wezterm.git" }
+rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk.git", default-features = false, features = [
     "server",
     "macros",
     "transport-io",
@@ -114,6 +113,7 @@ schemars = "*"
 same-file = "*"
 serde = { version = "*", features = ["derive", "unstable"] }
 shell-words = "*"
+snmalloc-rs = { git = "https://github.com/microsoft/snmalloc.git" }
 sonic-rs = "*"
 strum = { version = "*", features = ["derive"] }
 sugar_path = "*"
@@ -122,7 +122,7 @@ tempfile = "*"
 thiserror = "*"
 tokio = { version = "*", features = ["macros", "rt-multi-thread"] }
 toml = "*"
-vte = "*"
+vte = { git = "https://github.com/alacritty/vte.git" }
 which = "*"
 
 [target.'cfg(unix)'.dependencies]

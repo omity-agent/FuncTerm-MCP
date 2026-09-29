@@ -10,6 +10,8 @@ mod parse;
 mod process;
 #[path = "../support/temp.rs"]
 mod temp;
+#[path = "support/test_environment.rs"]
+mod test_environment;
 pub(crate) use command::run_cli_with_env;
 #[cfg(windows)]
 pub(crate) use command::run_cli_with_pipes;

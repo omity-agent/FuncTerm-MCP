@@ -1,6 +1,7 @@
 #[test]
 fn shell_environment_lists_preserve_exact_spelling_separators_and_order() {
     let names = super::protected_environment_names().collect::<Vec<_>>();
+    assert!(!names.contains(&"PATH"));
     assert_eq!(
         super::nushell_protected_environment_names(),
         names.join(" ")
@@ -66,7 +67,7 @@ fn posix_environment_scripts_preserve_exact_rendered_content() {
     assert_eq!(
         super::posix_environment_restore(),
         format!(
-            "    if [ -z \"${{PATH+x}}\" ] && [ -z \"${{PWD+x}}\" ]; then\n        eval \"$@VAR_complete_environment@\"\n    fi\n{restored}"
+            "    if [ -z \"${{PATH+x}}\" ] && [ -z \"${{PWD+x}}\" ]; then\n        eval \"$@VAR_complete_environment@\"\n    fi\n{restored}\n    functerm_ensure_shim_path || return 1"
         )
     );
 }

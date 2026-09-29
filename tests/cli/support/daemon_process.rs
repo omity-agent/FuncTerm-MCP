@@ -103,7 +103,7 @@ pub(crate) fn locked_with_env(extra_env: &[(&str, &str)]) -> TestGuard {
     }
 }
 pub(crate) fn apply_active_env(command: &mut Command) {
-    ACTIVE_CLI_ENV.with(|env| apply_env(command, &env.borrow()));
+    ACTIVE_CLI_ENV.with(|env| super::test_environment::apply(command, &env.borrow()));
 }
 pub(crate) fn active_env() -> Vec<(String, String)> {
     ACTIVE_CLI_ENV.with(|env| env.borrow().clone())
@@ -150,7 +150,7 @@ fn spawn_daemon(env: &[(String, String)], service_name: &str) -> ChildGuard {
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
     apply_daemon_flags(&mut command);
-    apply_env(&mut command, env);
+    super::test_environment::apply(&mut command, env);
     command.env("FUNCTERM_DAEMON_READY_STDOUT", "1");
     let mut child = command.spawn().unwrap();
     wait_for_daemon(&mut child, service_name);
@@ -179,11 +179,6 @@ fn wait_for_daemon(child: &mut std::process::Child, service_name: &str) {
         line.contains("Ready"),
         "daemon did not report readiness for {service_name}: {line}"
     );
-}
-fn apply_env(command: &mut Command, env: &[(String, String)]) {
-    for pair in env {
-        command.env(&pair.0, &pair.1);
-    }
 }
 #[cfg(windows)]
 fn apply_daemon_flags(command: &mut Command) {
