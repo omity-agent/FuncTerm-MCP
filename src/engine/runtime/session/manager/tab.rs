@@ -40,30 +40,30 @@ impl TabDirectory {
         &self,
         tab_id: &str,
         input: &KeyboardInput,
-        waiting: core::time::Duration,
+        wait_timeout: core::time::Duration,
     ) -> Result<ViewResult> {
-        self.require_tab(tab_id)?.manual_write(input, waiting)
+        self.require_tab(tab_id)?.manual_write(input, wait_timeout)
     }
     pub(super) fn send_command(
         &self,
         tab_id: &str,
         command: &str,
-        waiting: core::time::Duration,
+        wait_timeout: core::time::Duration,
     ) -> Result<(String, crate::runtime::protocol::EndReason, ViewResult)> {
         let command_id = self.next_command_id();
         let tab = self.require_tab(tab_id)?;
         let started = tab.start_command(command_id.clone(), command)?;
         self.commands.insert(command_id, Arc::clone(&tab));
-        started.wait(waiting)
+        started.wait(wait_timeout)
     }
-    pub(super) fn view(&self, id: &str, waiting: core::time::Duration) -> Result<ViewResult> {
+    pub(super) fn view(&self, id: &str, wait_timeout: core::time::Duration) -> Result<ViewResult> {
         let matching_tab = self.tabs.get(id).map(|entry| Arc::clone(entry.value()));
         if let Some(found_tab) = matching_tab {
-            return found_tab.view(waiting);
+            return found_tab.view(wait_timeout);
         }
         let command_owner = self.commands.get(id).map(|entry| Arc::clone(entry.value()));
         if let Some(owner_tab) = command_owner {
-            return owner_tab.command_view(id, waiting);
+            return owner_tab.command_view(id, wait_timeout);
         }
         bail!("unknown id {id}")
     }

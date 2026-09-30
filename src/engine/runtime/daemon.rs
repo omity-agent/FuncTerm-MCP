@@ -117,25 +117,25 @@ fn dispatch(manager: &Arc<Manager>, request: Request) -> Result<Payload> {
         Request::ManualWrite {
             tab_id,
             input,
-            waiting,
+            wait_timeout,
         } => {
-            let view = manager.manual_write(&tab_id, &input, waiting)?;
+            let view = manager.manual_write(&tab_id, &input, wait_timeout)?;
             Ok(Payload::KeyboardWritten { view })
         }
         Request::SendCommand {
             tab_id,
             command,
-            waiting,
+            wait_timeout,
         } => {
             let (command_id, end_reason, view) =
-                manager.send_command(&tab_id, &command, waiting)?;
+                manager.send_command(&tab_id, &command, wait_timeout)?;
             Ok(Payload::CommandAccepted {
                 command_id,
                 end_reason,
                 view,
             })
         }
-        Request::View { id, waiting } => Ok(Payload::View(manager.view(&id, waiting)?)),
+        Request::View { id, wait_timeout } => Ok(Payload::View(manager.view(&id, wait_timeout)?)),
     }
 }
 #[cfg(test)]

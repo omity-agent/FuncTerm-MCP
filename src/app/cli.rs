@@ -34,19 +34,19 @@ enum CliCommand {
         #[arg(long, required_unless_present = "text", conflicts_with = "text")]
         base64: Option<String>,
         #[arg(long, default_value_t = 0.0)]
-        waiting: f64,
+        wait_timeout: f64,
     },
     SendCommand {
         tab_id: String,
         #[arg(long)]
         command: String,
         #[arg(long, default_value_t = 0.0)]
-        waiting: f64,
+        wait_timeout: f64,
     },
     View {
         id: String,
         #[arg(long, default_value_t = 0.0)]
-        waiting: f64,
+        wait_timeout: f64,
     },
     #[command(hide = true)]
     InternalLaunchDaemon,
@@ -127,7 +127,7 @@ pub(crate) async fn run() -> Result<()> {
             tab_id,
             text,
             base64,
-            waiting,
+            wait_timeout,
         } => {
             let settings = config::load()?;
             let input = match (text, base64) {
@@ -141,28 +141,30 @@ pub(crate) async fn run() -> Result<()> {
             };
             print_result(crate::commands::with_daemon(
                 &settings.daemon_service_name,
-                |call| crate::commands::manual_write(call, tab_id, input, waiting),
+                |call| crate::commands::manual_write(call, tab_id, input, wait_timeout),
             ))
         }
         CliCommand::SendCommand {
             tab_id,
             command: shell_command,
-            waiting: waiting_seconds,
+            wait_timeout: wait_timeout_seconds,
         } => {
             let settings = config::load()?;
             print_result(crate::commands::with_daemon(
                 &settings.daemon_service_name,
-                |call| crate::commands::send_command(call, tab_id, shell_command, waiting_seconds),
+                |call| {
+                    crate::commands::send_command(call, tab_id, shell_command, wait_timeout_seconds)
+                },
             ))
         }
         CliCommand::View {
             id,
-            waiting: waiting_seconds,
+            wait_timeout: wait_timeout_seconds,
         } => {
             let settings = config::load()?;
             print_result(crate::commands::with_daemon(
                 &settings.daemon_service_name,
-                |call| crate::commands::view(call, id, waiting_seconds),
+                |call| crate::commands::view(call, id, wait_timeout_seconds),
             ))
         }
     }

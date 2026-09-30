@@ -23,7 +23,7 @@ fn configured_descriptions_are_applied_to_tools_and_parameters() {
                 ("tab_id".to_owned(), String::new()),
                 ("text".to_owned(), String::new()),
                 ("bytes".to_owned(), String::new()),
-                ("waiting".to_owned(), String::new()),
+                ("wait_timeout".to_owned(), String::new()),
             ]
             .into_iter()
             .collect(),
@@ -33,7 +33,7 @@ fn configured_descriptions_are_applied_to_tools_and_parameters() {
             parameters: [
                 ("tab_id".to_owned(), String::new()),
                 ("command".to_owned(), String::new()),
-                ("waiting".to_owned(), String::new()),
+                ("wait_timeout".to_owned(), String::new()),
             ]
             .into_iter()
             .collect(),
@@ -42,7 +42,7 @@ fn configured_descriptions_are_applied_to_tools_and_parameters() {
             description: String::new(),
             parameters: [
                 ("id".to_owned(), String::new()),
-                ("waiting".to_owned(), String::new()),
+                ("wait_timeout".to_owned(), String::new()),
             ]
             .into_iter()
             .collect(),

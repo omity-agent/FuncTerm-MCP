@@ -1,5 +1,5 @@
 use crate::runtime::protocol::{
-    EnvironmentSnapshot, KeyboardInput, Payload, Request, waiting_from_seconds,
+    EnvironmentSnapshot, KeyboardInput, Payload, Request, wait_timeout_from_seconds,
 };
 use crate::runtime::working_dir;
 use crate::shell::ShellChoice;
@@ -46,57 +46,61 @@ pub(crate) fn manual_write(
     call: impl Fn(&Request) -> Result<Payload>,
     tab_id: String,
     input: KeyboardInput,
-    waiting_seconds: f64,
+    wait_timeout_seconds: f64,
 ) -> Result<String> {
-    Ok(manual_write_payload(call, tab_id, input, waiting_seconds)?.into_plain_text())
+    Ok(manual_write_payload(call, tab_id, input, wait_timeout_seconds)?.into_plain_text())
 }
 pub(crate) fn manual_write_payload(
     call: impl Fn(&Request) -> Result<Payload>,
     tab_id: String,
     input: KeyboardInput,
-    waiting_seconds: f64,
+    wait_timeout_seconds: f64,
 ) -> Result<Payload> {
-    call_after_wait(call, waiting_seconds, |waiting| Request::ManualWrite {
-        tab_id,
-        input,
-        waiting,
+    call_with_wait_timeout(call, wait_timeout_seconds, |wait_timeout| {
+        Request::ManualWrite {
+            tab_id,
+            input,
+            wait_timeout,
+        }
     })
 }
 pub(crate) fn send_command(
     call: impl Fn(&Request) -> Result<Payload>,
     tab_id: String,
     command: String,
-    waiting_seconds: f64,
+    wait_timeout_seconds: f64,
 ) -> Result<String> {
-    Ok(send_command_payload(call, tab_id, command, waiting_seconds)?.into_plain_text())
+    Ok(send_command_payload(call, tab_id, command, wait_timeout_seconds)?.into_plain_text())
 }
 pub(crate) fn send_command_payload(
     call: impl Fn(&Request) -> Result<Payload>,
     tab_id: String,
     command: String,
-    waiting_seconds: f64,
+    wait_timeout_seconds: f64,
 ) -> Result<Payload> {
-    call_after_wait(call, waiting_seconds, |waiting| Request::SendCommand {
-        tab_id,
-        command,
-        waiting,
+    call_with_wait_timeout(call, wait_timeout_seconds, |wait_timeout| {
+        Request::SendCommand {
+            tab_id,
+            command,
+            wait_timeout,
+        }
     })
 }
 pub(crate) fn view(
     call: impl Fn(&Request) -> Result<Payload>,
     id: String,
-    waiting_seconds: f64,
+    wait_timeout_seconds: f64,
 ) -> Result<String> {
-    Ok(view_payload(call, id, waiting_seconds)?.into_plain_text())
+    Ok(view_payload(call, id, wait_timeout_seconds)?.into_plain_text())
 }
 pub(crate) fn view_payload(
     call: impl Fn(&Request) -> Result<Payload>,
     id: String,
-    waiting_seconds: f64,
+    wait_timeout_seconds: f64,
 ) -> Result<Payload> {
-    call_after_wait(call, waiting_seconds, |waiting| Request::View {
+    call_with_wait_timeout(call, wait_timeout_seconds, |wait_timeout| Request::View {
         id,
-        waiting,
+        wait_timeout,
     })
 }
 pub(crate) fn with_daemon(
@@ -109,11 +113,11 @@ pub(crate) fn with_daemon(
 fn call_payload(call: impl Fn(&Request) -> Result<Payload>, request: &Request) -> Result<Payload> {
     call(request)?.ensure_matches(request)
 }
-fn call_after_wait(
+fn call_with_wait_timeout(
     call: impl Fn(&Request) -> Result<Payload>,
-    waiting_seconds: f64,
+    wait_timeout_seconds: f64,
     request: impl FnOnce(Duration) -> Request,
 ) -> Result<Payload> {
-    let waiting = waiting_from_seconds(waiting_seconds)?;
-    call_payload(call, &request(waiting))
+    let wait_timeout = wait_timeout_from_seconds(wait_timeout_seconds)?;
+    call_payload(call, &request(wait_timeout))
 }

@@ -93,7 +93,7 @@ impl Tab {
 impl StartedCommand {
     pub(in crate::engine::runtime::session::manager) fn wait(
         self,
-        waiting: Duration,
+        wait_timeout: Duration,
     ) -> Result<(String, EndReason, ViewResult)> {
         let Self {
             command,
@@ -101,7 +101,7 @@ impl StartedCommand {
             session,
             reservation,
         } = self;
-        let reason = match command.wait(waiting)? {
+        let reason = match command.wait(wait_timeout)? {
             CommandWait::Finished => {
                 tab.finish_done_command(&command)?;
                 EndReason::CommandEnded

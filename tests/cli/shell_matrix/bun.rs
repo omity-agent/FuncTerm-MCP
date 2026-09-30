@@ -58,7 +58,7 @@ fn cli_tools_work_with_bun_repl() {
         String::from_utf8_lossy(&written.stdout),
         String::from_utf8_lossy(&written.stderr)
     );
-    let completed = parse_command_result(&run_cli(&["view", &command_id, "--waiting", "10"]));
+    let completed = parse_command_result(&run_cli(&["view", &command_id, "--wait-timeout", "10"]));
     assert!(completed.finished, "Bun command should finish");
     assert_eq!(completed.exit_code, Some(0_i32));
     assert!(

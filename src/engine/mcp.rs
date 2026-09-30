@@ -57,12 +57,12 @@ impl McpServer {
         &self,
         Parameters(request): Parameters<ManualWriteRequest>,
     ) -> Result<CallToolResult, String> {
-        let (tab_id, input, waiting) = request.into_parts().map_err(error_text)?;
+        let (tab_id, input, wait_timeout) = request.into_parts().map_err(error_text)?;
         let payload = crate::commands::manual_write_payload(
             |command| self.call(command),
             tab_id,
             input,
-            waiting,
+            wait_timeout,
         )
         .map_err(error_text)?;
         output::manual_write(payload)
@@ -76,7 +76,7 @@ impl McpServer {
             |command| self.call(command),
             request.tab_id,
             request.command,
-            request.waiting,
+            request.wait_timeout,
         )
         .map_err(error_text)?;
         output::send_command(payload)
@@ -89,7 +89,7 @@ impl McpServer {
         let payload = crate::commands::view_payload(
             |command| self.call(command),
             request.id,
-            request.waiting,
+            request.wait_timeout,
         )
         .map_err(error_text)?;
         output::view(payload)

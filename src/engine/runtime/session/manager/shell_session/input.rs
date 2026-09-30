@@ -20,7 +20,7 @@ impl ShellSession {
     pub(in crate::engine::runtime::session::manager) fn write_keyboard_for_running_command(
         &self,
         input: &KeyboardInput,
-        waiting: Duration,
+        wait_timeout: Duration,
     ) -> Result<(), KeyboardWriteFailure> {
         let busy = self.busy.lock();
         let Some(command) = busy.as_ref() else {
@@ -38,7 +38,7 @@ impl ShellSession {
                 return Err(KeyboardWriteFailure::Write(error));
             }
         }
-        self.screen.wait_for_output(revision, waiting)?;
+        self.screen.wait_for_output(revision, wait_timeout)?;
         Ok(())
     }
     #[expect(

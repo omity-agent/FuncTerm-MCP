@@ -10,7 +10,7 @@ impl Tab {
     pub(in crate::engine::runtime::session::manager) fn manual_write(
         &self,
         input: &KeyboardInput,
-        waiting: Duration,
+        wait_timeout: Duration,
     ) -> Result<ViewResult> {
         let session = self.live_session()?;
         if !session.is_alive()? {
@@ -18,7 +18,7 @@ impl Tab {
             anyhow::bail!("tab id {} was generated, but its shell is gone", self.id());
         }
         session.refresh_choice()?;
-        match session.write_keyboard_for_running_command(input, waiting) {
+        match session.write_keyboard_for_running_command(input, wait_timeout) {
             Ok(()) => {
                 if session.is_alive()? {
                     Ok(self.remember(&session)?.into_view(true))
@@ -39,12 +39,12 @@ impl Tab {
     pub(in crate::engine::runtime::session::manager) fn command_view(
         &self,
         command_id: &str,
-        waiting: Duration,
+        wait_timeout: Duration,
     ) -> Result<ViewResult> {
         let command = self
             .find_command(command_id)
             .with_context(|| format!("command owner is missing record: {command_id}"))?;
-        match command.wait(waiting)? {
+        match command.wait(wait_timeout)? {
             CommandWait::Finished => self.finish_done_command(&command)?,
             CommandWait::Running => {
                 if let Some(session) = self.optional_session() {

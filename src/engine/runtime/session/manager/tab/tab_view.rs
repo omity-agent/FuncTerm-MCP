@@ -3,17 +3,17 @@ use crate::runtime::protocol::ViewResult;
 use anyhow::Result;
 use std::thread;
 impl Tab {
-    pub(super) fn view(&self, waiting: core::time::Duration) -> Result<ViewResult> {
+    pub(super) fn view(&self, wait_timeout: core::time::Duration) -> Result<ViewResult> {
         let Ok(session) = self.live_session() else {
             return Ok(self.snapshot_view());
         };
         let busy_command_id = session.busy_command_id();
         let Some(command_id) = busy_command_id else {
-            thread::sleep(waiting);
+            thread::sleep(wait_timeout);
             return self.tab_view(&session);
         };
         if let Some(command) = self.find_command(&command_id) {
-            match command.wait(waiting)? {
+            match command.wait(wait_timeout)? {
                 super::super::command::CommandWait::Finished => {
                     self.finish_done_command(&command)?;
                 }

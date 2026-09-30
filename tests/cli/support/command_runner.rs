@@ -65,21 +65,21 @@ pub(crate) fn create_tab_from_directory_argument(cwd: &str, shell: &str) -> TabC
         shell,
     ]))
 }
-pub(crate) fn send_command(tab_id: &str, command: &str, waiting: f64) -> Output {
+pub(crate) fn send_command(tab_id: &str, command: &str, wait_timeout: f64) -> Output {
     run_cli(&[
         "send-command",
         tab_id,
         "--command",
         command,
-        "--waiting",
-        &waiting.to_string(),
+        "--wait-timeout",
+        &wait_timeout.to_string(),
     ])
 }
 pub(crate) fn send_command_with_env(
     env: &[(String, String)],
     tab_id: &str,
     command: &str,
-    waiting: f64,
+    wait_timeout: f64,
 ) -> Output {
     run_cli_with_env(
         &[
@@ -87,21 +87,21 @@ pub(crate) fn send_command_with_env(
             tab_id,
             "--command",
             command,
-            "--waiting",
-            &waiting.to_string(),
+            "--wait-timeout",
+            &wait_timeout.to_string(),
         ],
         env,
     )
 }
-pub(crate) fn manual_write(tab_id: &str, bytes: &[u8], waiting: f64) -> Output {
+pub(crate) fn manual_write(tab_id: &str, bytes: &[u8], wait_timeout: f64) -> Output {
     let encoded = STANDARD.encode(bytes);
     run_cli(&[
         "manual-write",
         tab_id,
         "--base64",
         &encoded,
-        "--waiting",
-        &waiting.to_string(),
+        "--wait-timeout",
+        &wait_timeout.to_string(),
     ])
 }
 fn output_to_files(mut command: Command, timeout: Duration) -> Output {

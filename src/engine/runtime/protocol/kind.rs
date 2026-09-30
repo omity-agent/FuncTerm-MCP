@@ -28,14 +28,17 @@ impl Request {
             Self::ManualWrite {
                 tab_id: _,
                 input: _,
-                waiting: _,
+                wait_timeout: _,
             } => PayloadKind::KeyboardWritten,
             Self::SendCommand {
                 tab_id: _,
                 command: _,
-                waiting: _,
+                wait_timeout: _,
             } => PayloadKind::CommandAccepted,
-            Self::View { id: _, waiting: _ } => PayloadKind::View,
+            Self::View {
+                id: _,
+                wait_timeout: _,
+            } => PayloadKind::View,
         }
     }
 }

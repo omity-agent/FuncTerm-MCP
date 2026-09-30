@@ -20,7 +20,7 @@ pub(super) struct ManualWriteRequest {
     pub(super) text: Option<String>,
     #[serde(default)]
     pub(super) bytes: Option<Vec<u8>>,
-    pub(super) waiting: f64,
+    pub(super) wait_timeout: f64,
 }
 impl ManualWriteRequest {
     pub(super) fn into_parts(self) -> Result<(String, KeyboardInput, f64)> {
@@ -28,7 +28,7 @@ impl ManualWriteRequest {
             tab_id,
             text,
             bytes,
-            waiting,
+            wait_timeout,
         } = self;
         let input = match (text, bytes) {
             (Some(input_text), None) => KeyboardInput::Text(input_text),
@@ -36,19 +36,19 @@ impl ManualWriteRequest {
             (Some(_), Some(_)) => bail!("text and bytes cannot be provided together"),
             (None, None) => bail!("either text or bytes must be provided"),
         };
-        Ok((tab_id, input, waiting))
+        Ok((tab_id, input, wait_timeout))
     }
 }
 #[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
 pub(super) struct SendCommandRequest {
     pub(super) tab_id: String,
     pub(super) command: String,
-    pub(super) waiting: f64,
+    pub(super) wait_timeout: f64,
 }
 #[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
 pub(super) struct ViewRequest {
     pub(super) id: String,
-    pub(super) waiting: f64,
+    pub(super) wait_timeout: f64,
 }
 #[cfg(test)]
 #[path = "../../../tests/unit/app/tool_inputs.rs"]

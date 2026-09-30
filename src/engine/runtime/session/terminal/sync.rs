@@ -15,9 +15,9 @@ impl Terminal {
     pub(in crate::engine::runtime::session) fn wait_for_output(
         &self,
         revision: u64,
-        waiting: Duration,
+        wait_timeout: Duration,
     ) -> Result<()> {
-        if waiting.is_zero() {
+        if wait_timeout.is_zero() {
             return Ok(());
         }
         let mut state = self.state.lock();
@@ -28,7 +28,7 @@ impl Terminal {
                     && !current.reader_closed
                     && current.reader_failure.is_none()
             },
-            waiting,
+            wait_timeout,
         );
         if let Some(message) = state.reader_failure.as_deref() {
             bail!("terminal reader failed while waiting for output: {message}");

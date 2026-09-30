@@ -160,7 +160,7 @@ fn manual_write_request_round_trip_preserves_input_kind_and_waiting() {
         let request = Request::ManualWrite {
             tab_id: "tab-round-trip".to_owned(),
             input,
-            waiting: Duration::from_millis(1_250),
+            wait_timeout: Duration::from_millis(1_250),
         };
         let serialized = sonic_rs::to_string(&request).unwrap();
         let restored = sonic_rs::from_str::<Request>(&serialized).unwrap();

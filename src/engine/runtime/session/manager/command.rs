@@ -17,19 +17,19 @@ impl Manager {
         &self,
         tab_id: &str,
         input: &KeyboardInput,
-        waiting: Duration,
+        wait_timeout: Duration,
     ) -> Result<ViewResult> {
-        self.tabs.manual_write(tab_id, input, waiting)
+        self.tabs.manual_write(tab_id, input, wait_timeout)
     }
     pub(crate) fn send_command(
         self: &Arc<Self>,
         tab_id: &str,
         command: &str,
-        waiting: Duration,
+        wait_timeout: Duration,
     ) -> Result<(String, EndReason, ViewResult)> {
-        self.tabs.send_command(tab_id, command, waiting)
+        self.tabs.send_command(tab_id, command, wait_timeout)
     }
-    pub(crate) fn view(&self, id: &str, waiting: Duration) -> Result<ViewResult> {
-        self.tabs.view(id, waiting)
+    pub(crate) fn view(&self, id: &str, wait_timeout: Duration) -> Result<ViewResult> {
+        self.tabs.view(id, wait_timeout)
     }
 }

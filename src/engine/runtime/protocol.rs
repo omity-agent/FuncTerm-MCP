@@ -26,16 +26,16 @@ pub(crate) enum Request {
     ManualWrite {
         tab_id: String,
         input: KeyboardInput,
-        waiting: Duration,
+        wait_timeout: Duration,
     },
     SendCommand {
         tab_id: String,
         command: String,
-        waiting: Duration,
+        wait_timeout: Duration,
     },
     View {
         id: String,
-        waiting: Duration,
+        wait_timeout: Duration,
     },
 }
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
@@ -110,9 +110,9 @@ pub(crate) enum ViewResult {
         note: String,
     },
 }
-pub(crate) fn waiting_from_seconds(seconds: f64) -> Result<Duration> {
+pub(crate) fn wait_timeout_from_seconds(seconds: f64) -> Result<Duration> {
     Duration::try_from_secs_f64(seconds)
-        .context("waiting must be a finite non-negative number of seconds")
+        .context("wait timeout must be a finite non-negative number of seconds")
 }
 #[cfg(test)]
 #[path = "../../../tests/unit/runtime/serialization.rs"]

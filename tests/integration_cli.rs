@@ -127,7 +127,8 @@ mod tests {
             String::from_utf8_lossy(&written.stdout).contains(marker),
             "manual_write should wait for the typed input to reach the screen"
         );
-        let completed = parse_command_result(&run_cli(&["view", &command_id, "--waiting", "5"]));
+        let completed =
+            parse_command_result(&run_cli(&["view", &command_id, "--wait-timeout", "5"]));
         assert!(completed.stdout.contains(marker));
     }
     #[test]
@@ -175,7 +176,7 @@ mod tests {
         );
         let command_id = parse_command_id(&accepted);
         let start = Instant::now();
-        let viewed = parse_command_result(&run_cli(&["view", &command_id, "--waiting", "5"]));
+        let viewed = parse_command_result(&run_cli(&["view", &command_id, "--wait-timeout", "5"]));
         let elapsed = start.elapsed();
         assert!(viewed.finished, "view should return after command finishes");
         assert!(

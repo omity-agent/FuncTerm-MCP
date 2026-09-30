@@ -60,7 +60,7 @@ mod tests {
                 "manual_write should wait for the typed input to reach the screen"
             );
             let completed =
-                parse_command_result(&run_cli(&["view", &command_id, "--waiting", "5"]));
+                parse_command_result(&run_cli(&["view", &command_id, "--wait-timeout", "5"]));
             assert!(completed.stdout.contains(&marker));
         }
     }

@@ -1,4 +1,12 @@
-cargo-features = ["trim-paths", "panic-immediate-abort"]
+cargo-features = [
+    "different-binary-name",
+    "multiple-build-scripts",
+    "open-namespaces",
+    "panic-immediate-abort",
+    "path-bases",
+    "trim-paths",
+    "unstable-editions",
+]
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }
@@ -43,6 +51,7 @@ too_many_lines = "allow"
 undocumented_unsafe_blocks = "allow"
 unneeded_field_pattern = "allow"
 unwrap_used = "allow"
+use_debug = "allow"
 wildcard_dependencies = "allow"
 
 [lints.rust]
@@ -99,6 +108,7 @@ humantime = "*"
 interprocess = "*"
 itertools = "*"
 kill_tree = "*"
+mimalloc = "*"
 named-lock = "*"
 nanoid = "*"
 notify = "*"
@@ -113,7 +123,6 @@ schemars = "*"
 same-file = "*"
 serde = { version = "*", features = ["derive", "unstable"] }
 shell-words = "*"
-snmalloc-rs = { git = "https://github.com/microsoft/snmalloc.git" }
 sonic-rs = "*"
 strum = { version = "*", features = ["derive"] }
 sugar_path = "*"

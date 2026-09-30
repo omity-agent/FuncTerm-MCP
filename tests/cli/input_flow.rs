@@ -100,7 +100,7 @@ fn piped_process_stays_pending_until_native_execution_finishes() {
     );
     assert!(!parse_command_result(&accepted).finished);
     let command_id = parse_command_id(&accepted);
-    let result = parse_command_result(&run_cli(&["view", &command_id, "--waiting", "10"]));
+    let result = parse_command_result(&run_cli(&["view", &command_id, "--wait-timeout", "10"]));
     assert!(result.finished);
     assert_eq!(result.exit_code, Some(0_i32));
     assert!(

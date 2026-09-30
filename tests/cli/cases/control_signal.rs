@@ -27,7 +27,8 @@ mod tests {
             String::from_utf8_lossy(&written.stdout),
             String::from_utf8_lossy(&written.stderr)
         );
-        let interrupted = parse_command_result(&run_cli(&["view", &command_id, "--waiting", "5"]));
+        let interrupted =
+            parse_command_result(&run_cli(&["view", &command_id, "--wait-timeout", "5"]));
         assert!(
             interrupted.finished,
             "native process did not stop after Ctrl+C; stdout: {}; stderr: {}",
