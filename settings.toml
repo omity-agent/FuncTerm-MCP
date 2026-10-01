@@ -1,5 +1,8 @@
-# 本地 Daemon 的 IPC 服务名；MCP 与 CLI 均通过它复用同一个 Shell 管理实例。
+# 本地 Daemon 的 IPC 服务名
 daemon_service_name = "functerm/daemon"
+
+# Daemon 结构化诊断的过滤规则；设为 functerm=debug 可观察命令生命周期。
+diagnostics_filter = "warn"
 
 # Shell PTY 的默认行数。
 terminal_rows = 30
@@ -33,6 +36,16 @@ bun = ["bun"]
 
 # Python 可执行文件候选。
 python = ["python3", "python"]
+
+[ipc]
+# IPC 连接建立与 Daemon 探测的最长等待秒数
+setup_timeout_seconds = 15.0
+
+# 单条 IPC 消息的最大字节数
+max_frame_bytes = 67108864
+
+# Daemon 中可同时执行的阻塞操作数
+blocking_concurrency = 32
 
 # MCP 工具及其参数的描述；描述设为空字符串时不向 MCP 客户端提供该描述。
 [mcp.new_tab]

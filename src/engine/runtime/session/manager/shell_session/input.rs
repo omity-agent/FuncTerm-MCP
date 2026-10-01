@@ -3,7 +3,6 @@ use crate::runtime::protocol::KeyboardInput;
 use crate::runtime::session::keyboard::{InputBatch, InputDelivery};
 use alloc::{borrow::Cow, sync::Arc};
 use anyhow::{Context as _, Result};
-use core::time::Duration;
 use std::io::Write as _;
 #[derive(Debug, thiserror :: Error)]
 pub(in crate::engine::runtime::session::manager) enum KeyboardWriteFailure {
@@ -20,8 +19,7 @@ impl ShellSession {
     pub(in crate::engine::runtime::session::manager) fn write_keyboard_for_running_command(
         &self,
         input: &KeyboardInput,
-        wait_timeout: Duration,
-    ) -> Result<(), KeyboardWriteFailure> {
+    ) -> Result<u64, KeyboardWriteFailure> {
         let busy = self.busy.lock();
         let Some(command) = busy.as_ref() else {
             return Err(KeyboardWriteFailure::IdlePrompt);
@@ -38,9 +36,7 @@ impl ShellSession {
                 return Err(KeyboardWriteFailure::Write(error));
             }
         }
-        self.screen
-            .wait_for_visible_change(visible_revision, wait_timeout)?;
-        Ok(())
+        Ok(visible_revision)
     }
     #[expect(
         clippy::pattern_type_mismatch,

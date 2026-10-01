@@ -2,6 +2,7 @@ mod cleanup;
 mod input;
 pub(super) mod process;
 use super::command::ManagedCommand;
+use crate::runtime::session::observation::PathWatch;
 use crate::runtime::session::records::CommandRecord;
 use crate::runtime::session::terminal::{CommandTitle, Terminal};
 use crate::shell::{ShellChoice, shims};
@@ -20,6 +21,7 @@ pub(super) struct ShellSession {
     screen: Arc<Terminal>,
     busy: Mutex<Option<Arc<ManagedCommand>>>,
     command_root: PathBuf,
+    command_watch: Arc<PathWatch>,
     dispatch_file: PathBuf,
     active_shell_file: PathBuf,
     command_start_timeout: Duration,
@@ -36,6 +38,7 @@ pub(super) struct ShellSessionParts {
     pub(super) screen: Arc<Terminal>,
     pub(super) busy: Option<Arc<ManagedCommand>>,
     pub(super) command_root: PathBuf,
+    pub(super) command_watch: Arc<PathWatch>,
     pub(super) dispatch_file: PathBuf,
     pub(super) active_shell_file: PathBuf,
     pub(super) command_start_timeout: Duration,
@@ -53,6 +56,7 @@ impl ShellSession {
             screen: parts.screen,
             busy: Mutex::new(parts.busy),
             command_root: parts.command_root,
+            command_watch: parts.command_watch,
             dispatch_file: parts.dispatch_file,
             active_shell_file: parts.active_shell_file,
             command_start_timeout: parts.command_start_timeout,
@@ -67,6 +71,9 @@ impl ShellSession {
     }
     pub(super) fn command_root(&self) -> &Path {
         &self.command_root
+    }
+    pub(super) fn command_watch(&self) -> Arc<PathWatch> {
+        Arc::clone(&self.command_watch)
     }
     pub(super) fn set_cwd(&self, cwd: PathBuf) {
         *self.cwd.lock() = cwd;
@@ -113,13 +120,19 @@ impl ShellSession {
             .context("failed to write command invocation")?;
         writer.flush().context("failed to flush command invocation")
     }
-    pub(super) fn wait_for_command_start(&self, command: &ManagedCommand) -> Result<()> {
-        if command.wait_started(self.command_start_timeout)? {
+    pub(super) async fn wait_for_command_start(&self, command: &ManagedCommand) -> Result<()> {
+        if command.wait_started(self.command_start_timeout).await? {
             return Ok(());
         }
         anyhow::bail!(
             "shell did not start command within {:?}",
             self.command_start_timeout
         );
+    }
+    pub(super) async fn wait_for_output(&self, revision: u64, timeout: Duration) -> Result<()> {
+        self.screen.wait_for_visible_change(revision, timeout).await
+    }
+    pub(super) async fn wait_for_exit(&self) -> Result<()> {
+        self.screen.wait_for_exit().await
     }
 }

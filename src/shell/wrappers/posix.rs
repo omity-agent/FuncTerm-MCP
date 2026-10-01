@@ -11,13 +11,15 @@ export HISTFILESIZE=0
 history -c
 	{path}
     {shim_path}
-	{command}
-	{dispatcher}
+		{command}
+ 		{dispatcher}
+        {exit_hook}
 	",
         path = path_function(false),
         shim_path = shim_path_function(false),
         command = runner::command_function(PosixDialect::Bash),
-        dispatcher = super::template::posix_dispatcher()
+        dispatcher = super::template::posix_dispatcher(),
+        exit_hook = EXIT_HOOK,
     );
     super::VariableNamespace::new().render(&wrapper)
 }
@@ -33,16 +35,30 @@ pub(in crate::shell) fn zsh_wrapper() -> String {
 	unset HISTFILE
 	{path}
 	{shim_path}
-	{command}
-	{dispatcher}
+		{command}
+		{dispatcher}
+        {exit_hook}
 	",
         path = path_function(true),
         shim_path = shim_path_function(true),
         command = runner::command_function(PosixDialect::Zsh),
-        dispatcher = super::template::posix_dispatcher()
+        dispatcher = super::template::posix_dispatcher(),
+        exit_hook = EXIT_HOOK,
     );
     super::VariableNamespace::new().render(&wrapper)
 }
+const EXIT_HOOK: &str = r#"functerm_complete_exit() {
+    local @VAR_exit_code@="$1"
+    if [ -z "${@VAR_command_id@-}" ] || [ -z "${@VAR_native_directory@-}" ]; then
+        return 0
+    fi
+    local @VAR_command_finished_at@
+    @VAR_command_finished_at@="$(functerm_command_time_millis)" || return 1
+    local @VAR_time_consumption@="$((@VAR_command_finished_at@ - @VAR_command_started_at@))ms"
+    functerm_publish_done "$@VAR_command_id@" "$@VAR_exit_code@" "$@VAR_time_consumption@" "$PWD" "$@VAR_native_directory@"
+}
+trap 'functerm_complete_exit "$?"' EXIT
+"#;
 pub(super) fn path_function(zsh: bool) -> String {
     let local_options = if zsh {
         "\n    emulate -L zsh\n    setopt sh_word_split"

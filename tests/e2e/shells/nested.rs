@@ -35,15 +35,13 @@ fn cli_keeps_nested_launch_result_stable_after_nested_shell_exits() {
             name = case.name,
             stdout = nested.stdout
         );
-        let exited = parse_command_result(&send_command(
-            &created.tab_id,
-            exit_command(case.name),
-            10.0,
-        ));
+        let exit_output = send_command(&created.tab_id, exit_command(case.name), 10.0);
+        let exited = parse_command_result(&exit_output);
         assert!(
             exited.finished,
-            "{} nested exit did not finish: stdout: {}\nstderr: {}",
-            case.name, exited.stdout, exited.stderr
+            "{} nested exit did not finish: {}",
+            case.name,
+            String::from_utf8_lossy(&exit_output.stdout)
         );
         let launch_after_exit = parse_command_result(&run_cli(&["view", &launch_id]));
         assert_eq!(launch_after_exit.exit_code, Some(0_i32));
@@ -52,7 +50,14 @@ fn cli_keeps_nested_launch_result_stable_after_nested_shell_exits() {
             &nested_marker_command(case.name, "PARENT_RESTORED"),
             10.0,
         ));
-        assert_eq!(restored.exit_code, Some(0_i32));
+        assert_eq!(
+            restored.exit_code,
+            Some(0_i32),
+            "{} parent command failed after nested exit: stdout: {}\nstderr: {}",
+            case.name,
+            restored.stdout,
+            restored.stderr
+        );
         assert!(restored.stdout.contains("PARENT_RESTORED"));
     }
 }

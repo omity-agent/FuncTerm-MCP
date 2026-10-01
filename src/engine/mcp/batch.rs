@@ -1,5 +1,5 @@
 use super::{collection, operations::Operation};
-use crate::runtime::{client, protocol::wait_timeout_from_seconds};
+use crate::runtime::{client, config::Settings, protocol::wait_timeout_from_seconds};
 use core::time::Duration;
 use rmcp::model::CallToolResult;
 use serde::Deserialize;
@@ -19,7 +19,7 @@ pub(super) struct TimedBatch<T> {
     pub(super) wait_timeout: f64,
 }
 pub(super) async fn run<T>(
-    service_name: &str,
+    settings: &Settings,
     entries: Vec<T>,
     wait_timeout: Option<f64>,
 ) -> Result<CallToolResult, String>
@@ -32,30 +32,19 @@ where
         .transpose()
         .map_err(super::error_text)?
         .unwrap_or(Duration::ZERO);
-    let daemon_name = service_name.to_owned();
-    tokio::task::spawn_blocking(move || client::ensure_daemon(&daemon_name))
+    client::ensure_daemon(settings)
         .await
-        .map_err(super::error_text)?
         .map_err(super::error_text)?;
     let started = Instant::now();
-    let workers: Vec<_> = entries
-        .into_iter()
-        .map(|entry| {
-            let connection_name = service_name.to_owned();
-            tokio::task::spawn_blocking(move || {
-                let mut connection =
-                    client::DaemonClient::connect(&connection_name).map_err(super::error_text)?;
-                entry.execute(&mut connection, budget.saturating_sub(started.elapsed()))
-            })
-        })
-        .collect();
-    let mut results = Vec::with_capacity(workers.len());
-    for worker in workers {
-        results.push(match worker.await {
-            Ok(result) => result,
-            Err(error) => Err(format!("batch worker failed: {error}")),
-        });
-    }
+    let operations = entries.into_iter().map(|entry| async move {
+        let mut connection = client::DaemonClient::connect(settings)
+            .await
+            .map_err(super::error_text)?;
+        let request = entry.request(budget.saturating_sub(started.elapsed()))?;
+        let payload = connection.call(request).await.map_err(super::error_text)?;
+        T::output(payload)
+    });
+    let results = futures_util::future::join_all(operations).await;
     collection::combine(results)
 }
 fn validate<T>(entries: &[T]) -> Result<(), String>

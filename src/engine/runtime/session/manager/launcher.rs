@@ -1,15 +1,19 @@
+#[cfg(windows)]
+mod host_wait;
 mod startup;
 use super::process;
 use super::shell_session::{ShellSession, ShellSessionParts};
 use crate::contract::DISPATCH_FILE;
 use crate::runtime::config::Settings;
 use crate::runtime::protocol::EnvironmentSnapshot;
+use crate::runtime::session::observation::PathWatch;
 use crate::runtime::session::terminal::{Terminal, start_reader};
 use crate::runtime::temp;
 use crate::shell::{ShellChoice, ShellStartup, shims};
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use core::time::Duration;
+use notify::RecursiveMode;
 use parking_lot::Mutex;
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::path::Path;
@@ -47,6 +51,7 @@ impl ShellLauncher {
         let command_root = temp::tab_commands_directory(&tab_root);
         fs_err::create_dir_all(&tab_state)?;
         fs_err::create_dir_all(&command_root)?;
+        let command_watch = Arc::new(PathWatch::new(&command_root, RecursiveMode::Recursive)?);
         let mut startup = starting_shell.startup(starting_directory, &tab_root)?;
         startup.env.extend(shims::environment(
             &self.settings,
@@ -143,6 +148,7 @@ impl ShellLauncher {
             screen,
             busy: None,
             command_root,
+            command_watch,
             dispatch_file: tab_state.join(DISPATCH_FILE),
             active_shell_file,
             command_start_timeout: startup_timeout,

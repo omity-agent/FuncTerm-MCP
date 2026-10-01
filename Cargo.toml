@@ -102,10 +102,12 @@ blake3 = "*"
 clap = { git = "https://github.com/clap-rs/clap.git", features = ["derive"] }
 dashmap = "*"
 encoding_rs = "*"
+event-listener = "*"
 fast-strip-ansi = "*"
 fs-err = "*"
+futures-util = { version = "*", features = ["sink"] }
 humantime = "*"
-interprocess = "*"
+interprocess = { version = "*", features = ["tokio"] }
 itertools = "*"
 kill_tree = "*"
 mimalloc = "*"
@@ -114,7 +116,6 @@ nanoid = "*"
 notify = "*"
 parking_lot = "*"
 portable-pty = { git = "https://github.com/wez/wezterm.git" }
-rmp-serde = "*"
 rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk.git", default-features = false, features = [
     "server",
     "macros",
@@ -131,10 +132,22 @@ sugar_path = "*"
 tastty-core = "*"
 tempfile = "*"
 thiserror = "*"
-tokio = { version = "*", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "*", features = [
+    "macros",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
+tokio-serde = { version = "*", features = ["messagepack"] }
+tokio-util = { version = "*", features = ["codec"] }
 toml = "*"
+tracing = "*"
+tracing-subscriber = { version = "*", features = ["env-filter"] }
 vte = { git = "https://github.com/alacritty/vte.git" }
 which = "*"
+
+[dev-dependencies]
+rmp-serde = "*"
 
 [target.'cfg(unix)'.dependencies]
 rustix = { version = "*", features = ["process"] }

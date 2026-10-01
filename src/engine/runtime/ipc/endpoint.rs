@@ -1,37 +1,49 @@
+use crate::runtime::config::IpcSettings;
+use crate::runtime::protocol::{Request, Response};
 use anyhow::{Context as _, Result};
-use core::time::Duration;
+use futures_util::{SinkExt as _, StreamExt as _};
 use interprocess::ConnectWaitMode;
-use interprocess::local_socket::prelude::*;
+use interprocess::local_socket::tokio::prelude::*;
 use interprocess::local_socket::{GenericNamespaced, ListenerOptions};
 use serde::{Serialize, de::DeserializeOwned};
-use std::io::BufReader;
-pub(crate) struct Connection {
-    reader: BufReader<LocalSocketStream>,
+use tokio_serde::{Framed as SerdeFramed, formats::MessagePack};
+use tokio_util::codec::{Framed, LengthDelimitedCodec};
+type Transport = Framed<LocalSocketStream, LengthDelimitedCodec>;
+pub(crate) type ClientConnection = Connection<Response, Request>;
+pub(crate) type ServerConnection = Connection<Request, Response>;
+pub(crate) struct Connection<Incoming, Outgoing> {
+    framed: SerdeFramed<Transport, Incoming, Outgoing, MessagePack<Incoming, Outgoing>>,
 }
-impl Connection {
-    pub(crate) fn new(stream: LocalSocketStream) -> Self {
+impl<Incoming, Outgoing> Connection<Incoming, Outgoing>
+where
+    Incoming: DeserializeOwned + Unpin,
+    Outgoing: Serialize + Unpin,
+{
+    pub(crate) fn new(stream: LocalSocketStream, settings: &IpcSettings) -> Self {
+        let transport = LengthDelimitedCodec::builder()
+            .max_frame_length(settings.max_frame_bytes)
+            .new_framed(stream);
         Self {
-            reader: BufReader::new(stream),
+            framed: SerdeFramed::new(transport, MessagePack::default()),
         }
     }
-    pub(crate) fn send<T>(&mut self, value: &T) -> Result<()>
-    where
-        T: Serialize,
-    {
-        super::codec::write(self.reader.get_mut(), value)
+    pub(crate) async fn send(&mut self, value: Outgoing) -> Result<()> {
+        self.framed
+            .send(value)
+            .await
+            .context("failed to send IPC frame")
     }
-    pub(crate) fn receive<T>(&mut self) -> Result<T>
-    where
-        T: DeserializeOwned,
-    {
-        self.receive_or_eof()?
+    pub(crate) async fn receive(&mut self) -> Result<Incoming> {
+        self.receive_or_eof()
+            .await?
             .context("IPC stream ended before a message was received")
     }
-    pub(crate) fn receive_or_eof<T>(&mut self) -> Result<Option<T>>
-    where
-        T: DeserializeOwned,
-    {
-        super::codec::read_or_eof(&mut self.reader)
+    pub(crate) async fn receive_or_eof(&mut self) -> Result<Option<Incoming>> {
+        self.framed
+            .next()
+            .await
+            .transpose()
+            .context("failed to receive IPC frame")
     }
 }
 pub(crate) fn listener(service_name: &str) -> Result<LocalSocketListener> {
@@ -43,21 +55,25 @@ pub(crate) fn listener(service_name: &str) -> Result<LocalSocketListener> {
     ListenerOptions::new()
         .name(name)
         .try_overwrite(true)
-        .create_sync()
+        .create_tokio()
         .context("failed to listen on daemon IPC socket")
 }
-pub(crate) fn connect(service_name: &str, timeout: Duration) -> Result<Connection> {
+pub(crate) async fn connect(
+    service_name: &str,
+    settings: &IpcSettings,
+) -> Result<ClientConnection> {
     let socket_name = socket_name(service_name);
     let name = socket_name
         .as_str()
         .to_ns_name::<GenericNamespaced>()
         .context("failed to create daemon socket name")?;
-    interprocess::local_socket::ConnectOptions::new()
+    let stream = interprocess::local_socket::ConnectOptions::new()
         .name(name)
-        .wait_mode(ConnectWaitMode::Timeout(timeout))
-        .connect_sync()
-        .map(Connection::new)
-        .with_context(|| format!("daemon is not running on IPC service {service_name}"))
+        .wait_mode(ConnectWaitMode::Timeout(settings.setup_timeout()?))
+        .connect_tokio()
+        .await
+        .with_context(|| format!("daemon is not running on IPC service {service_name}"))?;
+    Ok(Connection::new(stream, settings))
 }
 pub(crate) fn lock_name(service_name: &str, kind: &str) -> String {
     format!("functerm-{kind}-{}", service_digest(service_name))

@@ -1,10 +1,13 @@
 use super::output_events::ProtocolEvent;
+use crate::runtime::session::observation::wait_until;
 use alloc::{collections::BTreeMap, sync::Arc};
 use anyhow::{Result, bail};
-use parking_lot::{Condvar, Mutex};
+use core::time::Duration;
+use event_listener::Event;
+use parking_lot::Mutex;
 pub(in crate::engine::runtime::session) struct CommandTitle {
     state: Mutex<CommandTitleState>,
-    changed: Condvar,
+    changed: Event,
 }
 struct CommandTitleState {
     phase: TitlePhase,
@@ -24,26 +27,27 @@ impl CommandTitle {
                 phase: TitlePhase::Pending,
                 title: initial,
             }),
-            changed: Condvar::new(),
+            changed: Event::new(),
         }
     }
     pub(in crate::engine::runtime::session) fn current(&self) -> Result<String> {
         self.state.lock().result()
     }
-    pub(in crate::engine::runtime::session) fn wait_finished(&self) -> Result<String> {
-        let mut state = self.state.lock();
-        while matches!(state.phase, TitlePhase::Pending | TitlePhase::Active) {
-            self.changed.wait(&mut state);
-        }
-        state.result()
+    pub(in crate::engine::runtime::session) async fn wait_finished(&self) -> Result<String> {
+        wait_until(&self.changed, Duration::MAX, || {
+            Ok(!matches!(
+                self.state.lock().phase,
+                TitlePhase::Pending | TitlePhase::Active
+            ))
+        })
+        .await?;
+        self.current()
     }
-    pub(in crate::engine::runtime::session) fn cancel(&self) -> Result<String> {
+    pub(in crate::engine::runtime::session) fn cancel(&self) -> String {
         let mut state = self.state.lock();
-        if !matches!(state.phase, TitlePhase::Failed(_)) {
-            state.phase = TitlePhase::Finished;
-            self.changed.notify_all();
-        }
-        state.result()
+        state.phase = TitlePhase::Finished;
+        self.changed.notify(usize::MAX);
+        state.title.clone()
     }
     fn start(&self) {
         let mut state = self.state.lock();
@@ -57,15 +61,11 @@ impl CommandTitle {
             title.clone_into(&mut state.title);
         }
     }
-    fn finish(&self) -> Result<()> {
-        drop(self.cancel()?);
-        Ok(())
-    }
     fn fail(&self, message: &str) {
         let mut state = self.state.lock();
         if state.phase != TitlePhase::Finished {
             state.phase = TitlePhase::Failed(message.to_owned());
-            self.changed.notify_all();
+            self.changed.notify(usize::MAX);
         }
         drop(state);
     }
@@ -101,8 +101,14 @@ impl CaptureRegistry {
     }
     pub(super) fn handle(&mut self, event: ProtocolEvent, screen_title: &str) -> Result<()> {
         match event {
-            ProtocolEvent::Start(id) => self.start(&id),
-            ProtocolEvent::End(id) => self.finish(&id),
+            ProtocolEvent::Start(id) => {
+                tracing :: debug ! (command_id = % id , "terminal command start marker");
+                self.start(&id)
+            }
+            ProtocolEvent::End(id) => {
+                tracing :: debug ! (command_id = % id , "terminal command end marker");
+                self.finish(&id)
+            }
             ProtocolEvent::WindowTitleAssigned => self.update(screen_title),
             ProtocolEvent::Invalid(message) => bail!(message),
         }
@@ -128,7 +134,7 @@ impl CaptureRegistry {
         {
             bail!("command title capture {id} ended while {active} is active");
         }
-        self.require(id)?.finish()?;
+        drop(self.require(id)?.cancel());
         self.captures.remove(id);
         if self.active.as_deref() == Some(id) {
             self.active = None;

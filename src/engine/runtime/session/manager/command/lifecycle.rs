@@ -5,7 +5,7 @@ use crate::runtime::session::observation::PathWatch;
 use crate::runtime::session::records::CommandRecord;
 use crate::runtime::session::terminal::CommandTitle;
 use alloc::sync::Arc;
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use core::time::Duration;
 use parking_lot::Mutex;
 use std::time::Instant;
@@ -15,12 +15,12 @@ pub(in crate::engine::runtime::session::manager) struct ManagedCommand {
     started_at: Instant,
     pub(super) state: Mutex<ManagedCommandState>,
     pub(super) title: Arc<CommandTitle>,
+    watch: Arc<PathWatch>,
 }
 pub(super) struct ManagedCommandState {
     pub(super) wait: CommandWait,
     pub(super) cached_view: Option<CommandSnapshot>,
     pub(super) input: CommandInputHistory,
-    pub(super) watch: Option<Arc<PathWatch>>,
 }
 #[derive(Clone, Copy)]
 pub(in crate::engine::runtime::session::manager) enum CommandWait {
@@ -36,7 +36,13 @@ pub(in crate::engine::runtime::session::manager) enum CommandInputFailure {
     Write(#[from] anyhow::Error),
 }
 impl ManagedCommand {
-    pub(super) fn new(id: String, record: CommandRecord, title: Arc<CommandTitle>) -> Self {
+    pub(super) fn new(
+        id: String,
+        record: CommandRecord,
+        title: Arc<CommandTitle>,
+        watch: Arc<PathWatch>,
+    ) -> Self {
+        tracing :: debug ! (command_id = % id , directory = % record . directory . display () , "command registered");
         Self {
             id,
             record,
@@ -45,9 +51,9 @@ impl ManagedCommand {
                 wait: CommandWait::Running,
                 cached_view: None,
                 input: CommandInputHistory::default(),
-                watch: None,
             }),
             title,
+            watch,
         }
     }
     pub(in crate::engine::runtime::session::manager) fn id(&self) -> &str {
@@ -69,17 +75,17 @@ impl ManagedCommand {
         drop(state);
         Ok(())
     }
-    pub(in crate::engine::runtime::session::manager) fn wait(
+    pub(in crate::engine::runtime::session::manager) async fn wait(
         &self,
         limit: Duration,
     ) -> Result<CommandWait> {
-        let Some(watch) = self.observation()? else {
-            return Ok(self.state.lock().wait);
-        };
-        let result = watch.wait(limit, || {
-            Ok(!matches!(self.state.lock().wait, CommandWait::Running)
-                || self.record.done.try_exists()?)
-        });
+        let result = self
+            .watch
+            .wait(limit, || {
+                Ok(!matches!(self.state.lock().wait, CommandWait::Running)
+                    || self.record.done.try_exists()?)
+            })
+            .await;
         let current = self.state.lock().wait;
         if !matches!(current, CommandWait::Running) {
             return Ok(current);
@@ -87,41 +93,26 @@ impl ManagedCommand {
         match result {
             Ok(true) => Ok(CommandWait::Finished),
             Ok(false) => Ok(CommandWait::Running),
-            Err(error) => {
-                self.mark_failed(format!("failed to watch command completion: {error:#}"))?;
-                Err(error)
-            }
+            Err(error) => Err(error),
         }
     }
-    pub(in crate::engine::runtime::session::manager) fn cancel_title_capture(&self) -> Result<()> {
-        self.title.cancel()?;
-        Ok(())
+    pub(in crate::engine::runtime::session::manager) fn cancel_title_capture(&self) {
+        drop(self.title.cancel());
     }
-    pub(in crate::engine::runtime::session::manager) fn wait_started(
+    pub(in crate::engine::runtime::session::manager) async fn wait_started(
         &self,
         limit: Duration,
     ) -> Result<bool> {
-        let Some(watch) = self.observation()? else {
-            return Ok(true);
-        };
-        watch.wait(limit, || {
-            Ok(self.record.started.try_exists()? || self.record.done.try_exists()?)
-        })
+        self.watch
+            .wait(limit, || {
+                Ok(!matches!(self.state.lock().wait, CommandWait::Running)
+                    || self.record.started.try_exists()?
+                    || self.record.done.try_exists()?)
+            })
+            .await
     }
-    fn observation(&self) -> Result<Option<Arc<PathWatch>>> {
-        let mut state = self.state.lock();
-        if !matches!(state.wait, CommandWait::Running) {
-            return Ok(None);
-        }
-        if state.watch.is_none() {
-            let parent = self
-                .record
-                .done
-                .parent()
-                .context("command state has no parent")?;
-            state.watch = Some(Arc::new(PathWatch::new(parent)?));
-        }
-        Ok(state.watch.clone())
+    pub(super) fn wake(&self) {
+        self.watch.wake();
     }
     pub(super) fn time_consumption(&self) -> Duration {
         self.started_at.elapsed()

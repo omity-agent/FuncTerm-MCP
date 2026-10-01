@@ -7,8 +7,6 @@ use portable_pty::Child;
 use std::path::Path;
 use std::sync::mpsc;
 use std::time::Instant;
-#[cfg(windows)]
-mod windows;
 pub(super) struct StartupEvents {
     sender: mpsc::Sender<StartupEvent>,
     receiver: mpsc::Receiver<StartupEvent>,
@@ -32,7 +30,7 @@ impl StartupEvents {
         timeout: Duration,
     ) -> Result<()> {
         #[cfg(windows)]
-        windows::monitor_child(child.as_ref(), self.sender.clone())?;
+        super::host_wait::monitor_child(child.as_ref(), self.sender.clone(), Arc::clone(screen))?;
         let parent = ready_file
             .parent()
             .context("shell ready path has no parent")?;
@@ -147,7 +145,7 @@ fn startup_timeout(
 fn startup_screen(screen: &Terminal) -> String {
     screen.contents().trim().to_owned()
 }
-enum StartupEvent {
+pub(super) enum StartupEvent {
     Filesystem(notify::Result<()>),
     ReaderClosed,
     #[cfg(windows)]

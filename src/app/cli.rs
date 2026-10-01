@@ -1,83 +1,12 @@
+use super::interface::{self, Args, CliCommand};
 use crate::runtime::config;
-use crate::runtime::protocol::KeyboardInput;
-use crate::shell::ShellChoice;
+use crate::runtime::protocol::{
+    EnvironmentSnapshot, KeyboardInput, Request, wait_timeout_from_seconds,
+};
 use anyhow::{Context as _, Result};
 use base64_turbo::STANDARD;
-use clap::{Parser, Subcommand};
-use std::path::{Path, PathBuf};
-#[derive(Parser)]
-#[command(version, about)]
-struct Args {
-    #[command(subcommand)]
-    command: Option<CliCommand>,
-}
-#[derive(Subcommand)]
-enum CliCommand {
-    Mcp,
-    Daemon,
-    NewTab {
-        #[arg(long)]
-        starting_directory: Option<PathBuf>,
-        # [arg (long , default_value = "powershell" , value_parser = ShellChoice :: from_canonical_name)]
-        starting_shell: ShellChoice,
-    },
-    Close {
-        #[arg(long, required_unless_present = "current", conflicts_with = "current")]
-        tab_id: Option<String>,
-        #[arg(long)]
-        current: bool,
-    },
-    ManualWrite {
-        tab_id: String,
-        #[arg(long, required_unless_present = "base64", conflicts_with = "base64")]
-        text: Option<String>,
-        #[arg(long, required_unless_present = "text", conflicts_with = "text")]
-        base64: Option<String>,
-        #[arg(long, default_value_t = 0.0)]
-        wait_timeout: f64,
-    },
-    SendCommand {
-        tab_id: String,
-        #[arg(long)]
-        command: String,
-        #[arg(long, default_value_t = 0.0)]
-        wait_timeout: f64,
-    },
-    View {
-        id: String,
-        #[arg(long, default_value_t = 0.0)]
-        wait_timeout: f64,
-    },
-    #[command(hide = true)]
-    InternalLaunchDaemon,
-    #[command(hide = true)]
-    InternalTimeMillis,
-    #[command(hide = true)]
-    InternalWriteDone {
-        #[arg(long)]
-        command_id: String,
-        #[arg(long, allow_negative_numbers = true)]
-        exit_code: i32,
-        #[arg(long)]
-        time_consumption: String,
-        #[arg(long)]
-        cwd: String,
-        #[arg(long)]
-        directory: PathBuf,
-    },
-    #[command(hide = true)]
-    InternalWriteStart {
-        #[arg(long)]
-        command_id: String,
-        #[arg(long)]
-        directory: PathBuf,
-    },
-    #[command(hide = true)]
-    InternalEnsureShims {
-        #[arg(long)]
-        directory: PathBuf,
-    },
-}
+use clap::Parser as _;
+use std::path::Path;
 pub(crate) async fn run() -> Result<()> {
     let args = Args::parse();
     match args.command.unwrap_or(CliCommand::Mcp) {
@@ -105,26 +34,25 @@ pub(crate) async fn run() -> Result<()> {
             )
         }
         CliCommand::Mcp => crate::mcp::run(config::load()?).await,
-        CliCommand::Daemon => crate::runtime::daemon::run(config::load()?),
+        CliCommand::Daemon => crate::runtime::daemon::run(config::load()?).await,
         CliCommand::Close { tab_id, current: _ } => {
-            let target = crate::commands::close_target(tab_id)?;
+            let target = interface::close_target(tab_id)?;
             let settings = config::load()?;
-            print_result(crate::commands::with_daemon(
-                &settings.daemon_service_name,
-                |call| crate::commands::close(call, target),
-            ))
+            print_result(interface::execute(&settings, Request::Close { tab_id: target }).await)
         }
         CliCommand::NewTab {
             starting_directory,
             starting_shell,
         } => {
             let settings = config::load()?;
-            print_result(crate::commands::with_daemon(
-                &settings.daemon_service_name,
-                |call| {
-                    crate::commands::new_tab(call, starting_directory.as_deref(), starting_shell)
-                },
-            ))
+            let request = Request::NewTab {
+                starting_directory: crate::runtime::working_dir::resolve(
+                    starting_directory.as_deref(),
+                )?,
+                starting_shell,
+                environment: EnvironmentSnapshot::for_new_tab_request(),
+            };
+            print_result(interface::execute(&settings, request).await)
         }
         CliCommand::ManualWrite {
             tab_id,
@@ -142,10 +70,12 @@ pub(crate) async fn run() -> Result<()> {
                 ),
                 _ => anyhow::bail!("manual-write requires exactly one of --text or --base64"),
             };
-            print_result(crate::commands::with_daemon(
-                &settings.daemon_service_name,
-                |call| crate::commands::manual_write(call, tab_id, input, wait_timeout),
-            ))
+            let request = Request::ManualWrite {
+                tab_id,
+                input,
+                wait_timeout: wait_timeout_from_seconds(wait_timeout)?,
+            };
+            print_result(interface::execute(&settings, request).await)
         }
         CliCommand::SendCommand {
             tab_id,
@@ -153,22 +83,23 @@ pub(crate) async fn run() -> Result<()> {
             wait_timeout: wait_timeout_seconds,
         } => {
             let settings = config::load()?;
-            print_result(crate::commands::with_daemon(
-                &settings.daemon_service_name,
-                |call| {
-                    crate::commands::send_command(call, tab_id, shell_command, wait_timeout_seconds)
-                },
-            ))
+            let request = Request::SendCommand {
+                tab_id,
+                command: shell_command,
+                wait_timeout: wait_timeout_from_seconds(wait_timeout_seconds)?,
+            };
+            print_result(interface::execute(&settings, request).await)
         }
         CliCommand::View {
             id,
             wait_timeout: wait_timeout_seconds,
         } => {
             let settings = config::load()?;
-            print_result(crate::commands::with_daemon(
-                &settings.daemon_service_name,
-                |call| crate::commands::view(call, id, wait_timeout_seconds),
-            ))
+            let request = Request::View {
+                id,
+                wait_timeout: wait_timeout_from_seconds(wait_timeout_seconds)?,
+            };
+            print_result(interface::execute(&settings, request).await)
         }
     }
 }

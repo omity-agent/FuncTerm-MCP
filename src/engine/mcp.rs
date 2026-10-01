@@ -17,7 +17,7 @@ use rmcp::{
 };
 #[derive(Clone, Debug)]
 struct McpServer {
-    daemon_service_name: String,
+    settings: Settings,
     tool_router: ToolRouter<Self>,
 }
 #[expect(
@@ -32,7 +32,7 @@ impl McpServer {
         let mut tool_router = Self::tool_router();
         descriptions::apply(&mut tool_router, &settings.mcp)?;
         Ok(Self {
-            daemon_service_name: settings.daemon_service_name,
+            settings,
             tool_router,
         })
     }
@@ -41,31 +41,21 @@ impl McpServer {
         &self,
         Parameters(request): Parameters<ExecBatch<NewTabExec>>,
     ) -> Result<CallToolResult, String> {
-        batch::run(&self.daemon_service_name, request.exec, None).await
+        batch::run(&self.settings, request.exec, None).await
     }
     # [tool (name = "manual_write" , output_schema = schema_for_output ::< BatchOutput < output :: ManualWriteOutput <'static >>> ())]
     async fn manual_write(
         &self,
         Parameters(request): Parameters<TimedBatch<ManualWriteExec>>,
     ) -> Result<CallToolResult, String> {
-        batch::run(
-            &self.daemon_service_name,
-            request.exec,
-            Some(request.wait_timeout),
-        )
-        .await
+        batch::run(&self.settings, request.exec, Some(request.wait_timeout)).await
     }
     # [tool (name = "send_command" , output_schema = schema_for_output ::< BatchOutput < output :: SendCommandOutput <'static >>> ())]
     async fn send_command(
         &self,
         Parameters(request): Parameters<TimedBatch<SendCommandExec>>,
     ) -> Result<CallToolResult, String> {
-        batch::run(
-            &self.daemon_service_name,
-            request.exec,
-            Some(request.wait_timeout),
-        )
-        .await
+        batch::run(&self.settings, request.exec, Some(request.wait_timeout)).await
     }
     # [tool (name = "view" , output_schema = schema_for_output ::< BatchOutput < output :: ViewOutput <'static >>> ())]
     async fn view(
@@ -73,7 +63,7 @@ impl McpServer {
         Parameters(request): Parameters<ViewRequest>,
     ) -> Result<CallToolResult, String> {
         batch::run(
-            &self.daemon_service_name,
+            &self.settings,
             request.ids.into_iter().map(operations::LookupId).collect(),
             Some(request.wait_timeout),
         )

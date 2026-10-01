@@ -22,9 +22,9 @@ pub(crate) struct DoneOutput<'value> {
     pub(crate) cwd: &'value str,
 }
 pub(crate) fn write_start(command_id: &str, directory: &Path, model_title: &str) -> Result<()> {
-    let mut stdout = std::io::stdout().lock();
-    restore_model_title(&mut stdout, model_title)?;
-    write_start_to(command_id, directory, &mut stdout)
+    let mut terminal = crate::shim::terminal_output()?;
+    restore_model_title(&mut terminal, model_title)?;
+    write_start_to(command_id, directory, &mut terminal)
 }
 #[cfg(windows)]
 fn restore_model_title(_output: &mut impl Write, title: &str) -> Result<()> {
@@ -56,8 +56,8 @@ pub(crate) fn write_done(done: &DoneOutput<'_>, directory: &Path) -> Result<()> 
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(error) => return Err(error).context("failed to consume early completion guard"),
     }
-    let mut stdout = std::io::stdout().lock();
-    write_done_to(done, directory, &mut stdout)
+    let mut terminal = crate::shim::terminal_output()?;
+    write_done_to(done, directory, &mut terminal)
 }
 pub(crate) fn write_done_to(
     done: &DoneOutput<'_>,

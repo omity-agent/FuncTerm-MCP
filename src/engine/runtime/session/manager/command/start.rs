@@ -1,29 +1,48 @@
 use super::super::{shell_session::ShellSession, tab::Tab};
+use super::supervision::ShellReservation;
 use super::{CommandWait, ManagedCommand};
 use crate::runtime::protocol::{EndReason, ViewResult};
 use crate::runtime::session::records::{create_record, remove_record_directory};
 use alloc::sync::Arc;
 use anyhow::Result;
 use core::time::Duration;
-use std::thread;
 pub(in crate::engine::runtime::session::manager) struct StartedCommand {
     command: Arc<ManagedCommand>,
     tab: Arc<Tab>,
     session: Arc<ShellSession>,
-    reservation: ShellReservation,
-}
-pub(super) struct ShellReservation {
-    session: Arc<ShellSession>,
-    command_id: String,
-    released: bool,
 }
 impl Tab {
-    pub(in crate::engine::runtime::session::manager) fn start_command(
+    pub(in crate::engine::runtime::session::manager) async fn start_command(
+        self: &Arc<Self>,
+        command_id: String,
+        command_text: String,
+    ) -> Result<StartedCommand> {
+        let _operation = self.operation.lock().await;
+        let tab = Arc::clone(self);
+        let started = self
+            .blocking
+            .run(move || tab.dispatch_command(command_id, &command_text))
+            .await?;
+        if let Err(error) = started
+            .session
+            .wait_for_command_start(&started.command)
+            .await
+        {
+            let failed_tab = Arc::clone(self);
+            let command = Arc::clone(&started.command);
+            let session = Arc::clone(&started.session);
+            self.blocking
+                .run(move || failed_tab.abandon_start(&command, &session))
+                .await?;
+            return Err(error);
+        }
+        Ok(started)
+    }
+    fn dispatch_command(
         self: &Arc<Self>,
         command_id: String,
         command_text: &str,
     ) -> Result<StartedCommand> {
-        let _operation = self.operation.lock();
         let session = self.live_session()?;
         if !session.is_alive()? {
             self.close_session(&session)?;
@@ -34,13 +53,16 @@ impl Tab {
         let initial_cwd = session.cwd();
         let record = create_record(session.command_root(), &command_id, &initial_cwd)?;
         let title = session.capture_title(&command_id)?;
-        let managed = Arc::new(ManagedCommand::new(command_id, record, Arc::clone(&title)));
+        let managed = Arc::new(ManagedCommand::new(
+            command_id,
+            record,
+            Arc::clone(&title),
+            session.command_watch(),
+        ));
         let reservation = match ShellReservation::new(&session, self.id(), Arc::clone(&managed)) {
             Ok(reservation) => reservation,
             Err(error) => {
-                if let Err(cancel_error) = title.cancel() {
-                    eprintln!("{cancel_error:#}");
-                }
+                drop(title.cancel());
                 if let Err(remove_error) = remove_record_directory(managed.record()) {
                     eprintln!("{remove_error:#}");
                 }
@@ -52,37 +74,15 @@ impl Tab {
             self.abandon_start(&managed, &session)?;
             return Err(error);
         }
-        if let Err(error) = session.wait_for_command_start(&managed) {
-            self.abandon_start(&managed, &session)?;
-            return Err(error);
-        }
+        self.supervise(Arc::clone(&managed), reservation);
         Ok(StartedCommand {
             command: managed,
             tab: Arc::clone(self),
             session,
-            reservation,
         })
     }
-    fn start_monitor(
-        self: &Arc<Self>,
-        command: Arc<ManagedCommand>,
-        mut reservation: ShellReservation,
-    ) {
-        let tab = Arc::clone(self);
-        thread::spawn(move || {
-            match command.wait(Duration::MAX) {
-                Ok(CommandWait::Finished) => {
-                    if let Err(error) = tab.finish_done_command(&command) {
-                        eprintln!("{error:#}");
-                    }
-                }
-                Ok(CommandWait::Running | CommandWait::Failed) => {}
-                Err(error) => eprintln!("{error:#}"),
-            }
-            reservation.release();
-        });
-    }
     fn abandon_start(&self, command: &ManagedCommand, session: &ShellSession) -> Result<()> {
+        command.mark_failed("shell failed to start command")?;
         drop(self.remove_command(command.id()));
         if let Err(error) = remove_record_directory(command.record()) {
             eprintln!("{error:#}");
@@ -91,59 +91,30 @@ impl Tab {
     }
 }
 impl StartedCommand {
-    pub(in crate::engine::runtime::session::manager) fn wait(
+    pub(in crate::engine::runtime::session::manager) async fn wait(
         self,
         wait_timeout: Duration,
     ) -> Result<(String, EndReason, ViewResult)> {
-        let Self {
-            command,
-            tab,
-            session,
-            reservation,
-        } = self;
-        let reason = match command.wait(wait_timeout)? {
+        let reason = match self.command.wait(wait_timeout).await? {
             CommandWait::Finished => {
-                tab.finish_done_command(&command)?;
+                self.tab.finish_done_command(&self.command).await?;
                 EndReason::CommandEnded
             }
             CommandWait::Running => {
-                if tab.abort_if_shell_dead(&session, &command)? {
+                if self
+                    .tab
+                    .abort_if_shell_dead(&self.session, &self.command)
+                    .await?
+                {
                     EndReason::CommandFailed
                 } else {
-                    tab.start_monitor(Arc::clone(&command), reservation);
+                    tracing :: debug ! (command_id = % self . command . id () , started = self . command . record () . started . try_exists () ?, done = self . command . record () . done . try_exists () ?, shell_alive = self . session . is_alive () ?, "command wait timed out");
                     EndReason::WaitTimeout
                 }
             }
             CommandWait::Failed => EndReason::CommandFailed,
         };
-        let result = tab.command_view_result(&command)?;
-        Ok((command.id().to_owned(), reason, result))
-    }
-}
-impl ShellReservation {
-    fn new(
-        session: &Arc<ShellSession>,
-        tab_id: &str,
-        command: Arc<ManagedCommand>,
-    ) -> Result<Self> {
-        let command_id = command.id().to_owned();
-        session.reserve(tab_id, command)?;
-        Ok(Self {
-            session: Arc::clone(session),
-            command_id,
-            released: false,
-        })
-    }
-    fn release(&mut self) {
-        if self.released {
-            return;
-        }
-        self.session.release(&self.command_id);
-        self.released = true;
-    }
-}
-impl Drop for ShellReservation {
-    fn drop(&mut self) {
-        self.release();
+        let result = self.tab.command_view_result(&self.command).await?;
+        Ok((self.command.id().to_owned(), reason, result))
     }
 }

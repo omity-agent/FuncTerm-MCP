@@ -8,6 +8,9 @@ mod console;
 #[path = "services/diagnostics.rs"]
 mod diagnostics;
 #[cfg(test)]
+#[path = "services/framing.rs"]
+mod framing;
+#[cfg(test)]
 #[path = "services/gateway.rs"]
 mod mcp;
 #[cfg(test)]

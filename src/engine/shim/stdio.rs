@@ -14,14 +14,14 @@ pub(super) fn attach_session_stdio(command: &mut Command) -> Result<()> {
     Ok(())
 }
 #[cfg(unix)]
-pub(super) fn terminal_output() -> Result<fs::File> {
+pub(crate) fn terminal_output() -> Result<fs::File> {
     fs::OpenOptions::new()
         .write(true)
         .open("/dev/tty")
         .context("failed to open terminal output")
 }
 #[cfg(windows)]
-pub(super) fn terminal_output() -> Result<fs::File> {
+pub(crate) fn terminal_output() -> Result<fs::File> {
     let output = fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -50,6 +50,6 @@ pub(super) fn attach_session_stdio(_command: &mut Command) -> Result<()> {
     anyhow::bail!("interactive shell shims are not supported on this platform")
 }
 #[cfg(not(any(unix, windows)))]
-pub(super) fn terminal_output() -> Result<fs::File> {
+pub(crate) fn terminal_output() -> Result<fs::File> {
     anyhow::bail!("interactive shell shims are not supported on this platform")
 }

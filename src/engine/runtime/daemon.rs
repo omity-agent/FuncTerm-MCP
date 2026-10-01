@@ -1,17 +1,26 @@
 use crate::runtime::config::Settings;
 use crate::runtime::daemon::report::StartupReporter;
-use crate::runtime::protocol::{Payload, Request, Response};
+use crate::runtime::protocol::Response;
 use crate::runtime::session::Manager;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
-use interprocess::local_socket::prelude::*;
+use interprocess::local_socket::tokio::prelude::*;
 use std::io;
-use std::thread;
+use tokio::task::JoinSet;
 mod control_signal;
+mod dispatch;
 pub(crate) mod report;
-pub(crate) fn run(settings: Settings) -> Result<()> {
+pub(crate) async fn run(settings: Settings) -> Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_new(&settings.diagnostics_filter)
+                .context("invalid diagnostics_filter")?,
+        )
+        .with_writer(std::io::stderr)
+        .try_init()
+        .map_err(|error| anyhow::anyhow!("failed to initialize daemon diagnostics: {error}"))?;
     let mut startup_reporter = StartupReporter::from_env();
-    match run_inner(settings, &mut startup_reporter) {
+    match run_inner(settings, &mut startup_reporter).await {
         Ok(()) => Ok(()),
         Err(error) => {
             startup_reporter.failed(&error);
@@ -19,21 +28,21 @@ pub(crate) fn run(settings: Settings) -> Result<()> {
         }
     }
 }
-fn run_inner(settings: Settings, startup_reporter: &mut StartupReporter) -> Result<()> {
+async fn run_inner(settings: Settings, startup_reporter: &mut StartupReporter) -> Result<()> {
     control_signal::enable_ctrl_c_for_descendants()?;
     let service_name = settings.daemon_service_name.clone();
     let _daemon_instance = crate::runtime::daemon_lock::acquire_instance(&service_name)?;
-    let manager = Arc::new(Manager::new(settings)?);
+    let ipc = settings.ipc.clone();
+    let manager = Arc::new(
+        tokio::task::spawn_blocking(move || Manager::new(settings))
+            .await
+            .context("daemon initialization worker failed")??,
+    );
     let listener = crate::runtime::transport::listener(&service_name)?;
     startup_reporter.ready()?;
+    let mut workers = JoinSet::new();
     loop {
-        match listener.accept() {
-            Ok(stream) => spawn_request_worker(Arc::clone(&manager), stream),
-            Err(error) if recoverable_accept_error(&error) => {
-                eprintln!("recoverable IPC accept error: {error}");
-            }
-            Err(error) => return Err(error).context("failed to accept IPC request"),
-        }
+        tokio::select! { accepted = listener . accept () => match accepted { Ok (stream) => { let connection = crate :: runtime :: transport :: ServerConnection :: new (stream , & ipc) ; workers . spawn (serve_connection (Arc :: clone (& manager) , connection)) ; } Err (error) if recoverable_accept_error (& error) => { eprintln ! ("recoverable IPC accept error: {error}") ; } Err (error) => return Err (error) . context ("failed to accept IPC request") , } , Some (result) = workers . join_next () , if ! workers . is_empty () => { match result { Ok (Ok (())) => { } Ok (Err (error)) => eprintln ! ("IPC connection failed: {error:#}") , Err (error) => eprintln ! ("IPC connection task failed: {error}") , } } }
     }
 }
 fn recoverable_accept_error(error: &io::Error) -> bool {
@@ -71,70 +80,18 @@ fn recoverable_platform_accept_error(error: &io::Error) -> bool {
 const fn recoverable_platform_accept_error(_error: &io::Error) -> bool {
     false
 }
-fn spawn_request_worker(manager: Arc<Manager>, stream: LocalSocketStream) {
-    let _worker = thread::spawn(move || {
-        let mut connection = crate::runtime::transport::Connection::new(stream);
-        loop {
-            let request = match connection.receive_or_eof::<Request>() {
-                Ok(Some(request)) => request,
-                Ok(None) => return,
-                Err(error) => {
-                    eprintln!("failed to read IPC request: {error:#}");
-                    return;
-                }
-            };
-            let response = handle_request(&manager, request);
-            if let Err(error) = connection.send(&response) {
-                eprintln!("failed to send IPC response: {error:#}");
-                return;
-            }
-        }
-    });
-}
-fn handle_request(manager: &Arc<Manager>, request: Request) -> Response {
-    match dispatch(manager, request) {
-        Ok(payload) => Response::Ok { payload },
-        Err(error) => Response::Err {
-            message: format!("{error:#}"),
-        },
+async fn serve_connection(
+    manager: Arc<Manager>,
+    mut connection: crate::runtime::transport::ServerConnection,
+) -> Result<()> {
+    while let Some(request) = connection.receive_or_eof().await? {
+        let response = match dispatch::execute(&manager, request).await {
+            Ok(payload) => Response::Ok { payload },
+            Err(error) => Response::Err {
+                message: format!("{error:#}"),
+            },
+        };
+        connection.send(response).await?;
     }
-}
-fn dispatch(manager: &Arc<Manager>, request: Request) -> Result<Payload> {
-    match request {
-        Request::Ping => Ok(Payload::Pong),
-        Request::Close { tab_id } => {
-            manager.close(&tab_id)?;
-            Ok(Payload::TabClosed { tab_id })
-        }
-        Request::NewTab {
-            starting_directory,
-            starting_shell,
-            environment,
-        } => {
-            let tab_id = manager.new_tab(&starting_directory, starting_shell, &environment)?;
-            Ok(Payload::TabCreated { tab_id })
-        }
-        Request::ManualWrite {
-            tab_id,
-            input,
-            wait_timeout,
-        } => {
-            let view = manager.manual_write(&tab_id, &input, wait_timeout)?;
-            Ok(Payload::KeyboardWritten { view })
-        }
-        Request::SendCommand {
-            tab_id,
-            command,
-            wait_timeout,
-        } => {
-            let (command_id, end_reason, view) =
-                manager.send_command(&tab_id, &command, wait_timeout)?;
-            Ok(Payload::CommandAccepted {
-                command_id,
-                end_reason,
-                view,
-            })
-        }
-        Request::View { id, wait_timeout } => Ok(Payload::View(manager.view(&id, wait_timeout)?)),
-    }
+    Ok(())
 }

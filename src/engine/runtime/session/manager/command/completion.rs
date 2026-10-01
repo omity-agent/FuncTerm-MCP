@@ -17,12 +17,15 @@ impl ManagedCommand {
         drop(state);
         result
     }
-    pub(super) fn mark_finished(&self, update_cwd: impl FnOnce(PathBuf)) -> Result<()> {
+    pub(super) fn mark_finished(
+        &self,
+        title: String,
+        update_cwd: impl FnOnce(PathBuf),
+    ) -> Result<()> {
         let mut state = self.state.lock();
         if !matches!(state.wait, CommandWait::Running) {
             return Ok(());
         }
-        let title = self.title.wait_finished()?;
         let done =
             read_done(&self.record.done)?.context("completed command is missing done file")?;
         let mut view = read_and_clear_command_result(&self.record, self.time_consumption(), title)?;
@@ -30,11 +33,8 @@ impl ManagedCommand {
         update_cwd(PathBuf::from(done.cwd));
         state.cached_view = Some(view);
         state.wait = CommandWait::Finished;
-        let watch = state.watch.take();
         drop(state);
-        if let Some(observation) = watch {
-            observation.wake();
-        }
+        self.wake();
         Ok(())
     }
     pub(in crate::engine::runtime::session::manager) fn mark_failed(
@@ -46,7 +46,7 @@ impl ManagedCommand {
         if !matches!(state.wait, CommandWait::Running) {
             return Ok(());
         }
-        let title = self.title.cancel()?;
+        let title = self.title.cancel();
         let mut view = read_command_result(&self.record, self.time_consumption(), title)?;
         view.command.finished = true;
         view.command.exit_code = Some(1_i32);
@@ -56,11 +56,8 @@ impl ManagedCommand {
         }
         state.cached_view = Some(view);
         state.wait = CommandWait::Failed;
-        let watch = state.watch.take();
         drop(state);
-        if let Some(observation) = watch {
-            observation.wake();
-        }
+        self.wake();
         Ok(())
     }
 }

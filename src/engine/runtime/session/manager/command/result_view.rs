@@ -1,66 +1,44 @@
-use super::super::{
-    shell_session::{KeyboardWriteFailure, ShellSession},
-    tab::Tab,
-};
+use super::super::{shell_session::ShellSession, tab::Tab};
 use super::{CommandWait, ManagedCommand};
-use crate::runtime::protocol::{CommandSnapshot, KeyboardInput, ViewResult};
+use crate::runtime::protocol::{CommandSnapshot, ViewResult};
+use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use core::time::Duration;
 impl Tab {
-    pub(in crate::engine::runtime::session::manager) fn manual_write(
-        &self,
-        input: &KeyboardInput,
-        wait_timeout: Duration,
-    ) -> Result<ViewResult> {
-        let session = self.live_session()?;
-        if !session.is_alive()? {
-            self.close_session(&session)?;
-            anyhow::bail!("tab id {} was generated, but its shell is gone", self.id());
-        }
-        session.refresh_choice()?;
-        match session.write_keyboard_for_running_command(input, wait_timeout) {
-            Ok(()) => {
-                if session.is_alive()? {
-                    Ok(self.remember(&session)?.into_view(true))
-                } else {
-                    self.close_session(&session)?;
-                    Ok(self.snapshot_view())
-                }
-            }
-            Err(
-                error @ (KeyboardWriteFailure::IdlePrompt | KeyboardWriteFailure::CommandEnded),
-            ) => Err(error.into()),
-            Err(KeyboardWriteFailure::Write(error)) => {
-                self.close_session(&session)?;
-                Err(error)
-            }
-        }
-    }
-    pub(in crate::engine::runtime::session::manager) fn command_view(
-        &self,
+    pub(in crate::engine::runtime::session::manager) async fn command_view(
+        self: &Arc<Self>,
         command_id: &str,
         wait_timeout: Duration,
     ) -> Result<ViewResult> {
         let command = self
             .find_command(command_id)
             .with_context(|| format!("command owner is missing record: {command_id}"))?;
-        match command.wait(wait_timeout)? {
-            CommandWait::Finished => self.finish_done_command(&command)?,
+        match command.wait(wait_timeout).await? {
+            CommandWait::Finished => self.finish_done_command(&command).await?,
             CommandWait::Running => {
                 if let Some(session) = self.optional_session() {
-                    self.abort_if_shell_dead(&session, &command)?;
+                    self.abort_if_shell_dead(&session, &command).await?;
                 }
             }
             CommandWait::Failed => {}
         }
-        self.command_view_result(&command)
+        self.command_view_result(&command).await
     }
-    pub(in crate::engine::runtime::session::manager) fn finish_done_command(
-        &self,
-        command: &ManagedCommand,
+    pub(in crate::engine::runtime::session::manager) async fn finish_done_command(
+        self: &Arc<Self>,
+        command: &Arc<ManagedCommand>,
     ) -> Result<()> {
+        tracing :: debug ! (command_id = % command . id () , done = command . record () . done . try_exists () ?, "observed command completion; awaiting terminal title");
+        let title = command.title.wait_finished().await?;
+        let tab = Arc::clone(self);
+        let managed = Arc::clone(command);
+        self.blocking
+            .run(move || tab.cache_done_command(&managed, title))
+            .await
+    }
+    fn cache_done_command(&self, command: &ManagedCommand, title: String) -> Result<()> {
         let session = self.optional_session();
-        command.mark_finished(|cwd| {
+        command.mark_finished(title, |cwd| {
             if let Some(active_session) = session.as_ref() {
                 active_session.set_cwd(cwd);
             }
@@ -71,22 +49,35 @@ impl Tab {
         }
         Ok(())
     }
-    pub(in crate::engine::runtime::session::manager) fn abort_if_shell_dead(
-        &self,
-        session: &ShellSession,
-        command: &ManagedCommand,
+    pub(in crate::engine::runtime::session::manager) async fn abort_if_shell_dead(
+        self: &Arc<Self>,
+        session: &Arc<ShellSession>,
+        command: &Arc<ManagedCommand>,
     ) -> Result<bool> {
-        if session.is_alive()? {
-            return Ok(false);
-        }
-        command.mark_failed("shell exited before command wrote done.json")?;
-        session.release(command.id());
-        self.close_session(session)?;
-        Ok(true)
+        let target = Arc::clone(self);
+        let active = Arc::clone(session);
+        let managed = Arc::clone(command);
+        self.blocking
+            .run(move || {
+                if active.is_alive()? {
+                    return Ok(false);
+                }
+                managed.mark_failed("shell exited before command wrote done.json")?;
+                active.release(managed.id());
+                target.close_session(&active)?;
+                Ok(true)
+            })
+            .await
     }
-    pub(super) fn command_view_result(&self, command: &ManagedCommand) -> Result<ViewResult> {
-        let snapshot = command.view()?;
-        self.command_snapshot_result(snapshot)
+    pub(super) async fn command_view_result(
+        self: &Arc<Self>,
+        command: &Arc<ManagedCommand>,
+    ) -> Result<ViewResult> {
+        let target = Arc::clone(self);
+        let managed = Arc::clone(command);
+        self.blocking
+            .run(move || target.command_snapshot_result(managed.view()?))
+            .await
     }
     fn command_snapshot_result(&self, snapshot: CommandSnapshot) -> Result<ViewResult> {
         let mut shell = if let Some(session) = self.optional_session() {

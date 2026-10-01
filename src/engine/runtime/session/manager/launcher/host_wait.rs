@@ -1,4 +1,6 @@
-use super::StartupEvent;
+use super::startup::StartupEvent;
+use crate::runtime::session::terminal::Terminal;
+use alloc::sync::Arc;
 use anyhow::{Context as _, Result, bail};
 use portable_pty::Child;
 use std::os::windows::io::{AsRawHandle as _, BorrowedHandle, OwnedHandle};
@@ -9,6 +11,7 @@ use windows::Win32::System::Threading::{INFINITE, WaitForSingleObject};
 pub(super) fn monitor_child(
     child: &(dyn Child + Send + Sync),
     sender: mpsc::Sender<StartupEvent>,
+    screen: Arc<Terminal>,
 ) -> Result<()> {
     let raw_handle = child
         .as_raw_handle()
@@ -18,9 +21,15 @@ pub(super) fn monitor_child(
         .try_clone_to_owned()
         .context("failed to duplicate shell handle")?;
     let spawn_result = thread::Builder::new()
-        .name("functerm-shell-startup".to_owned())
+        .name("functerm-shell-lifetime".to_owned())
         .spawn(move || {
             let result = wait_for_process(duplicate);
+            match result.as_ref() {
+                Ok(&()) => screen.process_exited(),
+                Err(error) => {
+                    screen.reader_failed(&format!("shell process monitor failed: {error:#}"));
+                }
+            }
             let _sent = sender.send(StartupEvent::ProcessExited(result));
         });
     if let Err(error) = spawn_result {

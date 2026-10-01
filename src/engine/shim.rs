@@ -1,6 +1,7 @@
 mod invocation;
 mod routing;
 mod stdio;
+pub(crate) use self::stdio::terminal_output;
 use crate::shell::{ShellChoice, ShellStartup, shims};
 use anyhow::{Context as _, Result};
 use core::time::Duration;

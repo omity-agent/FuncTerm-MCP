@@ -1,8 +1,9 @@
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result, bail};
 use core::time::Duration;
+use event_listener::{Event, Listener as _};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher as _};
-use parking_lot::{Condvar, Mutex};
+use parking_lot::Mutex;
 use std::{path::Path, time::Instant};
 pub(in crate::engine::runtime::session) struct PathWatch {
     signal: Arc<Signal>,
@@ -11,10 +12,13 @@ pub(in crate::engine::runtime::session) struct PathWatch {
 #[derive(Default)]
 struct Signal {
     failure: Mutex<Option<String>>,
-    changed: Condvar,
+    changed: Event,
 }
 impl PathWatch {
-    pub(in crate::engine::runtime::session) fn new(directory: &Path) -> Result<Self> {
+    pub(in crate::engine::runtime::session) fn new(
+        directory: &Path,
+        mode: RecursiveMode,
+    ) -> Result<Self> {
         let signal = Arc::new(Signal::default());
         let observed = Arc::clone(&signal);
         let mut watcher =
@@ -24,50 +28,69 @@ impl PathWatch {
                     *failure = Some(error.to_string());
                 }
                 drop(failure);
-                observed.changed.notify_all();
+                observed.changed.notify(usize::MAX);
             })
             .context("failed to create filesystem watcher")?;
         watcher
-            .watch(directory, RecursiveMode::NonRecursive)
+            .watch(directory, mode)
             .with_context(|| format!("failed to watch directory {}", directory.display()))?;
         Ok(Self {
             signal,
             _watcher: watcher,
         })
     }
-    pub(in crate::engine::runtime::session) fn wait(
+    pub(in crate::engine::runtime::session) async fn wait(
         &self,
         limit: Duration,
         ready: impl Fn() -> Result<bool>,
     ) -> Result<bool> {
+        wait_until(&self.signal.changed, limit, || self.ready(&ready)).await
+    }
+    fn ready(&self, ready: &impl Fn() -> Result<bool>) -> Result<bool> {
+        if ready()? {
+            return Ok(true);
+        }
+        if let Some(message) = self.signal.failure.lock().as_deref() {
+            bail!("filesystem watcher failed: {message}");
+        }
+        Ok(false)
+    }
+    fn wait_blocking(&self, limit: Duration, ready: impl Fn() -> Result<bool>) -> Result<bool> {
         let started = Instant::now();
-        let mut failure = self.signal.failure.lock();
-        let result = loop {
-            if ready()? {
-                break Ok(true);
-            }
-            if let Some(message) = failure.as_deref() {
-                bail!("filesystem watcher failed: {message}");
+        loop {
+            let listener = self.signal.changed.listen();
+            if self.ready(&ready)? {
+                return Ok(true);
             }
             let Some(remaining) = limit.checked_sub(started.elapsed()) else {
-                break Ok(false);
+                return Ok(false);
             };
-            if self
-                .signal
-                .changed
-                .wait_for(&mut failure, remaining)
-                .timed_out()
-            {
-                break ready();
+            if listener.wait_timeout(remaining).is_none() {
+                return self.ready(&ready);
             }
-        };
-        drop(failure);
-        result
+        }
     }
     pub(in crate::engine::runtime::session) fn wake(&self) {
-        let guard = self.signal.failure.lock();
-        self.signal.changed.notify_all();
-        drop(guard);
+        self.signal.changed.notify(usize::MAX);
+    }
+}
+pub(super) async fn wait_until(
+    changed: &Event,
+    limit: Duration,
+    mut ready: impl FnMut() -> Result<bool>,
+) -> Result<bool> {
+    let waiting = async {
+        loop {
+            let listener = changed.listen();
+            if ready()? {
+                return Ok(true);
+            }
+            listener.await;
+        }
+    };
+    match tokio::time::timeout(limit, waiting).await {
+        Ok(result) => result,
+        Err(_elapsed) => ready(),
     }
 }
 pub(crate) fn wait_for_path(path: &Path, limit: Duration) -> Result<bool> {
@@ -79,6 +102,6 @@ pub(crate) fn wait_for_path(path: &Path, limit: Duration) -> Result<bool> {
     }
     let parent = path.parent().context("watched path has no parent")?;
     fs_err::create_dir_all(parent)?;
-    let watch = PathWatch::new(parent)?;
-    watch.wait(limit, || Ok(path.try_exists()?))
+    let watch = PathWatch::new(parent, RecursiveMode::NonRecursive)?;
+    watch.wait_blocking(limit, || Ok(path.try_exists()?))
 }

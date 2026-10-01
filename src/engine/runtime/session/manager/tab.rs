@@ -2,6 +2,7 @@ mod shutdown;
 mod snapshot;
 mod tab_view;
 use self::snapshot::TabSnapshot;
+use super::BlockingExecutor;
 use super::command::ManagedCommand;
 use super::shell_session::ShellSession;
 use crate::runtime::protocol::{KeyboardInput, ShellView, ViewResult};
@@ -16,7 +17,8 @@ pub(super) struct TabDirectory {
 }
 pub(super) struct Tab {
     id: String,
-    pub(super) operation: Mutex<()>,
+    pub(super) operation: tokio::sync::Mutex<()>,
+    pub(super) blocking: BlockingExecutor,
     state: Mutex<TabState>,
     commands: DashMap<String, Arc<ManagedCommand>>,
 }
@@ -30,21 +32,23 @@ const ID_ALPHABET: [char; 36] = [
     'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
 ];
 impl TabDirectory {
-    pub(super) fn close(&self, tab_id: &str) -> Result<()> {
-        self.require_tab(tab_id)?.close()
+    pub(super) async fn close(&self, tab_id: &str) -> Result<()> {
+        self.require_tab(tab_id)?.close().await
     }
     pub(super) fn insert(&self, tab: Tab) {
         self.tabs.insert(tab.id().to_owned(), Arc::new(tab));
     }
-    pub(super) fn manual_write(
+    pub(super) async fn manual_write(
         &self,
         tab_id: &str,
-        input: &KeyboardInput,
+        input: KeyboardInput,
         wait_timeout: core::time::Duration,
     ) -> Result<ViewResult> {
-        self.require_tab(tab_id)?.manual_write(input, wait_timeout)
+        self.require_tab(tab_id)?
+            .manual_write(input, wait_timeout)
+            .await
     }
-    pub(super) fn send_command(
+    pub(super) async fn send_command(
         &self,
         tab_id: &str,
         command: &str,
@@ -52,18 +56,24 @@ impl TabDirectory {
     ) -> Result<(String, crate::runtime::protocol::EndReason, ViewResult)> {
         let command_id = self.next_command_id();
         let tab = self.require_tab(tab_id)?;
-        let started = tab.start_command(command_id.clone(), command)?;
+        let started = tab
+            .start_command(command_id.clone(), command.to_owned())
+            .await?;
         self.commands.insert(command_id, Arc::clone(&tab));
-        started.wait(wait_timeout)
+        started.wait(wait_timeout).await
     }
-    pub(super) fn view(&self, id: &str, wait_timeout: core::time::Duration) -> Result<ViewResult> {
+    pub(super) async fn view(
+        &self,
+        id: &str,
+        wait_timeout: core::time::Duration,
+    ) -> Result<ViewResult> {
         let matching_tab = self.tabs.get(id).map(|entry| Arc::clone(entry.value()));
         if let Some(found_tab) = matching_tab {
-            return found_tab.view(wait_timeout);
+            return found_tab.view(wait_timeout).await;
         }
         let command_owner = self.commands.get(id).map(|entry| Arc::clone(entry.value()));
         if let Some(owner_tab) = command_owner {
-            return owner_tab.command_view(id, wait_timeout);
+            return owner_tab.command_view(id, wait_timeout).await;
         }
         bail!("unknown id {id}")
     }
@@ -93,11 +103,16 @@ impl TabDirectory {
     }
 }
 impl Tab {
-    pub(super) fn new(id: String, session: Arc<ShellSession>) -> Result<Self> {
+    pub(super) fn new(
+        id: String,
+        session: Arc<ShellSession>,
+        blocking: BlockingExecutor,
+    ) -> Result<Self> {
         let snapshot = TabSnapshot::from_session(&session)?;
         Ok(Self {
             id,
-            operation: Mutex::new(()),
+            operation: tokio::sync::Mutex::new(()),
+            blocking,
             state: Mutex::new(TabState {
                 session: Some(session),
                 snapshot,

@@ -69,3 +69,43 @@ fn mcp_view_accepts_mixed_ids_and_preserves_order_and_errors() {
             .contains("unknown id missing")
     );
 }
+#[test]
+fn mcp_many_waiters_share_completion_without_exhausting_blocking_operations() {
+    let mut session = McpSession::new();
+    let [target, _other] = create_tabs(&mut session);
+    #[cfg(windows)]
+    let command = "Start-Sleep -Seconds 2\nWrite-Output MANY_WAITERS_FINISHED";
+    #[cfg(not(windows))]
+    let command = "sleep 2\necho MANY_WAITERS_FINISHED";
+    let accepted = session . call ("send_command" , json ! ({ "exec" : [{ "tab_id" : target , "command" : command }] , "wait_timeout" : 0_u64 }) ,) ;
+    let command_id = entries(&accepted)
+        .first()
+        .unwrap()
+        .pointer("/result/command/command_id")
+        .and_then(Value::as_str)
+        .unwrap();
+    let viewed = session.call(
+        "view",
+        json ! ({ "ids" : vec ! [command_id ; 64_usize] , "wait_timeout" : 5_u64 }),
+    );
+    let results = entries(&viewed);
+    assert_eq!(results.len(), 64);
+    for result in results {
+        assert_eq!(
+            result.pointer("/result/command/finished"),
+            Some(&json!(true))
+        );
+        assert_eq!(
+            result.pointer("/result/command/exit_code"),
+            Some(&json!(0_i32))
+        );
+        assert!(
+            result
+                .pointer("/result/command/stdout")
+                .and_then(Value::as_str)
+                .unwrap()
+                .contains("MANY_WAITERS_FINISHED"),
+            "{result}"
+        );
+    }
+}

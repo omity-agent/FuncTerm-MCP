@@ -1,10 +1,11 @@
 use super::Tab;
 use crate::runtime::session::manager::command::CommandWait;
+use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use core::time::Duration;
 impl Tab {
-    pub(super) fn close(&self) -> Result<()> {
-        let _operation = self.operation.lock();
+    pub(super) async fn close(self: &Arc<Self>) -> Result<()> {
+        let _operation = self.operation.lock().await;
         let Some(session) = self.optional_session() else {
             return Ok(());
         };
@@ -17,13 +18,17 @@ impl Tab {
             None
         };
         if let Some(active) = command.as_ref() {
-            active.cancel_title_capture()?;
+            active.cancel_title_capture();
         }
-        session.terminate()?;
+        let target = Arc::clone(&session);
+        self.blocking.run(move || target.terminate()).await?;
         if let Some(active) = command {
-            match active.wait(Duration::ZERO)? {
-                CommandWait::Finished => self.finish_done_command(&active)?,
-                CommandWait::Running => active.mark_failed("Tab was closed")?,
+            match active.wait(Duration::ZERO).await? {
+                CommandWait::Finished => self.finish_done_command(&active).await?,
+                CommandWait::Running => {
+                    self.fail_command(&active, "Tab was closed".to_owned())
+                        .await?;
+                }
                 CommandWait::Failed => {}
             }
             session.release(active.id());

@@ -148,7 +148,7 @@ fn spawn_daemon(env: &[(String, String)], service_name: &str) -> ChildGuard {
         .arg("daemon")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null());
+        .stderr(Stdio::inherit());
     apply_daemon_flags(&mut command);
     super::test_environment::apply(&mut command, env);
     command.env("FUNCTERM_DAEMON_READY_STDOUT", "1");

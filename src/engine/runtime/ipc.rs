@@ -1,5 +1,4 @@
 pub(crate) mod client;
-mod codec;
 mod daemon_spawn;
 pub(crate) mod endpoint;
 pub(crate) mod lock;

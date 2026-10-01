@@ -1,44 +1,24 @@
-use super::{Payload, PayloadKind, Request, RequestKind};
+use super::{Payload, PayloadKind, RequestKind};
 use anyhow::{Result, bail};
 impl Payload {
-    pub(crate) fn ensure_matches(self, request: &Request) -> Result<Self> {
+    pub(crate) fn ensure_matches(self, request: RequestKind) -> Result<Self> {
         let expected = request.response_kind();
         let actual = PayloadKind::from(&self);
         if actual == expected {
             return Ok(self);
         }
-        bail!(
-            "daemon returned {}, but {} expects {}",
-            actual,
-            RequestKind::from(request),
-            expected
-        )
+        bail!("daemon returned {actual}, but {request} expects {expected}")
     }
 }
-impl Request {
-    const fn response_kind(&self) -> PayloadKind {
-        match *self {
+impl RequestKind {
+    const fn response_kind(self) -> PayloadKind {
+        match self {
             Self::Ping => PayloadKind::Pong,
-            Self::NewTab {
-                starting_directory: _,
-                starting_shell: _,
-                environment: _,
-            } => PayloadKind::TabCreated,
-            Self::Close { tab_id: _ } => PayloadKind::TabClosed,
-            Self::ManualWrite {
-                tab_id: _,
-                input: _,
-                wait_timeout: _,
-            } => PayloadKind::KeyboardWritten,
-            Self::SendCommand {
-                tab_id: _,
-                command: _,
-                wait_timeout: _,
-            } => PayloadKind::CommandAccepted,
-            Self::View {
-                id: _,
-                wait_timeout: _,
-            } => PayloadKind::View,
+            Self::NewTab => PayloadKind::TabCreated,
+            Self::Close => PayloadKind::TabClosed,
+            Self::ManualWrite => PayloadKind::KeyboardWritten,
+            Self::SendCommand => PayloadKind::CommandAccepted,
+            Self::View => PayloadKind::View,
         }
     }
 }

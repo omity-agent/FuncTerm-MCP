@@ -68,6 +68,32 @@ fn concurrent_command_views_share_completion_and_cancellation() {
     assert_shared_outcome(false);
     assert_shared_outcome(true);
 }
+#[test]
+fn shell_exit_without_done_file_settles_the_running_command() {
+    let _guard = locked_with_env(&[]);
+    let target = create_tab(&temp_root(), SHELL);
+    #[cfg(windows)]
+    let command = "Start-Sleep -Seconds 1; Stop-Process -Id $PID -Force";
+    #[cfg(unix)]
+    let command = "sleep 1; kill -KILL $$";
+    let accepted = send_command(&target.tab_id, command, 0.0);
+    let command_id = parse_command_id(&accepted);
+    let started = Instant::now();
+    let output = run_cli(&["view", &command_id, "--wait-timeout", "5"]);
+    let result = parse_command_result(&output);
+    assert!(
+        result.finished,
+        "shell termination did not settle command: {output:?}"
+    );
+    assert_ne!(result.exit_code, Some(0_i32));
+    assert!(
+        started.elapsed() < Duration::from_secs(4),
+        "shell exit was only noticed after the client wait timed out"
+    );
+    let cached = parse_command_result(&run_cli(&["view", &command_id]));
+    assert_eq!(cached.exit_code, result.exit_code);
+    assert!(!parse_tab_view(&run_cli(&["view", &target.tab_id])).alive);
+}
 fn assert_shared_outcome(close: bool) {
     let guard = locked_with_env(&[]);
     let target = create_tab(&temp_root(), SHELL);

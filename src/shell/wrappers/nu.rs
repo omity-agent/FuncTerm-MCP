@@ -169,7 +169,7 @@ const NUSHELL_STATE_FUNCTIONS : & str = "def save_nushell_state [
 		    }
 		    $env.PWD | save --force --raw $@VAR_cwd_file@
 	    let @VAR_environment_entries@ = $env
-	        | reject --optional PWD config @NUSHELL_PROTECTED_ENVIRONMENT@
+	        | reject --optional PWD FILE_PWD CURRENT_FILE config @NUSHELL_PROTECTED_ENVIRONMENT@
 	        | transpose @VAR_name@ @VAR_value@
 	        | where {|@VAR_item@| not (($@VAR_item@.@VAR_value@ | describe) starts-with 'closure') }
 	    let @VAR_saved_environment@ = if ($@VAR_environment_entries@ | is-empty) {
