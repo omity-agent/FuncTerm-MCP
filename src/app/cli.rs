@@ -51,6 +51,8 @@ enum CliCommand {
     #[command(hide = true)]
     InternalLaunchDaemon,
     #[command(hide = true)]
+    InternalTimeMillis,
+    #[command(hide = true)]
     InternalWriteDone {
         #[arg(long)]
         command_id: String,
@@ -83,6 +85,7 @@ pub(crate) async fn run() -> Result<()> {
             crate::shell::shims::ensure_directory(&directory)
         }
         CliCommand::InternalLaunchDaemon => crate::runtime::client::run_daemon_launcher(),
+        CliCommand::InternalTimeMillis => print_result(crate::app::command_state::time_millis()),
         CliCommand::InternalWriteDone {
             command_id,
             exit_code,

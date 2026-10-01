@@ -76,11 +76,13 @@ pub(super) fn command_function(dialect: PosixDialect) -> String {
 	        fi
 	        return 1
 	    fi
-	    local @VAR_command_started_at@="$(functerm_command_time_millis)" || return 1
+	    local @VAR_command_started_at@
+	    @VAR_command_started_at@="$(functerm_command_time_millis)" || return 1
 	    {{ eval "$@VAR_script@"; }} > "$@VAR_stdout_file@" 2> "$@VAR_stderr_file@"
 	    local @VAR_exit_code@=$?
 	{environment_restore}
-	    local @VAR_command_finished_at@="$(functerm_command_time_millis)" || return 1
+	    local @VAR_command_finished_at@
+	    @VAR_command_finished_at@="$(functerm_command_time_millis)" || return 1
 	    local @VAR_time_consumption@="$((@VAR_command_finished_at@ - @VAR_command_started_at@))ms"
 	    if [ -f "$@VAR_stdout_file@" ]; then
 	        cat "$@VAR_stdout_file@" || return 1
@@ -135,7 +137,15 @@ functerm_publish_done() {{
 	        --directory "$@VAR_native_directory@"
 }}
 {publish_start}
-functerm_command_time_millis() {{ {emulate}    perl -MTime::HiRes=time -e 'printf "%.0f\n", time() * 1000'; }}
+functerm_command_time_millis() {{
+{emulate}    local @VAR_helper@="${{{helper_env}-}}"
+	    if [ -z "$@VAR_helper@" ]; then
+	        printf '%s is not set\n' "{helper_env}" >&2
+	        return 1
+	    fi
+	    @VAR_helper@="$(functerm_posix_path "$@VAR_helper@")" || return 1
+	    "$@VAR_helper@" internal-time-millis
+}}
 functerm_ensure_shims() {{
 {emulate}    local @VAR_shim_dir@="${{FUNCTERM_SHIM_DIR-}}"
 	    if [ -z "$@VAR_shim_dir@" ]; then

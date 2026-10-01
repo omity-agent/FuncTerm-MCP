@@ -1,7 +1,19 @@
 use anyhow::{Context as _, Result, bail};
+use core::time::Duration;
 use serde::Serialize;
 use std::io::Write;
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
+pub(crate) fn time_millis() -> Result<String> {
+    let elapsed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("system clock is before the Unix epoch")?;
+    let rounded = elapsed
+        .checked_add(Duration::from_micros(500))
+        .context("system clock timestamp overflowed")?
+        .as_millis();
+    Ok(rounded.to_string())
+}
 #[derive(Serialize)]
 pub(crate) struct DoneOutput<'value> {
     pub(crate) command_id: &'value str,
