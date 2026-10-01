@@ -12,6 +12,9 @@ mod matrix;
 #[cfg(test)]
 #[path = "shells/nested.rs"]
 mod nested;
+#[cfg(windows)]
+#[path = "shells/powershell_scope.rs"]
+mod powershell_scope;
 #[cfg(test)]
 #[path = "shells/interpreters/interactive_python.rs"]
 mod python;

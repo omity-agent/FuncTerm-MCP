@@ -19,13 +19,7 @@ impl VariableNamespace {
         let mut remaining = template;
         while let Some((before_marker, marker_tail)) = remaining.split_once(MARKER_START) {
             rendered.push_str(before_marker);
-            let Some((semantic, after_marker)) = marker_tail.split_once('@') else {
-                panic!("wrapper variable marker must end with '@'");
-            };
-            assert!(
-                valid_semantic_prefix(semantic),
-                "wrapper variable semantic prefix is invalid: {semantic}"
-            );
+            let (semantic, after_marker) = split_marker(marker_tail);
             rendered.push_str(semantic);
             rendered.push('_');
             rendered.push_str(&self.suffix);
@@ -34,6 +28,31 @@ impl VariableNamespace {
         rendered.push_str(remaining);
         rendered
     }
+    pub(in crate::shell) fn render_powershell(&self, template: &str) -> String {
+        let names = template
+            .split(MARKER_START)
+            .skip(1)
+            .map(|tail| split_marker(tail).0)
+            .unique()
+            .format_with(", ", |name, format| {
+                format(&format_args!("'{name}_{}'", self.suffix))
+            });
+        let cleanup = format!(
+            "Get-Variable -Scope Local | Where-Object Name -In @({names}) | Remove-Variable -Scope Local"
+        );
+        let script = template.replace("@POWERSHELL_STATE_CLEANUP@", &cleanup);
+        self.render(&script)
+    }
+}
+fn split_marker(tail: &str) -> (&str, &str) {
+    let Some((semantic, remaining)) = tail.split_once('@') else {
+        panic!("wrapper variable marker must end with '@'");
+    };
+    assert!(
+        valid_semantic_prefix(semantic),
+        "wrapper variable semantic prefix is invalid: {semantic}"
+    );
+    (semantic, remaining)
 }
 fn valid_semantic_prefix(value: &str) -> bool {
     value

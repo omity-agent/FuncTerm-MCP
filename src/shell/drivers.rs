@@ -65,14 +65,13 @@ pub(crate) fn startup(choice: ShellChoice, context: StartupContext<'_>) -> Resul
 pub(crate) fn invocation(choice: ShellChoice) -> Result<Option<ShellInvocation>> {
     let line = match choice {
         ShellChoice::Bun => return Ok(None),
-        ShellChoice::Python => "_functerm_dispatch()",
-        ShellChoice::PowerShell
-        | ShellChoice::Bash
-        | ShellChoice::NuShell
-        | ShellChoice::Zsh
-        | ShellChoice::Cmd => DISPATCHER_COMMAND,
+        ShellChoice::Python => "_functerm_dispatch()".to_owned(),
+        ShellChoice::PowerShell => format!(". {DISPATCHER_COMMAND}"),
+        ShellChoice::Bash | ShellChoice::NuShell | ShellChoice::Zsh | ShellChoice::Cmd => {
+            DISPATCHER_COMMAND.to_owned()
+        }
     };
-    ShellInvocation::new(line.to_owned(), invocation_terminator(choice)).map(Some)
+    ShellInvocation::new(line, invocation_terminator(choice)).map(Some)
 }
 pub(crate) fn command_script(choice: ShellChoice, command: &str) -> String {
     match choice {

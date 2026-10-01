@@ -12,28 +12,26 @@ pub(in crate::shell) fn wrapper() -> String {
         super::template::powershell_dispatcher()
     );
     let rendered = template::render_command_function(&script, POWERSHELL_COMMAND_FUNCTION);
-    let promoted = rendered.replace(
-        "@POWERSHELL_STATE_PROMOTION@",
-        template::POWERSHELL_STATE_PROMOTION,
-    );
-    let protected = promoted.replace(
+    let protected = rendered.replace(
         "@POWERSHELL_PROTECTED_ENVIRONMENT@",
         &super::variables::powershell_protected_environment_names(),
     );
     let wrapper = template::render_powershell(&protected);
-    super::VariableNamespace::new().render(&wrapper)
+    super::VariableNamespace::new().render_powershell(&wrapper)
 }
-const COMMAND_TEMPLATE : & str = "if (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue) {
-    Set-PSReadLineOption -HistorySaveStyle SaveNothing
-    $@VAR_setPsReadLineOption@ = Get-Command Set-PSReadLineOption
-    if ($@VAR_setPsReadLineOption@.Parameters.ContainsKey('AddToHistoryHandler')) {
-        Set-PSReadLineOption -AddToHistoryHandler {
-            param([string] $@VAR_line@)
-            return $false
+const COMMAND_TEMPLATE : & str = "& {
+    if (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue) {
+        Set-PSReadLineOption -HistorySaveStyle SaveNothing
+        $@VAR_setPsReadLineOption@ = Get-Command Set-PSReadLineOption
+        if ($@VAR_setPsReadLineOption@.Parameters.ContainsKey('AddToHistoryHandler')) {
+            Set-PSReadLineOption -AddToHistoryHandler {
+                param([string] $@VAR_line@)
+                return $false
+            }
         }
     }
+    Clear-History
 }
-Clear-History
 function @FUNCTION@ {
     param(
         [Parameter(Mandatory = $true)][string]$@VAR_CommandId@,
@@ -76,24 +74,6 @@ function @FUNCTION@ {
         $@VAR_commandNativeExitCode@ = $null
         $@VAR_commandSucceeded@ = $false
         $@VAR_commandErrors@ = [Collections.Generic.List[object]]::new()
-        $@VAR_existingVariables@ = $null
-        $@VAR_existingFunctions@ = $null
-        $@VAR_existingAliases@ = $null
-        $@VAR_commandTimer@ = $null
-        $@VAR_commandScript@ = $null
-        $@VAR_error@ = $null
-        $@VAR_variable@ = $null
-        $@VAR_function@ = $null
-        $@VAR_alias@ = $null
-        $@VAR_existingVariables@ = (Get-Variable -Scope Local).Name
-        $@VAR_existingFunctions@ = @{}
-        foreach ($@VAR_function@ in Get-ChildItem Function:) {
-            $@VAR_existingFunctions@[$@VAR_function@.Name] = $@VAR_function@.ScriptBlock.ToString()
-        }
-        $@VAR_existingAliases@ = @{}
-        foreach ($@VAR_alias@ in Get-ChildItem Alias:) {
-            $@VAR_existingAliases@[$@VAR_alias@.Name] = $@VAR_alias@.Definition
-        }
         $@VAR_commandScript@ = [scriptblock]::Create(
             [IO.File]::ReadAllText($@VAR_scriptFile@, [Text.Encoding]::UTF8) +
             [Environment]::NewLine +
@@ -108,7 +88,6 @@ function @FUNCTION@ {
             [Console]::Error.WriteLine($@VAR_error@)
         }
         $@VAR_commandTimer@.Stop()
-@POWERSHELL_STATE_PROMOTION@
         $@VAR_timeConsumption@ = [string]::Format(
             [Globalization.CultureInfo]::InvariantCulture,
             '{0}ms',
