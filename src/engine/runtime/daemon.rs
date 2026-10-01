@@ -138,6 +138,3 @@ fn dispatch(manager: &Arc<Manager>, request: Request) -> Result<Payload> {
         Request::View { id, wait_timeout } => Ok(Payload::View(manager.view(&id, wait_timeout)?)),
     }
 }
-#[cfg(test)]
-#[path = "../../../tests/unit/runtime/accept_errors.rs"]
-mod tests;

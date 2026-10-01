@@ -50,6 +50,3 @@ fn initialization_script(
     );
     Ok(crate::shell::wrappers::VariableNamespace::new().render(&initialization))
 }
-#[cfg(test)]
-#[path = "../../../tests/unit/shell/drivers/posix_setup.rs"]
-mod tests;

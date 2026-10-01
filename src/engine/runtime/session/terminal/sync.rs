@@ -2,7 +2,7 @@ use super::Terminal;
 use anyhow::{Result, bail};
 use core::time::Duration;
 impl Terminal {
-    pub(in crate::engine::runtime::session) fn output_revision(&self) -> Result<u64> {
+    pub(in crate::engine::runtime::session) fn visible_revision(&self) -> Result<u64> {
         let state = self.state.lock();
         if let Some(message) = state.reader_failure.as_deref() {
             bail!("terminal reader is unavailable: {message}");
@@ -10,11 +10,11 @@ impl Terminal {
         if state.reader_closed {
             bail!("terminal reader is closed");
         }
-        Ok(state.revision)
+        Ok(state.visible_revision)
     }
-    pub(in crate::engine::runtime::session) fn wait_for_output(
+    pub(in crate::engine::runtime::session) fn wait_for_visible_change(
         &self,
-        revision: u64,
+        visible_revision: u64,
         wait_timeout: Duration,
     ) -> Result<()> {
         if wait_timeout.is_zero() {
@@ -24,7 +24,7 @@ impl Terminal {
         self.changed.wait_while_for(
             &mut state,
             |current| {
-                current.revision == revision
+                current.visible_revision == visible_revision
                     && !current.reader_closed
                     && current.reader_failure.is_none()
             },

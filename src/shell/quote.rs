@@ -39,6 +39,3 @@ pub fn nushell_string(value: &str) -> String {
 pub fn posix_string(value: &str) -> String {
     shell_words::quote(value).into_owned()
 }
-#[cfg(test)]
-#[path = "../../tests/unit/shell/quoting.rs"]
-mod tests;

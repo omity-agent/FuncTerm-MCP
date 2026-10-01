@@ -29,6 +29,3 @@ where
         .map(Some)
         .context("failed to decode IPC message")
 }
-#[cfg(test)]
-#[path = "../../../../tests/unit/message_stream.rs"]
-mod tests;

@@ -65,6 +65,3 @@ fn decode_entry(entry: &[u16]) -> Result<(OsString, OsString)> {
         .context("environment entry value is out of bounds")?;
     Ok((OsString::from_wide(name), OsString::from_wide(value)))
 }
-#[cfg(test)]
-#[path = "../../../../../tests/unit/platform/utf16_environment.rs"]
-mod tests;

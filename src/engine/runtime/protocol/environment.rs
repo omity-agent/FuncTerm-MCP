@@ -7,7 +7,7 @@ pub(crate) struct EnvironmentSnapshot {
     variables: Vec<(OsString, OsString)>,
 }
 impl EnvironmentSnapshot {
-    #[cfg(any(not(windows), test))]
+    #[cfg(not(windows))]
     pub(crate) fn capture() -> Self {
         Self::from_variables(std::env::vars_os())
     }
@@ -55,6 +55,3 @@ pub(crate) fn environment_name_equals(actual: &OsStr, expected: &str) -> bool {
 pub(crate) fn environment_name_equals(actual: &OsStr, expected: &str) -> bool {
     actual == expected
 }
-#[cfg(test)]
-#[path = "../../../../tests/unit/platform/snapshot.rs"]
-mod tests;

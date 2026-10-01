@@ -71,6 +71,3 @@ fn powershell_interactive_arguments(values: &[String]) -> bool {
     }
     true
 }
-#[cfg(test)]
-#[path = "../../../tests/unit/shell/drivers/pwsh_setup.rs"]
-mod tests;

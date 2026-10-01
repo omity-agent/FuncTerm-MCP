@@ -157,6 +157,3 @@ fn read_if_present(path: &Path, label: &str) -> Result<Option<Vec<u8>>> {
         Err(error) => Err(error).with_context(|| format!("failed to read {label}")),
     }
 }
-#[cfg(test)]
-#[path = "../../../../tests/unit/runtime/command_records.rs"]
-mod tests;

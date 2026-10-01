@@ -26,7 +26,7 @@ impl ShellSession {
         let Some(command) = busy.as_ref() else {
             return Err(KeyboardWriteFailure::IdlePrompt);
         };
-        let revision = self.screen.output_revision()?;
+        let visible_revision = self.screen.visible_revision()?;
         let write_result = command.deliver_input(|| self.write_keyboard(input));
         drop(busy);
         match write_result {
@@ -38,7 +38,8 @@ impl ShellSession {
                 return Err(KeyboardWriteFailure::Write(error));
             }
         }
-        self.screen.wait_for_output(revision, wait_timeout)?;
+        self.screen
+            .wait_for_visible_change(visible_revision, wait_timeout)?;
         Ok(())
     }
     #[expect(

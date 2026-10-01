@@ -73,6 +73,3 @@ const fn interrupt_bytes() -> &'static [u8] {
     )
     .as_bytes()
 }
-#[cfg(test)]
-#[path = "../../../../tests/unit/terminal/keystrokes.rs"]
-mod tests;

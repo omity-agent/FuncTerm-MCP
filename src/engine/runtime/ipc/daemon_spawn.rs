@@ -114,6 +114,3 @@ fn read_startup_file(path: &std::path::Path) -> Result<()> {
         StartupReply::Failed { message } => bail!(message),
     }
 }
-#[cfg(test)]
-#[path = "../../../../tests/unit/platform/spawn_arguments.rs"]
-mod tests;

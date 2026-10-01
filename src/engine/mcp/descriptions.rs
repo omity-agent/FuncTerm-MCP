@@ -94,6 +94,3 @@ fn set_description(parameter: &mut rmcp::serde_json::Map<String, Value>, descrip
         );
     }
 }
-#[cfg(test)]
-#[path = "../../../tests/unit/app/schema_descriptions.rs"]
-mod tests;

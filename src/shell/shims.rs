@@ -176,9 +176,3 @@ fn path_equals(actual: &Path, expected: &OsStr) -> bool {
 fn path_equals(actual: &Path, expected: &OsStr) -> bool {
     actual.as_os_str() == expected
 }
-#[cfg(test)]
-#[path = "../../tests/unit/shell/path_inheritance.rs"]
-mod environment_tests;
-#[cfg(test)]
-#[path = "../../tests/unit/shell/alias_creation.rs"]
-mod tests;

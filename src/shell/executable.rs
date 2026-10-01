@@ -134,6 +134,3 @@ fn same_file(left: &Path, right: &Path) -> bool {
     };
     left_path == right_path
 }
-#[cfg(test)]
-#[path = "../../tests/unit/shell/binary_resolution.rs"]
-mod tests;

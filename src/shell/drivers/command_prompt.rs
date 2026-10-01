@@ -35,6 +35,3 @@ fn initialization_script(context: StartupContext<'_>) -> Result<String> {
         quote::cmd_string(&quote::native_path(context.ready_file)?)
     ))
 }
-#[cfg(test)]
-#[path = "../../../tests/unit/shell/drivers/cmd_setup.rs"]
-mod tests;

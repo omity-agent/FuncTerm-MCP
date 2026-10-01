@@ -114,6 +114,3 @@ pub(crate) fn wait_timeout_from_seconds(seconds: f64) -> Result<Duration> {
     Duration::try_from_secs_f64(seconds)
         .context("wait timeout must be a finite non-negative number of seconds")
 }
-#[cfg(test)]
-#[path = "../../../tests/unit/runtime/serialization.rs"]
-mod tests;

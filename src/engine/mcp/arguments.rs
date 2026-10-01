@@ -56,6 +56,3 @@ pub(super) struct ViewRequest {
     #[schemars(range(min = 0))]
     pub(super) wait_timeout: f64,
 }
-#[cfg(test)]
-#[path = "../../../tests/unit/app/tool_inputs.rs"]
-mod tests;

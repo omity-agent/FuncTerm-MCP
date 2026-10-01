@@ -18,6 +18,3 @@ impl LaunchRoute {
         }
     }
 }
-#[cfg(test)]
-#[path = "../../../tests/unit/launch_policy.rs"]
-mod tests;

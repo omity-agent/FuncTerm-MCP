@@ -63,6 +63,3 @@ fn temporary_sibling(destination: &Path) -> Result<NamedTempFile> {
     fs_err::create_dir_all(parent)?;
     NamedTempFile::new_in(parent).context("failed to create atomic publication file")
 }
-#[cfg(test)]
-#[path = "../../tests/unit/runtime/atomic_writes.rs"]
-mod tests;

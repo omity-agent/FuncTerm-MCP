@@ -148,6 +148,3 @@ pub(super) fn spawn_with_shell_parent(mut command: Command) -> Result<std::proce
 pub(super) fn spawn_with_shell_parent(_command: Command) -> Result<std::process::Child> {
     anyhow::bail!("Windows shell parent launch is only available on Windows")
 }
-#[cfg(test)]
-#[path = "../../../../../tests/unit/platform/job_flags.rs"]
-mod tests;

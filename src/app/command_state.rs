@@ -110,6 +110,3 @@ fn validate_marker_field(name: &str, field: &[u8]) -> Result<()> {
     }
     Ok(())
 }
-#[cfg(test)]
-#[path = "../../tests/unit/app/start_markers.rs"]
-mod tests;

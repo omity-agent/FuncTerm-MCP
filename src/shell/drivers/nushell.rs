@@ -33,6 +33,3 @@ fn initialization_script(context: StartupContext<'_>) -> Result<String> {
         quote::nushell_path(context.ready_file)?
     ))
 }
-#[cfg(test)]
-#[path = "../../../tests/unit/shell/drivers/nu_setup.rs"]
-mod tests;

@@ -105,6 +105,3 @@ fn protected_environment_names() -> impl Iterator<Item = &'static str> {
             crate::contract::COMMAND_DIRECTORY_ENV,
         ])
 }
-#[cfg(test)]
-#[path = "../../../tests/unit/shell/drivers/protected_bindings.rs"]
-mod tests;

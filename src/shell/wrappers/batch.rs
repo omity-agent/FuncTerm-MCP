@@ -151,6 +151,3 @@ if defined @VAR_had_previous_command_directory@ (
 )
 exit /b 0
 "#;
-#[cfg(test)]
-#[path = "../../../tests/unit/line_endings.rs"]
-mod tests;

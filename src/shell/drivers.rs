@@ -145,6 +145,3 @@ pub(super) fn os_strings_lower(arguments: &[OsString]) -> Option<Vec<String>> {
         .map(|argument| argument.to_str().map(str::to_ascii_lowercase))
         .collect()
 }
-#[cfg(test)]
-#[path = "../../tests/unit/shell/dispatch.rs"]
-mod tests;

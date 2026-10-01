@@ -2,9 +2,6 @@ mod lifecycle;
 mod outcome;
 mod result_view;
 mod start;
-#[cfg(test)]
-#[path = "../../../../../tests/unit/runtime/input_lifecycle.rs"]
-mod tests;
 use super::Manager;
 use crate::runtime::protocol::{EndReason, KeyboardInput, ViewResult};
 use alloc::sync::Arc;

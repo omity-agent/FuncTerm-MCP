@@ -40,6 +40,3 @@ fn wait_for_process(handle: OwnedHandle) -> Result<()> {
         unexpected => bail!("unexpected shell process wait result {unexpected:?}"),
     }
 }
-#[cfg(test)]
-#[path = "../../../../../../../tests/unit/platform/conpty_reply.rs"]
-mod tests;

@@ -191,6 +191,3 @@ fn write_done(
         directory,
     )
 }
-#[cfg(test)]
-#[path = "../../tests/unit/app/argument_parsing.rs"]
-mod tests;

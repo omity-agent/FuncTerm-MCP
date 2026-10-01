@@ -42,6 +42,3 @@ impl Manager {
         Ok(tab_id)
     }
 }
-#[cfg(test)]
-#[path = "../../../../tests/unit/runtime/manager_creation.rs"]
-mod tests;

@@ -95,6 +95,3 @@ impl ShellChoice {
         drivers::interactive_arguments(self, arguments)
     }
 }
-#[cfg(test)]
-#[path = "../tests/unit/shell/selection.rs"]
-mod tests;

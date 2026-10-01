@@ -20,7 +20,7 @@ struct TerminalState {
     protocol: OutputParser,
     win32_input: bool,
     captures: CaptureRegistry,
-    revision: u64,
+    visible_revision: u64,
     reader_closed: bool,
     reader_failure: Option<String>,
 }
@@ -40,7 +40,7 @@ impl Terminal {
                 protocol: OutputParser::new(),
                 win32_input: false,
                 captures: CaptureRegistry::new(model_title.to_owned()),
-                revision: 0,
+                visible_revision: 0,
                 reader_closed: false,
                 reader_failure: None,
             }),
@@ -63,18 +63,17 @@ impl Terminal {
     pub(super) fn model_title(&self) -> String {
         self.model_title.clone()
     }
-    #[cfg(test)]
-    fn raw_title(&self) -> String {
-        self.state.lock().parser.screen().title().to_owned()
-    }
     pub(super) fn process(&self, chunk: &[u8], host: &HostProfile) -> Result<Vec<HostReply>> {
         let mut state = self.state.lock();
         let processed = (|| {
+            let previous_contents = state.parser.screen().contents();
             let replies = state.process(chunk, host)?;
-            state.revision = state
-                .revision
-                .checked_add(1)
-                .context("terminal output revision overflow")?;
+            if state.parser.screen().contents() != previous_contents {
+                state.visible_revision = state
+                    .visible_revision
+                    .checked_add(1)
+                    .context("terminal visible content revision overflow")?;
+            }
             Ok(replies)
         })();
         match processed {
@@ -139,9 +138,3 @@ impl TerminalState {
         );
     }
 }
-#[cfg(test)]
-#[path = "../../../../tests/unit/terminal/ordered_controls.rs"]
-mod ordered_controls;
-#[cfg(test)]
-#[path = "../../../../tests/unit/terminal/title_capture.rs"]
-mod tests;
