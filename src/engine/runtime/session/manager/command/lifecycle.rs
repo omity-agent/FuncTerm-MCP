@@ -1,10 +1,8 @@
 use super::outcome::CommandInputHistory;
 use crate::runtime::protocol::CommandSnapshot;
 use crate::runtime::session::keyboard::InputDelivery;
-use crate::runtime::session::records::{
-    CommandRecord, command_note, read_and_clear_command_result, read_command_result,
-    remove_record_directory, wait_for_done, write_failed_result,
-};
+use crate::runtime::session::observation::PathWatch;
+use crate::runtime::session::records::CommandRecord;
 use crate::runtime::session::terminal::CommandTitle;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
@@ -13,15 +11,16 @@ use parking_lot::Mutex;
 use std::time::Instant;
 pub(in crate::engine::runtime::session::manager) struct ManagedCommand {
     id: String,
-    record: CommandRecord,
+    pub(super) record: CommandRecord,
     started_at: Instant,
-    state: Mutex<ManagedCommandState>,
-    title: Arc<CommandTitle>,
+    pub(super) state: Mutex<ManagedCommandState>,
+    pub(super) title: Arc<CommandTitle>,
 }
-struct ManagedCommandState {
-    wait: CommandWait,
-    cached_view: Option<CommandSnapshot>,
-    input: CommandInputHistory,
+pub(super) struct ManagedCommandState {
+    pub(super) wait: CommandWait,
+    pub(super) cached_view: Option<CommandSnapshot>,
+    pub(super) input: CommandInputHistory,
+    pub(super) watch: Option<Arc<PathWatch>>,
 }
 #[derive(Clone, Copy)]
 pub(in crate::engine::runtime::session::manager) enum CommandWait {
@@ -46,6 +45,7 @@ impl ManagedCommand {
                 wait: CommandWait::Running,
                 cached_view: None,
                 input: CommandInputHistory::default(),
+                watch: None,
             }),
             title,
         }
@@ -73,13 +73,12 @@ impl ManagedCommand {
         &self,
         limit: Duration,
     ) -> Result<CommandWait> {
-        let state = self.state.lock().wait;
-        match state {
-            CommandWait::Finished | CommandWait::Failed => return Ok(state),
-            CommandWait::Running => {}
-        }
-        let result = wait_for_done(&self.record.done, limit, || {
-            !matches!(self.state.lock().wait, CommandWait::Running)
+        let Some(watch) = self.observation()? else {
+            return Ok(self.state.lock().wait);
+        };
+        let result = watch.wait(limit, || {
+            Ok(!matches!(self.state.lock().wait, CommandWait::Running)
+                || self.record.done.try_exists()?)
         });
         let current = self.state.lock().wait;
         if !matches!(current, CommandWait::Running) {
@@ -98,70 +97,33 @@ impl ManagedCommand {
         self.title.cancel()?;
         Ok(())
     }
-    pub(super) fn view(&self) -> Result<CommandSnapshot> {
-        let cached_view = self.state.lock().cached_view.clone();
-        if let Some(view) = cached_view {
-            return Ok(view);
-        }
-        read_command_result(&self.record, self.time_consumption(), self.title.current()?)
+    pub(in crate::engine::runtime::session::manager) fn wait_started(
+        &self,
+        limit: Duration,
+    ) -> Result<bool> {
+        let Some(watch) = self.observation()? else {
+            return Ok(true);
+        };
+        watch.wait(limit, || {
+            Ok(self.record.started.try_exists()? || self.record.done.try_exists()?)
+        })
     }
-    pub(super) fn mark_finished(&self) -> Result<()> {
+    fn observation(&self) -> Result<Option<Arc<PathWatch>>> {
         let mut state = self.state.lock();
         if !matches!(state.wait, CommandWait::Running) {
-            state
-                .cached_view
-                .as_ref()
-                .context("finished command is missing cached view")?;
-            drop(state);
-            return Ok(());
+            return Ok(None);
         }
-        let title = self.title.wait_finished()?;
-        let mut view = read_and_clear_command_result(&self.record, self.time_consumption(), title)?;
-        state.input.normalize(&mut view);
-        state.cached_view = Some(view);
-        state.wait = CommandWait::Finished;
-        drop(state);
-        Ok(())
-    }
-    pub(in crate::engine::runtime::session::manager) fn mark_failed(
-        &self,
-        message: impl Into<String>,
-    ) -> Result<()> {
-        let failure_message = message.into();
-        let mut state = self.state.lock();
-        if matches!(state.wait, CommandWait::Running) {
-            let title = self.title.cancel()?;
-            write_failed_result(&self.id, &self.record, &failure_message)?;
-            let view = failure_view(
-                &self.record,
-                &failure_message,
-                self.time_consumption(),
-                title,
-            )?;
-            if let Err(error) = remove_record_directory(&self.record) {
-                eprintln!("{error:#}");
-            }
-            state.cached_view = Some(view);
-            state.wait = CommandWait::Failed;
+        if state.watch.is_none() {
+            let parent = self
+                .record
+                .done
+                .parent()
+                .context("command state has no parent")?;
+            state.watch = Some(Arc::new(PathWatch::new(parent)?));
         }
-        drop(state);
-        Ok(())
+        Ok(state.watch.clone())
     }
-    fn time_consumption(&self) -> Duration {
+    pub(super) fn time_consumption(&self) -> Duration {
         self.started_at.elapsed()
     }
-}
-fn failure_view(
-    record: &CommandRecord,
-    message: &str,
-    time_consumption: Duration,
-    title: String,
-) -> Result<CommandSnapshot> {
-    let mut snapshot = read_command_result(record, time_consumption, title)?;
-    if !snapshot.command.finished {
-        snapshot.command.finished = true;
-        snapshot.command.exit_code = Some(1_i32);
-    }
-    snapshot.note = command_note(&snapshot.command.stdout, &snapshot.command.stderr, message);
-    Ok(snapshot)
 }

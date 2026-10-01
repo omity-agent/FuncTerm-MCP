@@ -60,10 +60,11 @@ impl Tab {
         command: &ManagedCommand,
     ) -> Result<()> {
         let session = self.optional_session();
-        if let Some(active_session) = session.as_ref() {
-            active_session.update_cwd_from_done(command.record())?;
-        }
-        command.mark_finished()?;
+        command.mark_finished(|cwd| {
+            if let Some(active_session) = session.as_ref() {
+                active_session.set_cwd(cwd);
+            }
+        })?;
         if let Some(active_session) = session {
             active_session.release(command.id());
             self.remember(&active_session)?;

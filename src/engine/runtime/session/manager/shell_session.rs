@@ -2,7 +2,7 @@ mod cleanup;
 mod input;
 pub(super) mod process;
 use super::command::ManagedCommand;
-use crate::runtime::session::records::{CommandRecord, read_done};
+use crate::runtime::session::records::CommandRecord;
 use crate::runtime::session::terminal::{CommandTitle, Terminal};
 use crate::shell::{ShellChoice, shims};
 use alloc::sync::Arc;
@@ -113,17 +113,8 @@ impl ShellSession {
             .context("failed to write command invocation")?;
         writer.flush().context("failed to flush command invocation")
     }
-    pub(super) fn update_cwd_from_done(&self, record: &CommandRecord) -> Result<()> {
-        if let Some(done) = read_done(&record.done)? {
-            self.set_cwd(PathBuf::from(done.cwd));
-        }
-        Ok(())
-    }
-    pub(super) fn wait_for_command_start(&self, record: &CommandRecord) -> Result<()> {
-        if crate::runtime::session::records::wait_for_start_or_done(
-            record,
-            self.command_start_timeout,
-        )? {
+    pub(super) fn wait_for_command_start(&self, command: &ManagedCommand) -> Result<()> {
+        if command.wait_started(self.command_start_timeout)? {
             return Ok(());
         }
         anyhow::bail!(

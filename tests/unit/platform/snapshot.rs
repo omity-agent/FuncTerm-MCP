@@ -10,13 +10,13 @@ fn environment_variables_round_trip() {
     assert_eq!(snapshot.value("FUNCTERM_TEST_NAME"), Some(value));
 }
 #[test]
-fn snapshot_round_trips_through_ipc_json() {
+fn snapshot_round_trips_through_ipc_messagepack() {
     let snapshot = EnvironmentSnapshot::from_variables([(
         OsString::from("FUNCTERM_TEST_NAME"),
         OsString::from("snapshot value"),
     )]);
-    let json = sonic_rs::to_string(&snapshot).unwrap();
-    let decoded = sonic_rs::from_str::<EnvironmentSnapshot>(&json).unwrap();
+    let message = rmp_serde::to_vec(&snapshot).unwrap();
+    let decoded = rmp_serde::from_slice::<EnvironmentSnapshot>(&message).unwrap();
     assert_eq!(
         decoded.value("FUNCTERM_TEST_NAME"),
         Some(OsString::from("snapshot value"))

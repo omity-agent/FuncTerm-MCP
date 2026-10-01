@@ -91,7 +91,7 @@ fn wait_for_startup_file(
     launcher: &mut std::process::Child,
     timeout: Duration,
 ) -> Result<()> {
-    if crate::runtime::session::records::wait_for_path(path, timeout)? {
+    if crate::runtime::session::wait_for_path(path, timeout)? {
         return read_startup_file(path);
     }
     if let Some(status) = launcher

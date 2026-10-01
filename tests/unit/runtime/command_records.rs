@@ -1,14 +1,12 @@
-use super::{
-    create_record, read_and_clear_command_result, read_command_result, wait_for_done,
-    write_failed_result,
-};
+use super::{create_record, read_and_clear_command_result, read_command_result};
+use crate::runtime::session::wait_for_path;
 use crate::shell::ShellChoice;
 use core::time::Duration;
 use std::path::Path;
 #[test]
 fn zero_wait_does_not_block_for_missing_done_file() {
     let missing_path = Path::new("Z:\\definitely-missing-command.done");
-    assert!(!wait_for_done(missing_path, Duration::from_millis(0), || false).unwrap());
+    assert!(!wait_for_path(missing_path, Duration::from_millis(0)).unwrap());
 }
 #[test]
 fn command_record_separates_input_output_and_state_files() {
@@ -42,12 +40,16 @@ fn command_record_separates_input_output_and_state_files() {
     std::fs::remove_dir_all(&root).unwrap();
 }
 #[test]
-fn failed_result_closes_command_lifecycle() {
+fn published_result_closes_command_lifecycle() {
     let root = crate::test_fs::temp_dir("record-failed-result");
     let _final_cleanup = std::fs::remove_dir_all(&root);
     let record = create_record(&root, "command-failed", Path::new("F:\\cwd")).unwrap();
-    write_failed_result("command-failed", &record, "shell exited").unwrap();
-    assert!(wait_for_done(&record.done, Duration::from_millis(0), || false).unwrap());
+    std::fs::write(
+        &record.done,
+        r#"{"exit_code":1,"time_consumption":"1ms","cwd":"F:/cwd"}"#,
+    )
+    .unwrap();
+    assert!(wait_for_path(&record.done, Duration::from_millis(0)).unwrap());
     let result =
         read_command_result(&record, Duration::from_millis(1), "FuncTerm".to_owned()).unwrap();
     assert!(result.command.finished);
@@ -66,7 +68,11 @@ fn read_and_clear_keeps_result_while_removing_record_files() {
     let record = create_record(&root, "command-clear", Path::new("F:\\cwd")).unwrap();
     std::fs::write(&record.stdout, "\x1b[32mkept stdout\x1b[0m").unwrap();
     std::fs::write(&record.stderr, "\x1b[31mkept stderr\x1b[0m").unwrap();
-    write_failed_result("command-clear", &record, "done").unwrap();
+    std::fs::write(
+        &record.done,
+        r#"{"exit_code":0,"time_consumption":"1ms","cwd":"F:/cwd"}"#,
+    )
+    .unwrap();
     let result =
         read_and_clear_command_result(&record, Duration::from_millis(1), "FuncTerm".to_owned())
             .unwrap();

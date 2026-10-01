@@ -114,6 +114,7 @@ nanoid = "*"
 notify = "*"
 parking_lot = "*"
 portable-pty = { git = "https://github.com/wez/wezterm.git" }
+rmp-serde = "*"
 rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk.git", default-features = false, features = [
     "server",
     "macros",
@@ -122,6 +123,7 @@ rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk.git", default-f
 schemars = "*"
 same-file = "*"
 serde = { version = "*", features = ["derive", "unstable"] }
+serde_bytes = "*"
 shell-words = "*"
 sonic-rs = "*"
 strum = { version = "*", features = ["derive"] }

@@ -5,18 +5,14 @@ use crate::contract::{
 };
 use crate::runtime::protocol::{CommandSnapshot, CommandView};
 use crate::shell::ShellChoice;
-mod wait;
 use anyhow::{Context as _, Result, bail};
 use core::time::Duration;
 use fs_err as fs;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::path::{Path, PathBuf};
-pub(crate) use wait::wait_for_path;
-pub(super) use wait::{wait_for_done, wait_for_start_or_done};
 #[derive(Clone)]
 pub(super) struct CommandRecord {
     pub(super) directory: PathBuf,
-    pub(super) initial_cwd: PathBuf,
     pub(super) stdout: PathBuf,
     pub(super) stderr: PathBuf,
     pub(super) command: PathBuf,
@@ -30,13 +26,6 @@ pub(super) struct DoneFile {
     pub(super) exit_code: i32,
     pub(super) time_consumption: String,
     pub(super) cwd: String,
-}
-#[derive(Serialize)]
-struct FailedDoneFile<'value> {
-    command_id: &'value str,
-    exit_code: i32,
-    time_consumption: &'value str,
-    cwd: String,
 }
 pub(super) fn create_record(
     command_root: &Path,
@@ -57,7 +46,6 @@ pub(super) fn create_record(
     )?;
     Ok(CommandRecord {
         directory: command_dir,
-        initial_cwd: initial_cwd.to_path_buf(),
         stdout: output_dir.join(STDOUT_FILE),
         stderr: output_dir.join(STDERR_FILE),
         command: input_dir.join(COMMAND_FILE),
@@ -124,23 +112,6 @@ pub(super) fn remove_record_directory(record: &CommandRecord) -> Result<()> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(error.into()),
     }
-}
-pub(super) fn write_failed_result(
-    command_id: &str,
-    record: &CommandRecord,
-    _message: &str,
-) -> Result<()> {
-    if let Some(parent) = record.stderr.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let done = FailedDoneFile {
-        command_id,
-        exit_code: 1_i32,
-        time_consumption: "0ns",
-        cwd: crate::text::path_text(&record.initial_cwd, "cwd")?,
-    };
-    let text = sonic_rs::to_string(&done).context("failed to serialize failed done file")?;
-    crate::publication::write_once(&record.done, text).context("failed to publish failed done file")
 }
 pub(super) fn command_note(stdout: &str, stderr: &str, extra: &str) -> String {
     let mut lines = Vec::new();

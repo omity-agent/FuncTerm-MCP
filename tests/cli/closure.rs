@@ -4,7 +4,11 @@ use crate::support::{
 };
 use core::time::Duration;
 use std::sync::mpsc;
+extern crate alloc;
+use alloc::sync::Arc;
+use std::sync::Barrier;
 use std::thread;
+use std::time::Instant;
 #[cfg(windows)]
 const SHELL: &str = "powershell";
 #[cfg(unix)]
@@ -111,4 +115,69 @@ fn close_rejects_unknown_id_and_missing_current_context() {
     let outside = run_cli_with_env(&["close", "--current"], &env);
     assert!(!outside.status.success());
     assert!(String::from_utf8_lossy(&outside.stderr).contains("current Tab"));
+}
+#[test]
+fn concurrent_command_views_share_completion_and_cancellation() {
+    assert_shared_outcome(false);
+    assert_shared_outcome(true);
+}
+fn assert_shared_outcome(close: bool) {
+    let guard = locked_with_env(&[]);
+    let target = create_tab(&temp_root(), SHELL);
+    #[cfg(windows)]
+    let command = format!(
+        "Write-Output OBSERVER_BEGIN\nStart-Sleep -Seconds {}\nWrite-Output OBSERVER_END",
+        if close { 60_u8 } else { 2_u8 }
+    );
+    #[cfg(unix)]
+    let command = format!(
+        "echo OBSERVER_BEGIN\nsleep {}\necho OBSERVER_END",
+        if close { 60_u8 } else { 2_u8 }
+    );
+    let accepted = send_command(&target.tab_id, &command, 0.0);
+    let command_id = parse_command_id(&accepted);
+    let barrier = Arc::new(Barrier::new(9));
+    let workers: [_; 8] = core::array::from_fn(|_| {
+        let env = guard.env();
+        let id = command_id.clone();
+        let ready = Arc::clone(&barrier);
+        thread::spawn(move || {
+            ready.wait();
+            let output = run_cli_with_env(&["view", &id, "--wait-timeout", "8"], &env);
+            parse_command_result(&output)
+        })
+    });
+    barrier.wait();
+    if close {
+        thread::sleep(Duration::from_millis(250));
+        let closed = run_cli(&["close", "--tab-id", &target.tab_id]);
+        assert!(closed.status.success(), "{closed:?}");
+    }
+    let settled = Instant::now();
+    let results: Vec<_> = workers
+        .into_iter()
+        .map(|worker| worker.join().unwrap())
+        .collect();
+    assert!(settled.elapsed() < Duration::from_secs(5));
+    let cached = parse_command_result(&run_cli(&["view", &command_id]));
+    for result in results {
+        assert!(result.finished);
+        assert_eq!(result.exit_code, cached.exit_code);
+        assert_eq!(result.stdout, cached.stdout);
+        assert_eq!(result.stderr, cached.stderr);
+    }
+    assert!(cached.finished);
+    if close {
+        assert_ne!(cached.exit_code, Some(0_i32));
+        assert!(!parse_tab_view(&run_cli(&["view", &target.tab_id])).alive);
+    } else {
+        assert_eq!(cached.exit_code, Some(0_i32));
+        assert_eq!(
+            cached.stdout.split_whitespace().collect::<Vec<_>>(),
+            ["OBSERVER_BEGIN", "OBSERVER_END"]
+        );
+        let tab = run_cli(&["view", &target.tab_id]);
+        assert!(tab.status.success());
+        assert!(String::from_utf8_lossy(&tab.stdout).contains("<IDLE>\ntrue\n"));
+    }
 }

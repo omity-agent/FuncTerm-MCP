@@ -1,10 +1,10 @@
+use super::endpoint::Connection;
 use crate::runtime::protocol::{Payload, Request, Response};
 use anyhow::{Context as _, Result, bail};
 use core::time::Duration;
-use interprocess::local_socket::prelude::*;
 const IPC_SETUP_TIMEOUT: Duration = Duration::from_secs(15);
 pub(crate) struct DaemonClient {
-    stream: LocalSocketStream,
+    stream: Connection,
 }
 impl core::fmt::Debug for DaemonClient {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -24,9 +24,9 @@ pub(crate) fn call(service_name: &str, request: &Request) -> Result<Payload> {
     let mut stream = crate::runtime::transport::connect(service_name, IPC_SETUP_TIMEOUT)?;
     call_on_stream(&mut stream, request)
 }
-fn call_on_stream(stream: &mut LocalSocketStream, request: &Request) -> Result<Payload> {
-    crate::runtime::transport::write_frame(stream, request)?;
-    let response = crate::runtime::transport::read_frame::<Response>(stream)?;
+fn call_on_stream(stream: &mut Connection, request: &Request) -> Result<Payload> {
+    stream.send(request)?;
+    let response = stream.receive::<Response>()?;
     match response {
         Response::Ok { payload } => Ok(payload),
         Response::Err { message } => bail!(message),

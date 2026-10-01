@@ -162,8 +162,8 @@ fn manual_write_request_round_trip_preserves_input_kind_and_waiting() {
             input,
             wait_timeout: Duration::from_millis(1_250),
         };
-        let serialized = sonic_rs::to_string(&request).unwrap();
-        let restored = sonic_rs::from_str::<Request>(&serialized).unwrap();
+        let serialized = rmp_serde::to_vec(&request).unwrap();
+        let restored = rmp_serde::from_slice::<Request>(&serialized).unwrap();
         assert_eq!(restored, request);
     }
 }

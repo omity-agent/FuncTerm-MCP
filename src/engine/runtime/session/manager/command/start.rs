@@ -52,7 +52,7 @@ impl Tab {
             self.abandon_start(&managed, &session)?;
             return Err(error);
         }
-        if let Err(error) = session.wait_for_command_start(managed.record()) {
+        if let Err(error) = session.wait_for_command_start(&managed) {
             self.abandon_start(&managed, &session)?;
             return Err(error);
         }

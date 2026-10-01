@@ -33,3 +33,4 @@ impl Manager {
         self.tabs.view(id, wait_timeout)
     }
 }
+mod completion;
