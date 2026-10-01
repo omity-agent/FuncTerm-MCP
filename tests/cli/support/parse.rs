@@ -91,7 +91,7 @@ fn inline_element(text: &str, name: &str) -> String {
 }
 fn parse_exit_code(value: &str) -> Option<i32> {
     match value {
-        "pending" => None,
+        "" => None,
         code => Some(code.parse().unwrap()),
     }
 }

@@ -103,7 +103,7 @@ fn command_text(command: &CommandView, command_id: Option<&str>) -> String {
     let presentation = command.presentation(command_id);
     let exit_code = presentation
         .exit_code
-        .map_or_else(|| "pending".to_owned(), |code| code.to_string());
+        .map_or_else(String::new, |code| code.to_string());
     let mut items = Vec::new();
     if let Some(id) = presentation.command_id {
         items.push(element("COMMAND_ID", id));

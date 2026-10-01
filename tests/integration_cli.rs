@@ -110,6 +110,8 @@ mod tests {
         );
         let pending = parse_command_result(&accepted);
         assert!(!pending.finished, "command should wait for manual input");
+        assert_eq!(pending.exit_code, None);
+        assert!(String::from_utf8_lossy(&accepted.stdout).contains("<EXIT_CODE>\n</EXIT_CODE>"));
         let command_id = parse_command_id(&accepted);
         let typed = format!("{marker}\r\n");
         let written = manual_write(&created.tab_id, typed.as_bytes(), 5.0);
@@ -130,6 +132,8 @@ mod tests {
         let completed =
             parse_command_result(&run_cli(&["view", &command_id, "--wait-timeout", "5"]));
         assert!(completed.stdout.contains(marker));
+        assert!(completed.finished);
+        assert_eq!(completed.exit_code, Some(0_i32));
     }
     #[test]
     fn cli_waiting_command_does_not_block_other_requests() {
