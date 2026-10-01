@@ -1,8 +1,12 @@
 use super::template;
 use crate::contract::POWERSHELL_COMMAND_FUNCTION;
 pub(in crate::shell) fn wrapper() -> String {
+    let command_template = COMMAND_TEMPLATE.replace(
+        "@POWERSHELL_COMMAND_ERROR_TRAP@",
+        template::POWERSHELL_COMMAND_ERROR_TRAP,
+    );
     let script = format!(
-        "{}\n{}\n{COMMAND_TEMPLATE}\n{}",
+        "{}\n{}\n{command_template}\n{}",
         super::start::POWERSHELL,
         super::start::POWERSHELL_SHIMS,
         super::template::powershell_dispatcher()
@@ -71,11 +75,13 @@ function @FUNCTION@ {
         $global:LASTEXITCODE = $null
         $@VAR_commandNativeExitCode@ = $null
         $@VAR_commandSucceeded@ = $false
+        $@VAR_commandErrors@ = [Collections.Generic.List[object]]::new()
         $@VAR_existingVariables@ = $null
         $@VAR_existingFunctions@ = $null
         $@VAR_existingAliases@ = $null
         $@VAR_commandTimer@ = $null
         $@VAR_commandScript@ = $null
+        $@VAR_error@ = $null
         $@VAR_variable@ = $null
         $@VAR_function@ = $null
         $@VAR_alias@ = $null
@@ -89,12 +95,18 @@ function @FUNCTION@ {
             $@VAR_existingAliases@[$@VAR_alias@.Name] = $@VAR_alias@.Definition
         }
         $@VAR_commandScript@ = [scriptblock]::Create(
-            [IO.File]::ReadAllText($@VAR_scriptFile@, [Text.Encoding]::UTF8)
+            [IO.File]::ReadAllText($@VAR_scriptFile@, [Text.Encoding]::UTF8) +
+            [Environment]::NewLine +
+            @POWERSHELL_COMMAND_ERROR_TRAP@
         )
         $@VAR_commandTimer@ = [Diagnostics.Stopwatch]::StartNew()
         . $@VAR_commandScript@ 2> $@VAR_stderrFile@ | Tee-Object -FilePath $@VAR_stdoutFile@
         $@VAR_commandSucceeded@ = $?
         $@VAR_commandNativeExitCode@ = $global:LASTEXITCODE
+        foreach ($@VAR_error@ in $@VAR_commandErrors@) {
+            [IO.File]::AppendAllText($@VAR_stderrFile@, [string]$@VAR_error@ + [Environment]::NewLine, [Text.Encoding]::UTF8)
+            [Console]::Error.WriteLine($@VAR_error@)
+        }
         $@VAR_commandTimer@.Stop()
 @POWERSHELL_STATE_PROMOTION@
         $@VAR_timeConsumption@ = [string]::Format(

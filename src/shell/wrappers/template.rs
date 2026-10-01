@@ -141,3 +141,15 @@ pub (super) const POWERSHELL_STATE_PROMOTION : & str = "        foreach ($@VAR_v
                 Set-Alias -Scope Global -Name $@VAR_alias@.Name -Value $@VAR_alias@.Definition
             }
         }" ;
+pub(super) const POWERSHELL_COMMAND_ERROR_TRAP: &str = concat!(
+    "'trap {\n",
+    "    if (\n",
+    "        $_.Exception -is [System.Management.Automation.CommandNotFoundException] -and\n",
+    "        $ErrorActionPreference -ne [System.Management.Automation.ActionPreference]::Stop\n",
+    "    ) {\n",
+    "        $null = $@VAR_commandErrors@.Add($_)\n",
+    "        continue\n",
+    "    }\n",
+    "    break\n",
+    "}'",
+);

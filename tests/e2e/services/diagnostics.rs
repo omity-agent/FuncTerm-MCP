@@ -51,3 +51,29 @@ fn powershell_user_errors_hide_wrapper_details_and_keep_tab_usable() {
     assert!(recovered.stdout.contains("FUNCTERM_AFTER_USER_ERROR"));
     assert!(recovered.stderr.is_empty(), "{}", recovered.stderr);
 }
+#[test]
+fn powershell_continues_after_command_not_found_and_preserves_state() {
+    let _guard = locked();
+    let tab = create_tab(&temp_root(), "powershell");
+    let result = parse_command_result(&send_command(
+        &tab.tab_id,
+        "$ErrorActionPreference = 'Continue'; FuncTermMissingCommand_8d4f; $FuncTermStateAfterError = 'FUNCTERM_STATE_AFTER_ERROR'; Write-Output 'FUNCTERM_AFTER_COMMAND_NOT_FOUND'; Start-Sleep -Milliseconds 25",
+        5.0,
+    ));
+    assert!(result.finished, "command should finish: {}", result.stderr);
+    assert_eq!(result.exit_code, Some(0_i32), "{}", result.stderr);
+    assert!(
+        result.stdout.contains("FUNCTERM_AFTER_COMMAND_NOT_FOUND"),
+        "{}",
+        result.stdout
+    );
+    assert!(result.stderr.contains("FuncTermMissingCommand_8d4f"));
+    assert_ne!(result.time_consumption, "0.00ms");
+    let state = parse_command_result(&send_command(
+        &tab.tab_id,
+        "Write-Output $FuncTermStateAfterError",
+        5.0,
+    ));
+    assert_eq!(state.exit_code, Some(0_i32), "{}", state.stderr);
+    assert!(state.stdout.contains("FUNCTERM_STATE_AFTER_ERROR"));
+}
