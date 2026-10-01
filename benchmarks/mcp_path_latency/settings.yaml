@@ -7,7 +7,7 @@ clients:
 # FuncTerm MCP 服务器启动方式；相对路径以本配置文件所在目录为基准解析。
 server:
   command:
-    windows: "../../target/release/functerm.exe"
+    windows: "../../target/x86_64-pc-windows-msvc/release/functerm.exe"
     unix: "../../target/release/functerm"
   args: ["mcp"]
   cwd: "../.."

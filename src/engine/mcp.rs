@@ -1,16 +1,20 @@
+mod arguments;
+mod batch;
+mod collection;
 mod descriptions;
+mod operations;
 mod output;
-mod types;
-use crate::runtime::client;
 use crate::runtime::config::Settings;
 use anyhow::Result;
+use arguments::{ManualWriteExec, NewTabExec, SendCommandExec, ViewRequest};
+use batch::{ExecBatch, TimedBatch};
+use collection::BatchOutput;
 use rmcp::{
     ServerHandler, ServiceExt as _,
     handler::server::{router::tool::ToolRouter, tool::schema_for_output, wrapper::Parameters},
     model::CallToolResult,
     tool, tool_handler, tool_router,
 };
-use types::{ManualWriteRequest, NewTabRequest, SendCommandRequest, ViewRequest};
 #[derive(Clone, Debug)]
 struct McpServer {
     daemon_service_name: String,
@@ -32,67 +36,48 @@ impl McpServer {
             tool_router,
         })
     }
-    fn call(
-        &self,
-        request: &crate::runtime::protocol::Request,
-    ) -> Result<crate::runtime::protocol::Payload> {
-        client::ensure_daemon(&self.daemon_service_name)?;
-        client::DaemonClient::connect(&self.daemon_service_name)?.call(request)
-    }
-    # [tool (name = "new_tab" , output_schema = schema_for_output ::< output :: NewTabOutput < 'static > > ())]
+    # [tool (name = "new_tab" , output_schema = schema_for_output ::< BatchOutput < output :: NewTabOutput <'static >>> ())]
     async fn new_tab(
         &self,
-        Parameters(request): Parameters<NewTabRequest>,
+        Parameters(request): Parameters<ExecBatch<NewTabExec>>,
     ) -> Result<CallToolResult, String> {
-        let payload = crate::commands::new_tab_payload(
-            |command| self.call(command),
-            request.starting_directory_path(),
-            request.starting_shell,
-        )
-        .map_err(error_text)?;
-        output::new_tab(payload)
+        batch::run(&self.daemon_service_name, request.exec, None).await
     }
-    # [tool (name = "manual_write" , output_schema = schema_for_output ::< output :: ManualWriteOutput < 'static > > ())]
+    # [tool (name = "manual_write" , output_schema = schema_for_output ::< BatchOutput < output :: ManualWriteOutput <'static >>> ())]
     async fn manual_write(
         &self,
-        Parameters(request): Parameters<ManualWriteRequest>,
+        Parameters(request): Parameters<TimedBatch<ManualWriteExec>>,
     ) -> Result<CallToolResult, String> {
-        let (tab_id, input, wait_timeout) = request.into_parts().map_err(error_text)?;
-        let payload = crate::commands::manual_write_payload(
-            |command| self.call(command),
-            tab_id,
-            input,
-            wait_timeout,
+        batch::run(
+            &self.daemon_service_name,
+            request.exec,
+            Some(request.wait_timeout),
         )
-        .map_err(error_text)?;
-        output::manual_write(payload)
+        .await
     }
-    # [tool (name = "send_command" , output_schema = schema_for_output ::< output :: SendCommandOutput < 'static > > ())]
+    # [tool (name = "send_command" , output_schema = schema_for_output ::< BatchOutput < output :: SendCommandOutput <'static >>> ())]
     async fn send_command(
         &self,
-        Parameters(request): Parameters<SendCommandRequest>,
+        Parameters(request): Parameters<TimedBatch<SendCommandExec>>,
     ) -> Result<CallToolResult, String> {
-        let payload = crate::commands::send_command_payload(
-            |command| self.call(command),
-            request.tab_id,
-            request.command,
-            request.wait_timeout,
+        batch::run(
+            &self.daemon_service_name,
+            request.exec,
+            Some(request.wait_timeout),
         )
-        .map_err(error_text)?;
-        output::send_command(payload)
+        .await
     }
-    # [tool (name = "view" , output_schema = schema_for_output ::< output :: ViewOutput < 'static > > ())]
+    # [tool (name = "view" , output_schema = schema_for_output ::< BatchOutput < output :: ViewOutput <'static >>> ())]
     async fn view(
         &self,
         Parameters(request): Parameters<ViewRequest>,
     ) -> Result<CallToolResult, String> {
-        let payload = crate::commands::view_payload(
-            |command| self.call(command),
-            request.id,
-            request.wait_timeout,
+        batch::run(
+            &self.daemon_service_name,
+            request.ids.into_iter().map(operations::LookupId).collect(),
+            Some(request.wait_timeout),
         )
-        .map_err(error_text)?;
-        output::view(payload)
+        .await
     }
 }
 pub(crate) async fn run(settings: Settings) -> Result<()> {

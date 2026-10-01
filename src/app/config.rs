@@ -32,6 +32,8 @@ pub(crate) struct ToolDescription {
     pub(crate) description: String,
     #[serde(default)]
     pub(crate) parameters: BTreeMap<String, String>,
+    #[serde(default)]
+    pub(crate) exec_parameters: BTreeMap<String, String>,
 }
 pub(crate) fn load() -> Result<Settings> {
     let mut settings =

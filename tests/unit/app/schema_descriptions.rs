@@ -1,5 +1,6 @@
 use super::{apply, optional_description};
 use crate::runtime::config::{McpSettings, ToolDescription};
+use alloc::collections::BTreeMap;
 #[test]
 fn empty_description_is_omitted() {
     assert!(optional_description("").is_none());
@@ -10,7 +11,8 @@ fn configured_descriptions_are_applied_to_tools_and_parameters() {
     let descriptions = McpSettings {
         new_tab: ToolDescription {
             description: "tool".to_owned(),
-            parameters: [
+            parameters: core::iter::once(("exec".to_owned(), String::new())).collect(),
+            exec_parameters: [
                 ("starting_directory".to_owned(), "directory".to_owned()),
                 ("starting_shell".to_owned(), String::new()),
             ]
@@ -20,10 +22,15 @@ fn configured_descriptions_are_applied_to_tools_and_parameters() {
         manual_write: ToolDescription {
             description: String::new(),
             parameters: [
+                ("exec".to_owned(), String::new()),
+                ("wait_timeout".to_owned(), String::new()),
+            ]
+            .into_iter()
+            .collect(),
+            exec_parameters: [
                 ("tab_id".to_owned(), String::new()),
                 ("text".to_owned(), String::new()),
                 ("bytes".to_owned(), String::new()),
-                ("wait_timeout".to_owned(), String::new()),
             ]
             .into_iter()
             .collect(),
@@ -31,9 +38,14 @@ fn configured_descriptions_are_applied_to_tools_and_parameters() {
         send_command: ToolDescription {
             description: String::new(),
             parameters: [
+                ("exec".to_owned(), String::new()),
+                ("wait_timeout".to_owned(), String::new()),
+            ]
+            .into_iter()
+            .collect(),
+            exec_parameters: [
                 ("tab_id".to_owned(), String::new()),
                 ("command".to_owned(), String::new()),
-                ("wait_timeout".to_owned(), String::new()),
             ]
             .into_iter()
             .collect(),
@@ -41,11 +53,12 @@ fn configured_descriptions_are_applied_to_tools_and_parameters() {
         view: ToolDescription {
             description: String::new(),
             parameters: [
-                ("id".to_owned(), String::new()),
+                ("ids".to_owned(), String::new()),
                 ("wait_timeout".to_owned(), String::new()),
             ]
             .into_iter()
             .collect(),
+            exec_parameters: BTreeMap::new(),
         },
     };
     if let Err(error) = apply(&mut router, &descriptions) {
@@ -59,6 +72,7 @@ fn configured_descriptions_are_applied_to_tools_and_parameters() {
     let properties = new_tab
         .input_schema
         .get("properties")
+        .and_then(|schema| schema.pointer("/exec/items/properties"))
         .and_then(rmcp::serde_json::Value::as_object)
         .unwrap_or_else(|| panic!("new_tab input schema should have properties"));
     let starting_directory = properties

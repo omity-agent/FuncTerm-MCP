@@ -190,3 +190,6 @@ mod tests {
         assert!(viewed.stdout.contains("MCP_PTY_VIEW_WAIT_DONE"));
     }
 }
+#[path = "mcp/gateway.rs"]
+#[cfg(test)]
+mod mcp;
