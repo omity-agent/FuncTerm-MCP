@@ -2,16 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
-from functerm_mcp_path_latency.config import (
-    BenchConfig,
-    ClientProfileConfig,
-    ServerConfig,
-    StepConfig,
-)
+from functerm_mcp_path_latency.config import BenchConfig, ClientProfileConfig, StepConfig
 from functerm_mcp_path_latency.extraction import extract_tag
 from functerm_mcp_path_latency.mcp_session import open_mcp_session, tool_result_text
 from functerm_mcp_path_latency.result import BenchmarkResult, ClientResult, StepEvent
@@ -20,9 +15,6 @@ from functerm_mcp_path_latency.template import render_value
 
 class ToolSession(Protocol):
     def call_tool(self, name: str, arguments: dict[str, Any]) -> Awaitable[object]: ...
-
-
-SessionFactory = Callable[[ServerConfig, bool], Any]
 
 
 async def run_benchmark(config: BenchConfig) -> BenchmarkResult:
@@ -52,10 +44,10 @@ async def run_client(config_index: int, config: BenchConfig) -> ClientResult:
         ) as session:
             for loop_index in range(config.clients.loop_count):
                 for profile in profile_order:
-                    profile_events = await run_profile(
+                    async for event in run_profile(
                         config_index, loop_index, profile, session, base_variables
-                    )
-                    events.extend(profile_events)
+                    ):
+                        events.append(event)
         return ClientResult(
             config_index,
             [profile.name for profile in profile_order],
@@ -79,7 +71,7 @@ async def run_profile(
     profile: ClientProfileConfig,
     session: ToolSession,
     base_variables: dict[str, str],
-) -> list[StepEvent]:
+) -> AsyncIterator[StepEvent]:
     variables = {
         **profile.variables,
         **base_variables,
@@ -87,14 +79,12 @@ async def run_profile(
         "loop.number": str(loop_index + 1),
         "profile.name": profile.name,
     }
-    events: list[StepEvent] = []
     for step in profile.scenario:
         event, captures = await run_step(
             client_index, loop_index, profile.name, step, session, variables
         )
         variables.update(captures)
-        events.append(event)
-    return events
+        yield event
 
 
 async def run_step(

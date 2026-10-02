@@ -1,4 +1,4 @@
-use super::template;
+use super::super::{VariableNamespace, start, template, variables};
 use crate::contract::POWERSHELL_COMMAND_FUNCTION;
 pub(in crate::shell) fn wrapper() -> String {
     let command_template = COMMAND_TEMPLATE.replace(
@@ -7,17 +7,17 @@ pub(in crate::shell) fn wrapper() -> String {
     );
     let script = format!(
         "{}\n{}\n{command_template}\n{}",
-        super::start::POWERSHELL,
-        super::start::POWERSHELL_SHIMS,
-        super::template::powershell_dispatcher()
+        start::POWERSHELL,
+        start::POWERSHELL_SHIMS,
+        template::powershell_dispatcher()
     );
     let rendered = template::render_command_function(&script, POWERSHELL_COMMAND_FUNCTION);
     let protected = rendered.replace(
         "@POWERSHELL_PROTECTED_ENVIRONMENT@",
-        &super::variables::powershell_protected_environment_names(),
+        &variables::powershell_protected_environment_names(),
     );
     let wrapper = template::render_powershell(&protected);
-    super::VariableNamespace::new().render_powershell(&wrapper)
+    VariableNamespace::new().render_powershell(&wrapper)
 }
 const COMMAND_TEMPLATE : & str = "& {
     if (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue) {
@@ -45,7 +45,6 @@ function @FUNCTION@ {
     $@VAR_stdoutFile@ = Join-Path $@VAR_outputDir@ '@STDOUT@'
     $@VAR_stderrFile@ = Join-Path $@VAR_outputDir@ '@STDERR@'
     $@VAR_scriptFile@ = Join-Path $@VAR_inputDir@ '@SCRIPT@'
-    $@VAR_doneFile@ = Join-Path $@VAR_stateDir@ '@DONE@'
     $@VAR_previousCommandId@ = $env:@COMMAND_ID_ENV@
     $@VAR_previousCommandDirectory@ = $env:@COMMAND_DIR_ENV@
     $@VAR_protectedEnvironment@ = [Collections.Generic.Dictionary[string, string]]::new(
@@ -130,32 +129,30 @@ function @FUNCTION@ {
             }
         }
         Set-FuncTermShimPath
-        if (-not [IO.File]::Exists($@VAR_doneFile@)) {
-            $null = [IO.Directory]::CreateDirectory($@VAR_stateDir@)
-            if ([string]::IsNullOrEmpty($env:@HELPER_ENV@)) {
-                [Console]::Error.WriteLine('@HELPER_ENV@ is not set')
-                $@VAR_exitCode@ = 1
-            }
-            else {
-                $@VAR_currentDirectory@ = $ExecutionContext.SessionState.Path.CurrentFileSystemLocation.ProviderPath
-                $@VAR_helperStart@ = [Diagnostics.ProcessStartInfo]::new($env:@HELPER_ENV@)
-                $@VAR_helperStart@.UseShellExecute = $false
-                $@VAR_helperStart@.ArgumentList.Add('internal-write-done')
-                $@VAR_helperStart@.ArgumentList.Add('--command-id')
-                $@VAR_helperStart@.ArgumentList.Add($@VAR_CommandId@)
-                $@VAR_helperStart@.ArgumentList.Add('--exit-code')
-                $@VAR_helperStart@.ArgumentList.Add([string]$@VAR_exitCode@)
-                $@VAR_helperStart@.ArgumentList.Add('--time-consumption')
-                $@VAR_helperStart@.ArgumentList.Add($@VAR_timeConsumption@)
-                $@VAR_helperStart@.ArgumentList.Add('--cwd')
-                $@VAR_helperStart@.ArgumentList.Add($@VAR_currentDirectory@)
-                $@VAR_helperStart@.ArgumentList.Add('--directory')
-                $@VAR_helperStart@.ArgumentList.Add($@VAR_Directory@)
-                $@VAR_helperProcess@ = [Diagnostics.Process]::Start($@VAR_helperStart@)
-                $@VAR_helperProcess@.WaitForExit()
-                if ($@VAR_helperProcess@.ExitCode -ne 0) {
-                    $@VAR_exitCode@ = $@VAR_helperProcess@.ExitCode
-                }
+        $null = [IO.Directory]::CreateDirectory($@VAR_stateDir@)
+        if ([string]::IsNullOrEmpty($env:@HELPER_ENV@)) {
+            [Console]::Error.WriteLine('@HELPER_ENV@ is not set')
+            $@VAR_exitCode@ = 1
+        }
+        else {
+            $@VAR_currentDirectory@ = $ExecutionContext.SessionState.Path.CurrentFileSystemLocation.ProviderPath
+            $@VAR_helperStart@ = [Diagnostics.ProcessStartInfo]::new($env:@HELPER_ENV@)
+            $@VAR_helperStart@.UseShellExecute = $false
+            $@VAR_helperStart@.ArgumentList.Add('internal-write-done')
+            $@VAR_helperStart@.ArgumentList.Add('--command-id')
+            $@VAR_helperStart@.ArgumentList.Add($@VAR_CommandId@)
+            $@VAR_helperStart@.ArgumentList.Add('--exit-code')
+            $@VAR_helperStart@.ArgumentList.Add([string]$@VAR_exitCode@)
+            $@VAR_helperStart@.ArgumentList.Add('--time-consumption')
+            $@VAR_helperStart@.ArgumentList.Add($@VAR_timeConsumption@)
+            $@VAR_helperStart@.ArgumentList.Add('--cwd')
+            $@VAR_helperStart@.ArgumentList.Add($@VAR_currentDirectory@)
+            $@VAR_helperStart@.ArgumentList.Add('--directory')
+            $@VAR_helperStart@.ArgumentList.Add($@VAR_Directory@)
+            $@VAR_helperProcess@ = [Diagnostics.Process]::Start($@VAR_helperStart@)
+            $@VAR_helperProcess@.WaitForExit()
+            if ($@VAR_helperProcess@.ExitCode -ne 0) {
+                $@VAR_exitCode@ = $@VAR_helperProcess@.ExitCode
             }
         }
         if ($null -eq $@VAR_previousCommandId@) {

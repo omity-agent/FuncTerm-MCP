@@ -1,14 +1,14 @@
-use super::template;
+use super::super::{VariableNamespace, template, variables};
 pub(in crate::shell) fn wrapper() -> String {
     let protected = TEMPLATE.replace(
         "@CMD_PROTECTED_ENVIRONMENT_RESTORE@",
-        &super::variables::cmd_environment_restore(),
+        &variables::cmd_environment_restore(),
     );
     let captured = protected.replace(
         "@CMD_PROTECTED_ENVIRONMENT_CAPTURE@",
-        &super::variables::cmd_environment_capture(),
+        &variables::cmd_environment_capture(),
     );
-    super::VariableNamespace::new()
+    VariableNamespace::new()
         .render(&template::render_script(&captured))
         .replace('\n', "\r\n")
 }
@@ -26,7 +26,6 @@ if not exist "%@VAR_state_dir@%" mkdir "%@VAR_state_dir@%" || exit /b 1
 set "@VAR_stdout_file@=%@VAR_output_dir@%\@STDOUT@"
 set "@VAR_stderr_file@=%@VAR_output_dir@%\@STDERR@"
 set "@VAR_script_file@=%@VAR_input_dir@%\@SCRIPT@"
-set "@VAR_done_file@=%@VAR_state_dir@%\@DONE@"
 set "@VAR_time_consumption@=0ns"
 set "@VAR_had_previous_command_id@="
 set "@VAR_had_previous_command_directory@="
@@ -67,7 +66,12 @@ call :command_time_millis
 set "@VAR_command_started_at@=%ERRORLEVEL%"
 set > "%~dp0@VAR_environment_before_file@.txt"
 "%FUNCTERM_REAL_CMD%" /D /Q /V:OFF /S /C ""%~f0" --capture "%~2"" > "%~2\@OUTPUT_DIR@\@STDOUT@" 2> "%~2\@OUTPUT_DIR@\@STDERR@"
-if not exist "%~dp0@VAR_exit_code_file@.txt" exit %ERRORLEVEL%
+set "@VAR_exit_code@=%ERRORLEVEL%"
+set "@VAR_worker_exited@="
+if not exist "%~dp0@VAR_exit_code_file@.txt" (
+    set "@VAR_worker_exited@=1"
+    goto publish_result
+)
 if not exist "%~dp0@VAR_cwd_after_file@.txt" (
     echo CMD worker did not publish its working directory 1>&2
     exit 1
@@ -84,6 +88,7 @@ set /p "@VAR_exit_code@="<"%~dp0@VAR_exit_code_file@.txt"
 set /p "@VAR_current_directory@="<"%~dp0@VAR_cwd_after_file@.txt"
 del /q "%~dp0@VAR_environment_before_file@.txt" "%~dp0@VAR_environment_after_file@.txt" "%~dp0@VAR_protected_environment_file@.txt" "%~dp0@VAR_exit_code_file@.txt" "%~dp0@VAR_cwd_after_file@.txt"
 cd /d "%@VAR_current_directory@%"
+:publish_result
 call :command_time_millis
 set /a @VAR_command_elapsed@=%ERRORLEVEL% - @VAR_command_started_at@
 if %@VAR_command_elapsed@% LSS 0 set /a @VAR_command_elapsed@+=86400000
@@ -97,6 +102,7 @@ if errorlevel 1 (
     exit /b 1
 )
 call :restore_command_environment
+if defined @VAR_worker_exited@ exit %@VAR_exit_code@%
 exit /b %@VAR_exit_code@%
 :capture_user_state
 call "%~2\@INPUT_DIR@\@SCRIPT@"
@@ -106,7 +112,7 @@ set > "%~dp0@VAR_environment_after_file@.txt" 2> nul
 exit /b 0
 :prepend_functerm_paths
 if "%FUNCTERM_SHIM_DIR%"=="" exit /b 0
-set "@VAR_startup_path@=%FUNCTERM_SESSION_ROOT%\startup"
+set "@VAR_startup_path@=%~dp0"
 set "@VAR_new_path@=%FUNCTERM_SHIM_DIR%;%@VAR_startup_path@%"
 set "@VAR_remaining_path@=%PATH%"
 :prepend_functerm_path_entry
@@ -120,7 +126,6 @@ goto prepend_functerm_path_entry
 set "PATH=%@VAR_new_path@%"
 exit /b 0
 :publish_done
-if exist "%@VAR_done_file@%" exit /b 0
 if "%@HELPER_ENV@%"=="" (
     echo @HELPER_ENV@ is not set 1>&2
     exit /b 1

@@ -14,6 +14,7 @@ pub(crate) const EARLY_DONE_DIRECTORY: &str = ".early-done";
 pub(crate) const HELPER_EXECUTABLE_ENV: &str = "FUNCTERM_HELPER_EXECUTABLE";
 pub(crate) const POWERSHELL_COMMAND_FUNCTION: &str = "Invoke-FuncTermCommand";
 pub(crate) const POSIX_COMMAND_FUNCTION: &str = "functerm_run_command";
+pub(crate) const RELEASED_FILE: &str = "released";
 pub(crate) const SESSION_COMMANDS_DIRECTORY: &str = "commands";
 pub(crate) const SESSION_STATE_DIRECTORY: &str = "state";
 pub(crate) const STDERR_FILE: &str = "stderr.txt";

@@ -67,4 +67,5 @@ fn mcp_manual_write_delivers_text_and_bytes_to_distinct_tabs() {
             "{completed}"
         );
     }
+    drop(session);
 }

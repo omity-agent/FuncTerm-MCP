@@ -5,7 +5,7 @@ use crate::runtime::session::observation::PathWatch;
 use crate::runtime::session::records::CommandRecord;
 use crate::runtime::session::terminal::CommandTitle;
 use alloc::sync::Arc;
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use core::time::Duration;
 use parking_lot::Mutex;
 use std::time::Instant;
@@ -83,7 +83,12 @@ impl ManagedCommand {
             .watch
             .wait(limit, || {
                 Ok(!matches!(self.state.lock().wait, CommandWait::Running)
-                    || self.record.done.try_exists()?)
+                    || self.record.done.try_exists().with_context(|| {
+                        format!(
+                            "failed to inspect command completion {}",
+                            self.record.done.display()
+                        )
+                    })?)
             })
             .await;
         let current = self.state.lock().wait;
@@ -106,13 +111,36 @@ impl ManagedCommand {
         self.watch
             .wait(limit, || {
                 Ok(!matches!(self.state.lock().wait, CommandWait::Running)
-                    || self.record.started.try_exists()?
-                    || self.record.done.try_exists()?)
+                    || self.record.started.try_exists().with_context(|| {
+                        format!(
+                            "failed to inspect command start {}",
+                            self.record.started.display()
+                        )
+                    })?
+                    || self.record.done.try_exists().with_context(|| {
+                        format!(
+                            "failed to inspect command completion {}",
+                            self.record.done.display()
+                        )
+                    })?)
             })
             .await
     }
     pub(super) fn wake(&self) {
         self.watch.wake();
+    }
+    pub(super) async fn wait_released(&self) -> Result<()> {
+        self.watch
+            .wait(Duration::MAX, || {
+                self.record.released.try_exists().with_context(|| {
+                    format!(
+                        "failed to inspect command release {}",
+                        self.record.released.display()
+                    )
+                })
+            })
+            .await?;
+        Ok(())
     }
     pub(super) fn time_consumption(&self) -> Duration {
         self.started_at.elapsed()

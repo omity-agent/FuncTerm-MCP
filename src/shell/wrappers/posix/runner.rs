@@ -2,7 +2,7 @@ use super::super::{start, variables};
 use super::PosixDialect;
 use crate::contract::{
     COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, COMMAND_INPUT_DIRECTORY,
-    COMMAND_OUTPUT_DIRECTORY, COMMAND_STATE_DIRECTORY, DONE_FILE, HELPER_EXECUTABLE_ENV,
+    COMMAND_OUTPUT_DIRECTORY, COMMAND_STATE_DIRECTORY, HELPER_EXECUTABLE_ENV,
     POSIX_COMMAND_FUNCTION, STDERR_FILE, STDOUT_FILE,
 };
 pub(super) fn command_function(dialect: PosixDialect) -> String {
@@ -21,7 +21,6 @@ pub(super) fn command_function(dialect: PosixDialect) -> String {
 	    local @VAR_stdout_file@="$@VAR_output_dir@/{stdout}"
 	    local @VAR_stderr_file@="$@VAR_output_dir@/{stderr}"
 	    local @VAR_command_file@="$@VAR_input_dir@/{command_file}"
-	    local @VAR_done_file@="$@VAR_state_dir@/{done}"
 	    local @VAR_previous_command_id@="${{{command_id_env}-}}"
 	    local @VAR_previous_command_directory@="${{{command_dir_env}-}}"
 	{previous_flags}
@@ -121,9 +120,6 @@ functerm_publish_done() {{
 	    local @VAR_cwd@="$4"
 	    local @VAR_native_directory@="$5"
 	    local @VAR_helper@="${{{helper_env}-}}"
-	    if [ -e "$@VAR_done_file@" ]; then
-	        return 0
-	    fi
 	    if [ -z "$@VAR_helper@" ]; then
 	        printf '%s is not set\n' "{helper_env}" >&2
 	        return 1
@@ -168,7 +164,6 @@ functerm_ensure_shims() {{
         stdout = STDOUT_FILE,
         stderr = STDERR_FILE,
         command_file = COMMAND_FILE,
-        done = DONE_FILE,
         helper_env = HELPER_EXECUTABLE_ENV,
         command_id_env = COMMAND_ID_ENV,
         command_dir_env = COMMAND_DIRECTORY_ENV,

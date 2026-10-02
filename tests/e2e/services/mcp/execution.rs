@@ -94,6 +94,7 @@ fn mcp_batch_preserves_order_and_isolates_errors() {
             .unwrap()
             .contains("either text or bytes")
     );
+    drop(session);
 }
 #[test]
 fn mcp_wait_budget_is_shared_and_timeout_does_not_cancel_commands() {
@@ -135,4 +136,5 @@ fn mcp_wait_budget_is_shared_and_timeout_does_not_cancel_commands() {
                 .contains("BATCH_FINISHED")
         );
     }
+    drop(session);
 }

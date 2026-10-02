@@ -68,6 +68,7 @@ fn mcp_view_accepts_mixed_ids_and_preserves_order_and_errors() {
             .unwrap()
             .contains("unknown id missing")
     );
+    drop(session);
 }
 #[test]
 fn mcp_many_waiters_share_completion_without_exhausting_blocking_operations() {
@@ -108,4 +109,5 @@ fn mcp_many_waiters_share_completion_without_exhausting_blocking_operations() {
             "{result}"
         );
     }
+    drop(session);
 }

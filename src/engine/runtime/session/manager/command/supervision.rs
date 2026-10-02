@@ -1,5 +1,6 @@
 use super::super::{shell_session::ShellSession, tab::Tab};
 use super::{CommandWait, ManagedCommand};
+use crate::runtime::session::records::remove_record_directory;
 use alloc::sync::Arc;
 use anyhow::Result;
 use core::time::Duration;
@@ -34,6 +35,7 @@ impl Tab {
     ) {
         let tab = Arc::clone(self);
         tokio::spawn(async move {
+            let session = Arc::clone(&reservation.session);
             let result = async { let observed = tokio :: select ! { completion = command . wait (Duration :: MAX) => completion ?, exited = reservation . session . wait_for_exit () => { exited ?; command . wait (Duration :: ZERO) . await ? } } ; match observed { CommandWait :: Finished => tab . finish_done_command (& command) . await , CommandWait :: Running => { tab . fail_command (& command , "shell exited before command wrote done.json" . to_owned ()) . await ? ; let closed_tab = Arc :: clone (& tab) ; let stopped_session = Arc :: clone (& reservation . session) ; tab . blocking . run (move | | closed_tab . close_session (& stopped_session)) . await } CommandWait :: Failed => Ok (()) , } } . await ;
             if let Err(error) = result {
                 tracing :: error ! (command_id = % command . id () , error = % error , "command supervision failed");
@@ -54,7 +56,20 @@ impl Tab {
             {
                 tracing :: error ! (command_id = % command . id () , error = % error , "failed to release shell reservation");
             }
+            let command_id = command.id().to_owned();
+            if let Err(error) = tab.cleanup_command_record(command, session).await {
+                tracing :: error ! (% command_id , error = % error , "failed to clean command record");
+            }
         });
+    }
+    async fn cleanup_command_record(
+        &self,
+        command: Arc<ManagedCommand>,
+        session: Arc<ShellSession>,
+    ) -> Result<()> {
+        tracing :: debug ! (command_id = % command . id () , "waiting for command resources to be released");
+        tokio::select! { released = command . wait_released () => released ?, exited = session . wait_for_exit () => exited ?, }
+        self . blocking . run (move | | { let result = remove_record_directory (command . record ()) ; tracing :: debug ! (command_id = % command . id () , removed = result . is_ok () , "command record cleanup completed") ; drop (session) ; result }) . await
     }
     pub(in crate::engine::runtime::session::manager) async fn fail_command(
         self: &Arc<Self>,

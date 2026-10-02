@@ -31,6 +31,7 @@ async fn ipc_preserves_fragmented_and_pipelined_frames() {
     for _ in 0_usize..4 {
         assert_pong(&mut stream).await;
     }
+    drop(guard);
 }
 #[tokio::test]
 async fn incomplete_and_oversized_ipc_frames_do_not_block_other_clients() {
@@ -55,6 +56,7 @@ async fn incomplete_and_oversized_ipc_frames_do_not_block_other_clients() {
         .unwrap();
     healthy.write_all(&body).await.unwrap();
     assert_pong(&mut healthy).await;
+    drop(guard);
 }
 async fn connect(guard: &TestGuard) -> LocalSocketStream {
     let environment = guard.env();

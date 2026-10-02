@@ -52,12 +52,19 @@ fn write_start_to(command_id: &str, directory: &Path, output: &mut impl Write) -
 pub(crate) fn write_done(done: &DoneOutput<'_>, directory: &Path) -> Result<()> {
     let guard = early_done_guard(done.command_id, directory)?;
     match fs_err::remove_file(guard) {
-        Ok(()) => return Ok(()),
+        Ok(()) => return write_released(directory),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(error) => return Err(error).context("failed to consume early completion guard"),
     }
     let mut terminal = crate::shim::terminal_output()?;
-    write_done_to(done, directory, &mut terminal)
+    write_done_to(done, directory, &mut terminal)?;
+    write_released(directory)
+}
+fn write_released(directory: &Path) -> Result<()> {
+    let path = directory
+        .join(crate::contract::COMMAND_STATE_DIRECTORY)
+        .join(crate::contract::RELEASED_FILE);
+    crate::publication::write_once(&path, b"").context("failed to publish command release file")
 }
 pub(crate) fn write_done_to(
     done: &DoneOutput<'_>,

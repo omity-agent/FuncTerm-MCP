@@ -1,7 +1,8 @@
 use crate::contract::{
     COMMAND_FILE, COMMAND_INPUT_DIRECTORY, COMMAND_OUTPUT_DIRECTORY,
     COMMAND_POWERSHELL_SCRIPT_FILE, COMMAND_SCRIPT_FILE, COMMAND_STATE_DIRECTORY,
-    COMMAND_WORKING_DIRECTORY_FILE, DONE_FILE, STARTED_FILE, STDERR_FILE, STDOUT_FILE,
+    COMMAND_WORKING_DIRECTORY_FILE, DONE_FILE, RELEASED_FILE, STARTED_FILE, STDERR_FILE,
+    STDOUT_FILE,
 };
 use crate::runtime::protocol::{CommandSnapshot, CommandView};
 use crate::shell::ShellChoice;
@@ -20,6 +21,7 @@ pub(super) struct CommandRecord {
     pub(super) powershell_script: PathBuf,
     pub(super) started: PathBuf,
     pub(super) done: PathBuf,
+    pub(super) released: PathBuf,
 }
 #[derive(Deserialize)]
 pub(super) struct DoneFile {
@@ -53,6 +55,7 @@ pub(super) fn create_record(
         powershell_script: input_dir.join(COMMAND_POWERSHELL_SCRIPT_FILE),
         started: state_dir.join(STARTED_FILE),
         done: state_dir.join(DONE_FILE),
+        released: state_dir.join(RELEASED_FILE),
     })
 }
 impl CommandRecord {
@@ -94,17 +97,6 @@ pub(super) fn read_command_result(
         },
         note,
     })
-}
-pub(super) fn read_and_clear_command_result(
-    record: &CommandRecord,
-    time_consumption: Duration,
-    title: String,
-) -> Result<CommandSnapshot> {
-    let result = read_command_result(record, time_consumption, title)?;
-    if let Err(error) = remove_record_directory(record) {
-        eprintln!("{error:#}");
-    }
-    Ok(result)
 }
 pub(super) fn remove_record_directory(record: &CommandRecord) -> Result<()> {
     match fs::remove_dir_all(&record.directory) {

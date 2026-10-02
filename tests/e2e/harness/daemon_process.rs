@@ -1,3 +1,4 @@
+use super::capacity::DaemonPermit;
 use super::command::{CLI_COMMAND_TIMEOUT, exe};
 use super::process::ChildGuard;
 use super::temp;
@@ -6,57 +7,16 @@ use core::sync::atomic::{AtomicU64, Ordering};
 use core::time::Duration;
 use std::io::BufRead as _;
 use std::process::{Command, Stdio};
-use std::sync::{Condvar, Mutex};
 use std::thread;
-const MAX_PARALLEL_DAEMONS: usize = 2;
 static SERVICE_COUNTER: AtomicU64 = AtomicU64::new(0);
-static DAEMON_SLOTS: Mutex<SlotState> = Mutex::new(SlotState { active: 0 });
-static DAEMON_SLOT_AVAILABLE: Condvar = Condvar::new();
 thread_local! { static ACTIVE_CLI_ENV : RefCell < Vec < (String , String) >> = const { RefCell :: new (Vec :: new ()) } ; }
 pub(crate) struct TestGuard {
     daemon: ChildGuard,
     env: Vec<(String, String)>,
     service_name: String,
-    _slot: DaemonSlot,
-}
-struct DaemonSlot;
-struct SlotState {
-    active: usize,
-}
-impl DaemonSlot {
-    fn acquire() -> Self {
-        let mut active = DAEMON_SLOTS
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        while active.active >= MAX_PARALLEL_DAEMONS {
-            active = DAEMON_SLOT_AVAILABLE
-                .wait(active)
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-        }
-        if active.active == 0 {
-            reset_runtime_directory().unwrap_or_else(|error| {
-                panic!("failed to reset FuncTerm test runtime before tests: {error}")
-            });
-        }
-        active.active += 1;
-        Self
-    }
-}
-impl Drop for DaemonSlot {
-    fn drop(&mut self) {
-        {
-            let mut active = DAEMON_SLOTS
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            active.active -= 1;
-            if active.active == 0
-                && let Err(error) = clear_runtime_directory()
-            {
-                eprintln!("failed to clear FuncTerm test runtime after tests: {error}");
-            }
-        }
-        DAEMON_SLOT_AVAILABLE.notify_one();
-    }
+    previous_env: Vec<(String, String)>,
+    _runtime: temp::TestRuntime,
+    _permit: DaemonPermit,
 }
 impl TestGuard {
     pub(crate) fn env(&self) -> Vec<(String, String)> {
@@ -73,7 +33,7 @@ impl TestGuard {
 }
 impl Drop for TestGuard {
     fn drop(&mut self) {
-        ACTIVE_CLI_ENV.with(|env| env.borrow_mut().clear());
+        set_active_env(&self.previous_env);
     }
 }
 #[cfg(windows)]
@@ -81,7 +41,8 @@ pub(crate) fn locked() -> TestGuard {
     locked_with_env(&[])
 }
 pub(crate) fn locked_with_env(extra_env: &[(&str, &str)]) -> TestGuard {
-    let slot = DaemonSlot::acquire();
+    let permit = DaemonPermit::acquire();
+    let runtime = temp::TestRuntime::new();
     let service_name = unique_service_name();
     let mut env = vec![(
         "FUNCTERM_DAEMON_SERVICE_NAME".to_owned(),
@@ -92,14 +53,17 @@ pub(crate) fn locked_with_env(extra_env: &[(&str, &str)]) -> TestGuard {
         let value = pair.1.to_owned();
         (key, value)
     }));
-    env.extend(temp_environment());
-    set_active_env(&env);
+    env.extend(runtime.environment());
     let child = spawn_daemon(&env, &service_name);
+    let previous_env = active_env();
+    set_active_env(&env);
     TestGuard {
         daemon: child,
         env,
         service_name,
-        _slot: slot,
+        previous_env,
+        _runtime: runtime,
+        _permit: permit,
     }
 }
 pub(crate) fn apply_active_env(command: &mut Command) {
@@ -115,33 +79,6 @@ fn unique_service_name() -> String {
     let unique = SERVICE_COUNTER.fetch_add(1, Ordering::Relaxed);
     format!("functerm/test/{}/{}", unique, std::process::id())
 }
-fn temp_environment() -> Vec<(String, String)> {
-    let text = temp::temp_root().to_string_lossy().into_owned();
-    platform_temp_environment(text)
-}
-fn reset_runtime_directory() -> std::io::Result<()> {
-    let root = temp::temp_root().join(temp::FUNCTERM_DIRECTORY);
-    remove_directory_if_present(&root)?;
-    std::fs::create_dir_all(root)
-}
-fn clear_runtime_directory() -> std::io::Result<()> {
-    remove_directory_if_present(&temp::temp_root().join(temp::FUNCTERM_DIRECTORY))
-}
-fn remove_directory_if_present(path: &std::path::Path) -> std::io::Result<()> {
-    match std::fs::remove_dir_all(path) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error),
-    }
-}
-#[cfg(windows)]
-fn platform_temp_environment(text: String) -> Vec<(String, String)> {
-    vec![("TMP".to_owned(), text.clone()), ("TEMP".to_owned(), text)]
-}
-#[cfg(not(windows))]
-fn platform_temp_environment(text: String) -> Vec<(String, String)> {
-    vec![("TMPDIR".to_owned(), text)]
-}
 fn spawn_daemon(env: &[(String, String)], service_name: &str) -> ChildGuard {
     let mut command = Command::new(exe());
     command
@@ -152,9 +89,9 @@ fn spawn_daemon(env: &[(String, String)], service_name: &str) -> ChildGuard {
     apply_daemon_flags(&mut command);
     super::test_environment::apply(&mut command, env);
     command.env("FUNCTERM_DAEMON_READY_STDOUT", "1");
-    let mut child = command.spawn().unwrap();
-    wait_for_daemon(&mut child, service_name);
-    ChildGuard::new(child)
+    let mut child = ChildGuard::new(command.spawn().unwrap());
+    wait_for_daemon(child.child_mut(), service_name);
+    child
 }
 fn wait_for_daemon(child: &mut std::process::Child, service_name: &str) {
     let stdout = child.stdout.take().unwrap();

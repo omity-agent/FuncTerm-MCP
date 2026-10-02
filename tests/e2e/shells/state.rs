@@ -18,6 +18,23 @@ fn cli_preserves_shell_state_between_commands() {
             definition.stdout,
             definition.stderr
         );
+        if case.name == "nu" {
+            let record = crate::support::command_directory(&created.tab_id, "probe");
+            let declarations = record
+                .parent()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .join("state")
+                .join("nushell-declarations.nu");
+            let archived = fs_err::read_to_string(declarations).unwrap();
+            assert!(archived.contains("def functerm-state"));
+            assert!(archived.contains("alias functerm-alias"));
+            assert!(
+                !archived.contains("def exit "),
+                "framework exit controls were archived as user declarations"
+            );
+        }
         let query = parse_command_result(&send_command(
             &created.tab_id,
             query_command(case.name),
@@ -26,10 +43,12 @@ fn cli_preserves_shell_state_between_commands() {
         assert_eq!(
             query.exit_code,
             Some(0_i32),
-            "{} state query failed: stdout: {}\nstderr: {}",
+            "{} state query failed: stdout: {}\nstderr: {}\ndefinition stdout: {}\ndefinition stderr: {}",
             case.name,
             query.stdout,
-            query.stderr
+            query.stderr,
+            definition.stdout,
+            definition.stderr
         );
         for marker in expected_markers(case.name) {
             assert!(

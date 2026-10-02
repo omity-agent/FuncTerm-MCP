@@ -30,7 +30,7 @@ pub(super) fn interactive_arguments(arguments: &[std::ffi::OsString]) -> bool {
 }
 fn initialization_script(context: StartupContext<'_>) -> Result<String> {
     Ok(format!(
-        "@echo off\r\nset {CURRENT_SHELL_ENV}=cmd\r\nset \"PATH=%FUNCTERM_SESSION_ROOT%\\startup;%PATH%\"\r\ndoskey /listsize=0 >nul 2>nul\r\ncd /d {}\r\ntype nul > {}\r\n",
+        "@echo off\r\nset {CURRENT_SHELL_ENV}=cmd\r\nset \"PATH=%~dp0;%PATH%\"\r\ndoskey /listsize=0 >nul 2>nul\r\ncd /d {}\r\ntype nul > {}\r\n",
         quote::cmd_string(&quote::native_path(context.cwd)?),
         quote::cmd_string(&quote::native_path(context.ready_file)?)
     ))

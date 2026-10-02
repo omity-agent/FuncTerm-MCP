@@ -1,9 +1,8 @@
 use super::StartupContext;
 use crate::contract::{
     COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, COMMAND_INPUT_DIRECTORY,
-    COMMAND_OUTPUT_DIRECTORY, COMMAND_WORKING_DIRECTORY_FILE, DISPATCH_FILE, DONE_FILE,
-    HELPER_EXECUTABLE_ENV, SESSION_COMMANDS_DIRECTORY, SESSION_STATE_DIRECTORY, STDERR_FILE,
-    STDOUT_FILE,
+    COMMAND_OUTPUT_DIRECTORY, COMMAND_WORKING_DIRECTORY_FILE, DISPATCH_FILE, HELPER_EXECUTABLE_ENV,
+    SESSION_COMMANDS_DIRECTORY, SESSION_STATE_DIRECTORY, STDERR_FILE, STDOUT_FILE,
 };
 use anyhow::{Context as _, Result};
 pub(super) fn script(context: StartupContext<'_>) -> Result<String> {
@@ -44,7 +43,6 @@ pub(super) fn script(context: StartupContext<'_>) -> Result<String> {
 	    @VAR_working_directory@ = (@VAR_input_directory@ / "{COMMAND_WORKING_DIRECTORY_FILE}").read_text(encoding="utf-8")
 	    @VAR_stdout_file@ = @VAR_output_directory@ / "{STDOUT_FILE}"
 	    @VAR_stderr_file@ = @VAR_output_directory@ / "{STDERR_FILE}"
-	    @VAR_done_file@ = @VAR_directory@ / "state" / "{DONE_FILE}"
 	    @VAR_previous_id@ = @VAR_os@.environ.get("{COMMAND_ID_ENV}")
 	    @VAR_previous_directory@ = @VAR_os@.environ.get("{COMMAND_DIRECTORY_ENV}")
 	    @VAR_protected_environment@ = dict(@VAR_os@.environ)
@@ -83,16 +81,15 @@ pub(super) fn script(context: StartupContext<'_>) -> Result<String> {
 	            if @VAR_environment_was_cleared@ or @VAR_name@.upper() in {{@PYTHON_PROTECTED_ENVIRONMENT@}}:
 	                @VAR_os@.environ[@VAR_name@] = @VAR_value@
 	        @VAR_prepend_shim@()
-	        if not @VAR_done_file@.exists():
-	            @VAR_elapsed@ = max(1, round((@VAR_time@.perf_counter() - @VAR_started@) * 1000))
-	            @VAR_helper@(
-	                "internal-write-done",
-	                "--command-id", @VAR_command_id@,
-	                "--exit-code", str(@VAR_exit_code@),
-	                "--time-consumption", f"{{@VAR_elapsed@}}ms",
-	                "--cwd", @VAR_os@.getcwd(),
-	                "--directory", str(@VAR_directory@),
-	            )
+	        @VAR_elapsed@ = max(1, round((@VAR_time@.perf_counter() - @VAR_started@) * 1000))
+	        @VAR_helper@(
+	            "internal-write-done",
+	            "--command-id", @VAR_command_id@,
+	            "--exit-code", str(@VAR_exit_code@),
+	            "--time-consumption", f"{{@VAR_elapsed@}}ms",
+	            "--cwd", @VAR_os@.getcwd(),
+	            "--directory", str(@VAR_directory@),
+	        )
 	        if @VAR_previous_id@ is None:
 	            @VAR_os@.environ.pop("{COMMAND_ID_ENV}", None)
 	        else:

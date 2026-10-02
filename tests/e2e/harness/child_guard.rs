@@ -14,6 +14,9 @@ impl ChildGuard {
     pub(crate) const fn new(child: Child) -> Self {
         Self { child }
     }
+    pub(super) const fn child_mut(&mut self) -> &mut Child {
+        &mut self.child
+    }
     pub(crate) fn terminate(&mut self) {
         if self.child.try_wait().unwrap().is_none() {
             let config = Config {

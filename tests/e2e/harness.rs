@@ -1,3 +1,5 @@
+#[path = "harness/capacity.rs"]
+mod capacity;
 #[path = "harness/command_runner.rs"]
 mod command;
 #[path = "harness/daemon_process.rs"]
@@ -26,4 +28,4 @@ pub(crate) use parse::assert_powershell_primary_prompt;
 #[cfg(windows)]
 pub(crate) use parse::parse_tab_created;
 pub(crate) use parse::{TabView, parse_command_id, parse_command_result, parse_tab_view};
-pub(crate) use temp::{temp_dir, temp_root};
+pub(crate) use temp::{command_directory, temp_dir, temp_root};

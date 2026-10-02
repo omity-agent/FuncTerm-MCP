@@ -71,3 +71,34 @@ fn cli_captures_nushell_implicit_structured_output() {
         result.stdout
     );
 }
+#[cfg(windows)]
+#[test]
+fn cli_nushell_exit_closes_shell_and_preserves_command_result() {
+    let case = shell_cases().iter().find(|case| case.name == "nu").unwrap();
+    let executable = required_executable(case);
+    let _guard = locked_with_env(&[(case.env_var, &executable)]);
+    let created = create_tab(&case_dir(case.name, "shell exit"), case.name);
+    let failed = parse_command_result(&send_command(
+        &created.tab_id,
+        "error make {msg: 'EXPECTED_NUSHELL_ERROR'}",
+        5.0,
+    ));
+    assert!(failed.finished);
+    assert_ne!(failed.exit_code, Some(0_i32));
+    assert!(parse_tab_view(&run_cli(&["view", &created.tab_id])).alive);
+    let output = send_command(&created.tab_id, "exit 42", 5.0);
+    let command_id = crate::support::parse_command_id(&output);
+    let exited = parse_command_result(&output);
+    assert!(exited.finished, "{output:?}");
+    assert_eq!(exited.exit_code, Some(42_i32));
+    let closing = std::time::Instant::now();
+    while parse_tab_view(&run_cli(&["view", &created.tab_id])).alive {
+        assert!(
+            closing.elapsed() < core::time::Duration::from_secs(3),
+            "NuShell stayed alive after exit"
+        );
+        std::thread::sleep(core::time::Duration::from_millis(10));
+    }
+    let cached = parse_command_result(&run_cli(&["view", &command_id]));
+    assert_eq!(cached.exit_code, Some(42_i32));
+}

@@ -72,6 +72,7 @@ fn mcp_schema_exposes_tool_inputs_and_preserves_descriptions() {
         }
         assert!(tool.pointer("/outputSchema/properties/results").is_some());
     }
+    drop(session);
 }
 #[test]
 fn mcp_rejects_invalid_batches_before_dispatch() {
@@ -120,6 +121,7 @@ fn mcp_rejects_invalid_batches_before_dispatch() {
         "{recovered}"
     );
     assert!(!directory.join("rejected.txt").exists());
+    drop(session);
 }
 fn assert_descriptions(
     parameters: &rmcp::serde_json::Map<String, Value>,

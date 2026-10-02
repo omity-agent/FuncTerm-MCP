@@ -1,13 +1,9 @@
-mod batch;
-mod nu;
 mod posix;
-mod pwsh;
+mod runners;
 mod start;
 mod template;
 mod variables;
-pub(super) use batch::wrapper as cmd_wrapper;
-pub(super) use nu::wrapper as nushell_wrapper;
 pub(super) use posix::{bash_wrapper, zsh_wrapper};
-pub(super) use pwsh::wrapper as powershell_wrapper;
+pub(super) use runners::{cmd_wrapper, nushell_wrapper, powershell_wrapper};
 pub(super) use template::cmd_dispatcher;
 pub(in crate::shell) use variables::{VariableNamespace, quoted_protected_environment_names};

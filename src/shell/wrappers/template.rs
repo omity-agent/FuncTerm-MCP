@@ -119,7 +119,7 @@ set /p "@VAR_command_id@="<"%@VAR_dispatch_file@%" || exit /b 1
 del /q "%@VAR_dispatch_file@%" || exit /b 1
 set "@VAR_directory@=%FUNCTERM_SESSION_ROOT%\@SESSION_COMMANDS@\%@VAR_command_id@%"
 set /p "@VAR_working_directory@="<"%@VAR_directory@%\@INPUT_DIR@\@WORKING_DIRECTORY@" || exit /b 1
-call "%FUNCTERM_SESSION_ROOT%\startup\cmd_run.bat" "%@VAR_command_id@%" "%@VAR_directory@%" "%@VAR_working_directory@%"
+call "%~dp0cmd_run.bat" "%@VAR_command_id@%" "%@VAR_directory@%" "%@VAR_working_directory@%"
 exit /b %ERRORLEVEL%
 "#;
 pub(super) const POWERSHELL_COMMAND_ERROR_TRAP: &str = concat!(
