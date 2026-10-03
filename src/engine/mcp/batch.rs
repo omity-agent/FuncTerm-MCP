@@ -40,7 +40,7 @@ where
         let mut connection = client::DaemonClient::connect(settings)
             .await
             .map_err(super::error_text)?;
-        let request = entry.request(budget.saturating_sub(started.elapsed()))?;
+        let request = entry.request(settings, budget.saturating_sub(started.elapsed()))?;
         let payload = connection.call(request).await.map_err(super::error_text)?;
         T::output(payload)
     });

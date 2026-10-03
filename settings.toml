@@ -16,6 +16,9 @@ terminal_model_title = ""
 # Shell 启动注入脚本写入 ready 文件前最多等待的秒数。
 shell_startup_timeout_seconds = 30.0
 
+# 默认加载 Shell Profile；mcp 和 new-tab 的 --no-profile 可关闭加载。
+shell_load_profile = true
+
 # PowerShell 可执行文件候选
 powershell = ["pwsh", "powershell"]
 

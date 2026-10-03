@@ -15,6 +15,8 @@ pub(crate) struct StartupContext<'value> {
     pub(crate) cwd: &'value Path,
     pub(crate) startup_directory: &'value Path,
     pub(crate) ready_file: &'value Path,
+    pub(crate) load_profile: bool,
+    pub(crate) environment: &'value crate::runtime::protocol::EnvironmentSnapshot,
 }
 pub(crate) struct ShellInvocation {
     line: String,
@@ -98,7 +100,9 @@ pub(crate) fn keyboard_bytes(choice: ShellChoice, bytes: &[u8]) -> Cow<'_, [u8]>
 pub(crate) fn interactive_arguments(choice: ShellChoice, arguments: &[OsString]) -> bool {
     match choice {
         ShellChoice::PowerShell => powershell::interactive_arguments(arguments),
-        ShellChoice::Bash | ShellChoice::Zsh => unix_shell::interactive_arguments(arguments),
+        ShellChoice::Bash | ShellChoice::Zsh => {
+            unix_shell::interactive_arguments(choice, arguments)
+        }
         ShellChoice::NuShell => nushell::interactive_arguments(arguments),
         ShellChoice::Cmd => command_prompt::interactive_arguments(arguments),
         ShellChoice::Bun => bun::interactive_arguments(arguments),

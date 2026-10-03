@@ -16,9 +16,13 @@ pub(super) struct McpSession {
 }
 impl McpSession {
     pub(super) fn new() -> Self {
+        Self::with_arguments(&[])
+    }
+    pub(super) fn with_arguments(arguments: &[&str]) -> Self {
         let daemon = locked_with_env(&[]);
         let mut child = Command::new(env!("CARGO_BIN_EXE_functerm"))
             .arg("mcp")
+            .args(arguments)
             .envs(daemon.env())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

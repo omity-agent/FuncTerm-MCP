@@ -36,7 +36,7 @@ impl PosixDialect {
     }
     pub(super) const fn cd(self) -> &'static str {
         match self {
-            Self::Bash => "cd",
+            Self::Bash => "builtin cd",
             Self::Zsh => "builtin cd --",
         }
     }

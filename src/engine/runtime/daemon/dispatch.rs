@@ -12,10 +12,16 @@ pub(super) async fn execute(manager: &Arc<Manager>, request: Request) -> Result<
         Request::NewTab {
             starting_directory,
             starting_shell,
+            load_profile,
             environment,
         } => {
             let tab_id = manager
-                .new_tab(starting_directory, starting_shell, environment)
+                .new_tab(
+                    starting_directory,
+                    starting_shell,
+                    load_profile,
+                    environment,
+                )
                 .await?;
             Ok(Payload::TabCreated { tab_id })
         }

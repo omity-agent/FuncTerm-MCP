@@ -1,4 +1,5 @@
 use crate::runtime::config::Settings;
+use crate::runtime::protocol::EnvironmentSnapshot;
 mod drivers;
 mod executable;
 pub mod quote;
@@ -39,26 +40,45 @@ impl ShellChoice {
             cwd,
         )
     }
-    pub(crate) fn startup(self, cwd: &Path, session_root: &Path) -> Result<ShellStartup> {
+    pub(crate) fn startup(
+        self,
+        cwd: &Path,
+        session_root: &Path,
+        load_profile: bool,
+        environment: &EnvironmentSnapshot,
+    ) -> Result<ShellStartup> {
         let state_directory = session_root.join("state");
         let startup_directory = session_root.join("startup");
         fs_err::create_dir_all(&state_directory)?;
         fs_err::create_dir_all(&startup_directory)?;
         let ready_file = state_directory.join("ready");
+        let mut variables = environment.variables();
+        variables.retain(|pair| {
+            !crate::runtime::protocol::environment_name_equals(&pair.0, shims::LOAD_PROFILE_ENV)
+        });
+        variables.push((
+            shims::LOAD_PROFILE_ENV.into(),
+            if load_profile { "1" } else { "0" }.into(),
+        ));
+        let launch_environment = EnvironmentSnapshot::from_variables(variables);
         let startup = drivers::startup(
             self,
             drivers::StartupContext {
                 cwd,
                 startup_directory: &startup_directory,
                 ready_file: &ready_file,
+                load_profile,
+                environment: &launch_environment,
             },
         )?;
         let args = startup.args;
-        let env = startup
-            .env
-            .into_iter()
-            .map(|(name, value)| (OsString::from(name), OsString::from(value)))
-            .collect();
+        let mut env = launch_environment.variables();
+        env.extend(
+            startup
+                .env
+                .into_iter()
+                .map(|(name, value)| (OsString::from(name), OsString::from(value))),
+        );
         Ok(ShellStartup {
             args,
             env,

@@ -18,7 +18,7 @@ pub(crate) fn run_if_requested() -> Result<Option<i32>> {
     }
     let arguments = std::env::args_os().skip(1).collect::<Vec<_>>();
     match LaunchRoute::detect(choice, &arguments) {
-        LaunchRoute::ManagedSession => run_interactive(choice).map(Some),
+        LaunchRoute::ManagedSession => run_interactive(choice, &arguments).map(Some),
         LaunchRoute::NativeProcess => run_passthrough(choice, arguments).map(Some),
     }
 }
@@ -61,14 +61,19 @@ fn run_passthrough(choice: ShellChoice, arguments: Vec<std::ffi::OsString>) -> R
         .with_context(|| format!("failed to run {}", choice.canonical_name()))?;
     Ok(exit_code(status))
 }
-fn run_interactive(choice: ShellChoice) -> Result<i32> {
+fn run_interactive(choice: ShellChoice, arguments: &[std::ffi::OsString]) -> Result<i32> {
     let command_started_at = Instant::now();
     let parent_shell = current_shell().unwrap_or(choice);
     let active_shell_file = active_shell_file()?;
     let session_root = nested_session_root(choice)?;
     fs_err::create_dir_all(&session_root)?;
     let cwd = std::env::current_dir().context("failed to read current directory")?;
-    let startup = choice.startup(&cwd, &session_root)?;
+    let startup = choice.startup(
+        &cwd,
+        &session_root,
+        routing::load_profile(arguments)?,
+        &crate::runtime::protocol::EnvironmentSnapshot::from_variables(std::env::vars_os()),
+    )?;
     let ready_file = startup.ready_file.clone();
     let child = spawn_shell(choice, startup)?;
     let mut active_shell = ActiveShellGuard::new(active_shell_file, parent_shell);

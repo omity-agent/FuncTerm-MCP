@@ -151,8 +151,10 @@ const TEMPLATE : & str = "def --env @FUNCTION@ [@VAR_command_id@: string, @VAR_d
 	] {
 	    if ($@VAR_env_state_file@ | path exists) {
 	        let @VAR_saved_env@ = open --raw $@VAR_env_state_file@ | from nuon
-	        for @VAR_name@ in ($@VAR_previous_env_names@ | where {|@VAR_name@| not ($@VAR_name@ in ($@VAR_saved_env@ | columns)) }) {
-	            hide-env $@VAR_name@
+	        if not ($@VAR_saved_env@ | is-empty) {
+	            for @VAR_name@ in ($@VAR_previous_env_names@ | where {|@VAR_name@| not ($@VAR_name@ in ($@VAR_saved_env@ | columns)) }) {
+	                hide-env $@VAR_name@
+	            }
 	        }
 	        load-env $@VAR_saved_env@
 	    }

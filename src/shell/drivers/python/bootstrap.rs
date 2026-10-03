@@ -8,12 +8,26 @@ use anyhow::{Context as _, Result};
 pub(super) fn script(context: StartupContext<'_>) -> Result<String> {
     let cwd = python_string(context.cwd)?;
     let ready = python_string(context.ready_file)?;
+    let profile = if context.load_profile {
+        r#"@VAR_startup_file@ = @VAR_os@.environ.get("PYTHONSTARTUP")
+if @VAR_startup_file@:
+    with open(@VAR_startup_file@, "rb") as @VAR_startup_source@:
+        exec(compile(@VAR_startup_source@.read(), @VAR_startup_file@, "exec"), globals())
+"#
+    } else {
+        ""
+    };
+    let protected_environment = crate::shell::wrappers::startup_environment(
+        crate::shell::ShellChoice::Python,
+        context.environment,
+    )?;
     let bootstrap = format ! (r#"import ast as @VAR_ast@
 	import contextlib as @VAR_contextlib@
 	import os as @VAR_os@
 	import pathlib as @VAR_pathlib@
 	import subprocess as @VAR_subprocess@
 	import time as @VAR_time@
+	{profile}{protected_environment}
 	@VAR_os@.chdir({cwd})
 	@VAR_os@.environ["FUNCTERM_CURRENT_SHELL"] = "python"
 

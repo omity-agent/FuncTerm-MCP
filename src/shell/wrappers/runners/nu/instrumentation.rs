@@ -18,6 +18,13 @@ pub(super) fn render(template_text: &str) -> String {
         &variables::nushell_protected_environment_names(),
     );
     let runner = template::render_command_function(&protected, POSIX_COMMAND_FUNCTION);
-    let wrapper = format!("{runner}\n{}", template::nushell_dispatcher());
+    let state_functions = capture_state::FUNCTIONS.replace(
+        "@NUSHELL_PROTECTED_ENVIRONMENT@",
+        &variables::nushell_protected_environment_names(),
+    );
+    let wrapper = format!(
+        "{runner}\n{state_functions}\n{}",
+        template::nushell_dispatcher()
+    );
     VariableNamespace::new().render(&wrapper)
 }

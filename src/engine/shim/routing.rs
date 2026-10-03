@@ -18,3 +18,25 @@ impl LaunchRoute {
         }
     }
 }
+pub(super) fn load_profile(arguments: &[OsString]) -> anyhow::Result<bool> {
+    let inherited = match std::env::var(crate::shell::shims::LOAD_PROFILE_ENV)?.as_str() {
+        "1" => true,
+        "0" => false,
+        value => anyhow::bail!("invalid Shell Profile policy: {value}"),
+    };
+    let disabled = arguments.iter().any(|argument| {
+        argument.to_str().is_some_and(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "-noprofile"
+                    | "--noprofile"
+                    | "--norc"
+                    | "--no-config-file"
+                    | "--no-rcs"
+                    | "-f"
+                    | "/d"
+            )
+        })
+    });
+    Ok(inherited && !disabled)
+}

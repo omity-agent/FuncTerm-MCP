@@ -7,6 +7,9 @@ mod input_delivery;
 #[cfg(test)]
 #[path = "mcp/inspection.rs"]
 mod inspection;
+#[cfg(test)]
+#[path = "mcp/policy.rs"]
+mod policy;
 #[path = "mcp/wire.rs"]
 mod wire;
 use rmcp::serde_json::{Value, json};

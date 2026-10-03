@@ -42,6 +42,7 @@ impl ShellLauncher {
         tab_id: &str,
         starting_directory: &Path,
         starting_shell: ShellChoice,
+        load_profile: bool,
         environment: &EnvironmentSnapshot,
     ) -> Result<Arc<ShellSession>> {
         let tab_environment = EnvironmentSnapshot::tab_launch_environment(environment)
@@ -52,16 +53,21 @@ impl ShellLauncher {
         fs_err::create_dir_all(&tab_state)?;
         fs_err::create_dir_all(&command_root)?;
         let command_watch = Arc::new(PathWatch::new(&command_root, RecursiveMode::Recursive)?);
-        let mut startup = starting_shell.startup(starting_directory, &tab_root)?;
-        startup.env.extend(shims::environment(
+        let mut managed_environment = shims::environment(
             &self.settings,
             &tab_root,
             &self.shim_dir,
             starting_shell,
             &tab_environment,
             starting_directory,
-        )?);
-        startup.env.push((shims::TAB_ID_ENV.into(), tab_id.into()));
+        )?;
+        managed_environment.push((shims::TAB_ID_ENV.into(), tab_id.into()));
+        let startup = starting_shell.startup(
+            starting_directory,
+            &tab_root,
+            load_profile,
+            &EnvironmentSnapshot::from_variables(managed_environment),
+        )?;
         let screen = Arc::new(Terminal::new(
             TerminalSize {
                 rows: self.settings.terminal_rows,

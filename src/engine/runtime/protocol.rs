@@ -8,7 +8,7 @@ pub(crate) mod format;
 mod kind;
 mod presentation;
 mod time_consumption;
-pub(crate) use environment::EnvironmentSnapshot;
+pub(crate) use environment::{EnvironmentSnapshot, environment_name_equals};
 pub(crate) use presentation::{CommandPresentation, ShellPresentation};
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, strum :: EnumDiscriminants)]
 #[strum_discriminants(name(RequestKind), derive(strum::Display))]
@@ -18,6 +18,7 @@ pub(crate) enum Request {
     NewTab {
         starting_directory: PathBuf,
         starting_shell: ShellChoice,
+        load_profile: bool,
         environment: EnvironmentSnapshot,
     },
     Close {

@@ -11,13 +11,21 @@ pub(super) struct Args {
 }
 #[derive(Subcommand)]
 pub(super) enum CliCommand {
-    Mcp,
+    Mcp {
+        #[arg(
+            long,
+            help = "Disable Shell Profile loading for all Tabs created by this MCP server"
+        )]
+        no_profile: bool,
+    },
     Daemon,
     NewTab {
         #[arg(long)]
         starting_directory: Option<PathBuf>,
         # [arg (long , default_value = "powershell" , value_parser = ShellChoice :: from_canonical_name)]
         starting_shell: ShellChoice,
+        #[arg(long, help = "Disable Shell Profile loading")]
+        no_profile: bool,
     },
     Close {
         #[arg(long, required_unless_present = "current", conflicts_with = "current")]

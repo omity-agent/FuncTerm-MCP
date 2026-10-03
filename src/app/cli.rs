@@ -9,7 +9,10 @@ use clap::Parser as _;
 use std::path::Path;
 pub(crate) async fn run() -> Result<()> {
     let args = Args::parse();
-    match args.command.unwrap_or(CliCommand::Mcp) {
+    match args
+        .command
+        .unwrap_or(CliCommand::Mcp { no_profile: false })
+    {
         CliCommand::InternalEnsureShims { directory } => {
             crate::shell::shims::ensure_directory(&directory)
         }
@@ -33,7 +36,11 @@ pub(crate) async fn run() -> Result<()> {
                 &settings.terminal_model_title,
             )
         }
-        CliCommand::Mcp => crate::mcp::run(config::load()?).await,
+        CliCommand::Mcp { no_profile } => {
+            let mut settings = config::load()?;
+            settings.shell_load_profile &= !no_profile;
+            crate::mcp::run(settings).await
+        }
         CliCommand::Daemon => crate::runtime::daemon::run(config::load()?).await,
         CliCommand::Close { tab_id, current: _ } => {
             let target = interface::close_target(tab_id)?;
@@ -43,6 +50,7 @@ pub(crate) async fn run() -> Result<()> {
         CliCommand::NewTab {
             starting_directory,
             starting_shell,
+            no_profile,
         } => {
             let settings = config::load()?;
             let request = Request::NewTab {
@@ -50,6 +58,7 @@ pub(crate) async fn run() -> Result<()> {
                     starting_directory.as_deref(),
                 )?,
                 starting_shell,
+                load_profile: settings.shell_load_profile && !no_profile,
                 environment: EnvironmentSnapshot::for_new_tab_request(),
             };
             print_result(interface::execute(&settings, request).await)

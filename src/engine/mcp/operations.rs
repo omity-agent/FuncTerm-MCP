@@ -2,6 +2,7 @@ use super::{
     arguments::{ManualWriteExec, NewTabExec, SendCommandExec},
     error_text, output,
 };
+use crate::runtime::config::Settings;
 use crate::runtime::protocol::{EnvironmentSnapshot, Payload, Request};
 use core::time::Duration;
 use rmcp::model::CallToolResult;
@@ -11,17 +12,18 @@ pub(super) trait Operation {
     fn tab_id(&self) -> Option<&str> {
         None
     }
-    fn request(self, wait_timeout: Duration) -> Result<Request, String>;
+    fn request(self, settings: &Settings, wait_timeout: Duration) -> Result<Request, String>;
     fn output(payload: Payload) -> Result<CallToolResult, String>;
 }
 impl Operation for NewTabExec {
-    fn request(self, _wait_timeout: Duration) -> Result<Request, String> {
+    fn request(self, settings: &Settings, _wait_timeout: Duration) -> Result<Request, String> {
         let starting_directory =
             crate::runtime::working_dir::resolve(self.starting_directory_path())
                 .map_err(error_text)?;
         Ok(Request::NewTab {
             starting_directory,
             starting_shell: self.starting_shell,
+            load_profile: settings.shell_load_profile,
             environment: EnvironmentSnapshot::for_new_tab_request(),
         })
     }
@@ -33,7 +35,7 @@ impl Operation for ManualWriteExec {
     fn tab_id(&self) -> Option<&str> {
         Some(&self.tab_id)
     }
-    fn request(self, wait_timeout: Duration) -> Result<Request, String> {
+    fn request(self, _settings: &Settings, wait_timeout: Duration) -> Result<Request, String> {
         let (tab_id, input) = self.into_parts().map_err(error_text)?;
         Ok(Request::ManualWrite {
             tab_id,
@@ -49,7 +51,7 @@ impl Operation for SendCommandExec {
     fn tab_id(&self) -> Option<&str> {
         Some(&self.tab_id)
     }
-    fn request(self, wait_timeout: Duration) -> Result<Request, String> {
+    fn request(self, _settings: &Settings, wait_timeout: Duration) -> Result<Request, String> {
         Ok(Request::SendCommand {
             tab_id: self.tab_id,
             command: self.command,
@@ -62,7 +64,7 @@ impl Operation for SendCommandExec {
 }
 impl Operation for LookupId {
     const LIST_PARAMETER: &'static str = "ids";
-    fn request(self, wait_timeout: Duration) -> Result<Request, String> {
+    fn request(self, _settings: &Settings, wait_timeout: Duration) -> Result<Request, String> {
         Ok(Request::View {
             id: self.0,
             wait_timeout,

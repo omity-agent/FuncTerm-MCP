@@ -31,17 +31,26 @@ impl Manager {
         self: &Arc<Self>,
         starting_directory: PathBuf,
         starting_shell: ShellChoice,
+        load_profile: bool,
         environment: EnvironmentSnapshot,
     ) -> Result<String> {
         let manager = Arc::clone(self);
         self.blocking
-            .run(move || manager.launch_tab(&starting_directory, starting_shell, &environment))
+            .run(move || {
+                manager.launch_tab(
+                    &starting_directory,
+                    starting_shell,
+                    load_profile,
+                    &environment,
+                )
+            })
             .await
     }
     fn launch_tab(
         &self,
         starting_directory: &Path,
         starting_shell: ShellChoice,
+        load_profile: bool,
         environment: &EnvironmentSnapshot,
     ) -> Result<String> {
         if !starting_directory.is_dir() {
@@ -51,9 +60,13 @@ impl Manager {
             );
         }
         let tab_id = self.tabs.next_tab_id();
-        let session =
-            self.launcher
-                .launch(&tab_id, starting_directory, starting_shell, environment)?;
+        let session = self.launcher.launch(
+            &tab_id,
+            starting_directory,
+            starting_shell,
+            load_profile,
+            environment,
+        )?;
         self.tabs.insert(tab::Tab::new(
             tab_id.clone(),
             session,
