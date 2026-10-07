@@ -1,7 +1,12 @@
+#![cfg_attr(windows, feature(windows_process_extensions_raw_attribute))]
 #[cfg(test)]
 #[cfg(windows)]
 #[path = "integration/bootstrap_contract.rs"]
 mod bootstrap_contract;
+#[cfg(test)]
+#[cfg(windows)]
+#[path = "integration/job_isolation.rs"]
+mod job_isolation;
 #[cfg(test)]
 #[path = "e2e/streams.rs"]
 mod routing;
@@ -20,3 +25,10 @@ mod shells;
 mod startup_files;
 #[path = "e2e/harness.rs"]
 mod support;
+#[cfg(test)]
+#[cfg(windows)]
+#[path = "integration/terminal_fixture.rs"]
+mod terminal_fixture;
+#[cfg(test)]
+#[path = "integration/transfer_contract.rs"]
+mod transfer_contract;

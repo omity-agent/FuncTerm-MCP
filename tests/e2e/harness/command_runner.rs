@@ -48,6 +48,7 @@ pub(crate) fn create_tab_with_env(cwd: &Path, shell: &str, env: &[(String, Strin
     parse_tab_created(&run_cli_with_env(
         &[
             "new-tab",
+            "--no-profile",
             "--starting-directory",
             cwd.to_str().unwrap(),
             "--starting-shell",
@@ -59,6 +60,7 @@ pub(crate) fn create_tab_with_env(cwd: &Path, shell: &str, env: &[(String, Strin
 pub(crate) fn create_tab_from_directory_argument(cwd: &str, shell: &str) -> TabCreated {
     parse_tab_created(&run_cli(&[
         "new-tab",
+        "--no-profile",
         "--starting-directory",
         cwd,
         "--starting-shell",

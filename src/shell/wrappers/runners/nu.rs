@@ -1,5 +1,7 @@
 mod capture_state;
 mod instrumentation;
+mod worker_setup;
+pub(in crate::shell) use worker_setup::prepare_nushell_command;
 pub(in crate::shell) fn wrapper() -> String {
     instrumentation::render(TEMPLATE)
 }
@@ -7,18 +9,11 @@ const TEMPLATE : & str = "def --env @FUNCTION@ [@VAR_command_id@: string, @VAR_d
 	    let @VAR_input_dir@ = ($@VAR_directory@ | path join '@INPUT_DIR@')
 	    let @VAR_output_dir@ = ($@VAR_directory@ | path join '@OUTPUT_DIR@')
 	    let @VAR_state_dir@ = ($@VAR_directory@ | path join '@STATE_DIR@')
-	    mkdir $@VAR_input_dir@ $@VAR_output_dir@ $@VAR_state_dir@
 	    let @VAR_stdout_file@ = ($@VAR_output_dir@ | path join '@STDOUT@')
 	    let @VAR_stderr_file@ = ($@VAR_output_dir@ | path join '@STDERR@')
-	    let @VAR_command_file@ = ($@VAR_input_dir@ | path join '@COMMAND@')
 	    let @VAR_session_state_dir@ = ($env.FUNCTERM_SESSION_ROOT | path join 'state')
 	    let @VAR_env_state_file@ = ($@VAR_session_state_dir@ | path join 'nushell-env.nuon')
 	    let @VAR_config_state_file@ = ($@VAR_session_state_dir@ | path join 'nushell-config.nuon')
-	    let @VAR_declaration_state_file@ = ($@VAR_session_state_dir@ | path join 'nushell-declarations.nu')
-	    mkdir $@VAR_session_state_dir@
-	    if not ($@VAR_declaration_state_file@ | path exists) {
-	        $'' | save --force --raw $@VAR_declaration_state_file@
-	    }
 	    let @VAR_previous_env_names@ = if ($@VAR_env_state_file@ | path exists) {
 	        open --raw $@VAR_env_state_file@ | from nuon | columns
 	    } else {
@@ -28,18 +23,15 @@ const TEMPLATE : & str = "def --env @FUNCTION@ [@VAR_command_id@: string, @VAR_d
 		    let @VAR_exit_file@ = ($@VAR_state_dir@ | path join '@NUSHELL_EXIT_REQUEST@')
 	    let @VAR_config_file@ = ($@VAR_input_dir@ | path join 'functerm-config.nu')
 	    let @VAR_env_config_file@ = ($@VAR_input_dir@ | path join 'functerm-env.nu')
-	    let @VAR_script_file@ = ($@VAR_input_dir@ | path join 'command.nu')
+	    let @VAR_launch_file@ = ($@VAR_input_dir@ | path join 'nushell-launch.txt')
 	    let @VAR_previous_command_id@ = $env.@COMMAND_ID_ENV@?
 	    let @VAR_previous_command_directory@ = $env.@COMMAND_DIR_ENV@?
 	    $env.@COMMAND_ID_ENV@ = $@VAR_command_id@
 	    $env.@COMMAND_DIR_ENV@ = ($@VAR_directory@ | path expand)
 	    let @VAR_state@ = try {
-	        ensure_nushell_shims
-	        open --raw $@VAR_command_file@ | save --force --raw $@VAR_script_file@
-	        rm --force $@VAR_command_file@
-	        write_nushell_config $@VAR_config_file@ $@VAR_cwd_file@ $@VAR_env_state_file@ $@VAR_config_state_file@ $@VAR_declaration_state_file@
-	        $'' | save --force --raw $@VAR_env_config_file@
-	        let @VAR_command@ = $'source (char single_quote)($@VAR_declaration_state_file@)(char single_quote); source (char single_quote)($@VAR_script_file@)(char single_quote)'
+	        let @VAR_shim_dir@ = $env.FUNCTERM_SHIM_DIR
+	        $env.PATH = ($env.PATH | where {|@VAR_entry@| $@VAR_entry@ != $@VAR_shim_dir@ } | prepend $@VAR_shim_dir@)
+	        let @VAR_command@ = (open --raw $@VAR_launch_file@)
 	        let @VAR_nushell@ = $env.FUNCTERM_REAL_NUSHELL?
 	        if ($@VAR_nushell@ | is-empty) {
 	            error make {msg: 'FUNCTERM_REAL_NUSHELL is not set'}
@@ -63,13 +55,11 @@ const TEMPLATE : & str = "def --env @FUNCTION@ [@VAR_command_id@: string, @VAR_d
 	        if ($@VAR_stderr_file@ | path exists) {
 	            print --raw --no-newline --stderr (open --raw $@VAR_stderr_file@)
 	        }
-	        rm --force $@VAR_script_file@ $@VAR_config_file@ $@VAR_env_config_file@
 	        let @VAR_command_cwd@ = if ($@VAR_cwd_file@ | path exists) {
 	            open --raw $@VAR_cwd_file@
 	        } else {
 	            $@VAR_working_directory@ | path expand
 	        }
-	        rm --force $@VAR_cwd_file@
 	        restore_nushell_environment $@VAR_env_state_file@ $@VAR_config_state_file@ $@VAR_previous_env_names@
 	        { cwd: $@VAR_command_cwd@, exit_code: $@VAR_result@.exit_code, time_consumption: $@VAR_time_consumption@ }
 	    } catch {|@VAR_error@|
@@ -77,7 +67,6 @@ const TEMPLATE : & str = "def --env @FUNCTION@ [@VAR_command_id@: string, @VAR_d
 	        print --stderr $@VAR_error@.msg
 	        { cwd: ($@VAR_working_directory@ | path expand), exit_code: 1, time_consumption: '0ns' }
 	    }
-		    mkdir $@VAR_state_dir@
 		    let @VAR_exit_request@ = if ($@VAR_exit_file@ | path exists) {
 		        open --raw $@VAR_exit_file@ | from nuon
 		    } else {
@@ -119,30 +108,6 @@ const TEMPLATE : & str = "def --env @FUNCTION@ [@VAR_command_id@: string, @VAR_d
         }
 	        $env.PATH = ($env.PATH | where {|@VAR_entry@| $@VAR_entry@ != $@VAR_shim_dir@ } | prepend $@VAR_shim_dir@)
     }
-	}
-	def write_nushell_config [
-	    @VAR_config_file@: path,
-	    @VAR_cwd_file@: path,
-	    @VAR_env_state_file@: path,
-	    @VAR_config_state_file@: path,
-	    @VAR_declaration_state_file@: path,
-] {
-    [
-        '$env.config.show_banner = false'
-        '$env.config.use_ansi_coloring = false'
-        '$env.config.shell_integration = { osc2: false, osc7: false, osc8: false, osc9_9: false, osc133: false, osc633: false, reset_application_mode: false }'
-        '$env.config.history.file_format = \"plaintext\"'
-        '$env.config.history.max_size = 0'
-        '$env.config.history.sync_on_enter = false'
-	        $'let @VAR_functerm_env_state_file@ = ($@VAR_env_state_file@ | to nuon)'
-	        'if ($@VAR_functerm_env_state_file@ | path exists) { load-env (open --raw $@VAR_functerm_env_state_file@ | from nuon) }'
-	        $'let @VAR_functerm_config_state_file@ = ($@VAR_config_state_file@ | to nuon)'
-	        'if ($@VAR_functerm_config_state_file@ | path exists) { $env.config = ($env.config | merge (open --raw $@VAR_functerm_config_state_file@ | from nuon)) }'
-	        'if not ($env.FUNCTERM_SHIM_DIR? | is-empty) { $env.PATH = ($env.PATH | where {|@VAR_entry@| $@VAR_entry@ != $env.FUNCTERM_SHIM_DIR } | prepend $env.FUNCTERM_SHIM_DIR) }'
-	        $'$env.config.hooks.display_output = { save_nushell_state ($@VAR_cwd_file@ | to nuon) ($@VAR_env_state_file@ | to nuon) ($@VAR_config_state_file@ | to nuon) ($@VAR_declaration_state_file@ | to nuon); $in | table }'
-		        '@NUSHELL_STATE_FUNCTIONS@'
-		        '@NUSHELL_EXIT_HOOK@'
-	    ] | str join (char newline) | save --force --raw $@VAR_config_file@
 	}
 	def --env restore_nushell_environment [
 	    @VAR_env_state_file@: path,

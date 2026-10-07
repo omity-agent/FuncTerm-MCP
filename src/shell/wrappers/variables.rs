@@ -24,7 +24,7 @@ pub(super) fn posix_environment_restore() -> String {
             ))
         });
     format!(
-        "    if [ -z \"${{PATH+x}}\" ] && [ -z \"${{PWD+x}}\" ]; then\n        eval \"$@VAR_complete_environment@\"\n    fi\n{protected}\n    functerm_ensure_shim_path || return 1"
+        "    if [ -z \"${{PATH+x}}\" ] && [ -z \"${{PWD+x}}\" ]; then\n        eval \"$@VAR_complete_environment@\"\n    fi\n{protected}\n    functerm_ensure_shim_path"
     )
 }
 pub(super) fn nushell_protected_environment_names() -> String {

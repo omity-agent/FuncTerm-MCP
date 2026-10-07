@@ -27,5 +27,7 @@ pub(crate) use parse::CommandResult;
 pub(crate) use parse::assert_powershell_primary_prompt;
 pub(crate) use parse::parse_tab_created;
 pub(crate) use parse::{TabView, parse_command_id, parse_command_result, parse_tab_view};
+#[cfg(windows)]
+pub(crate) use process::ChildGuard;
 pub(crate) use temp::{command_directory, temp_dir, temp_root};
 pub(crate) use test_environment::apply as apply_test_environment;

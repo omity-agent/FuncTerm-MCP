@@ -18,7 +18,7 @@ pub(super) struct McpSession {
 }
 impl McpSession {
     pub(super) fn new() -> Self {
-        Self::with_arguments(&[])
+        Self::with_arguments(&["--no-profile"])
     }
     pub(super) fn with_arguments(arguments: &[&str]) -> Self {
         let daemon = Rc::new(locked_with_env(&[]));

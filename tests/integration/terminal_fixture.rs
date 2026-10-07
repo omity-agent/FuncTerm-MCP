@@ -1,7 +1,12 @@
 use core::time::Duration;
-use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+use portable_pty::{CommandBuilder, ExitStatus, PtySize, native_pty_system};
 use std::{io::Read as _, sync::mpsc, thread};
 pub(super) fn run(command: CommandBuilder) -> String {
+    let (status, output) = run_with_status(command);
+    assert!(status.success(), "{status:?}: {output}");
+    output
+}
+pub(super) fn run_with_status(command: CommandBuilder) -> (ExitStatus, String) {
     let pair = native_pty_system().openpty(PtySize::default()).unwrap();
     let mut child = pair.slave.spawn_command(command).unwrap();
     let mut killer = child.clone_killer();
@@ -29,6 +34,5 @@ pub(super) fn run(command: CommandBuilder) -> String {
     let status = result
         .unwrap_or_else(|error| panic!("fixture failed to finish: {error}; {output}"))
         .unwrap();
-    assert!(status.success(), "{status:?}: {output}");
-    output
+    (status, output)
 }

@@ -46,7 +46,7 @@ fn initialization_script(context: StartupContext<'_>) -> Result<String> {
 const INPUT_GUARD: &str = r"& {
     foreach ($@VAR_reservedName@ in @(
         'f', 'Invoke-FuncTermCommand', 'Set-FuncTermShimPath',
-        'Ensure-FuncTermShims', 'Publish-FuncTermStart'
+        'Invoke-FuncTermHelper', 'Publish-FuncTermStart'
     )) {
         if (Microsoft.PowerShell.Management\Get-Item -LiteralPath ('Alias:' + $@VAR_reservedName@) -ErrorAction SilentlyContinue) {
             Microsoft.PowerShell.Management\Remove-Item -LiteralPath ('Alias:' + $@VAR_reservedName@) -Force -ErrorAction Stop

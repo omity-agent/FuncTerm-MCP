@@ -1,8 +1,7 @@
 use super::StartupContext;
 use crate::contract::{
     COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, COMMAND_INPUT_DIRECTORY,
-    COMMAND_OUTPUT_DIRECTORY, COMMAND_WORKING_DIRECTORY_FILE, DISPATCH_FILE, HELPER_EXECUTABLE_ENV,
-    SESSION_COMMANDS_DIRECTORY, SESSION_STATE_DIRECTORY, STDERR_FILE, STDOUT_FILE,
+    COMMAND_OUTPUT_DIRECTORY, HELPER_EXECUTABLE_ENV, STDERR_FILE, STDOUT_FILE,
 };
 use anyhow::{Context as _, Result};
 pub(super) fn script(context: StartupContext<'_>) -> Result<String> {
@@ -23,6 +22,7 @@ if @VAR_startup_file@:
     )?;
     let bootstrap = format ! (r#"import ast as @VAR_ast@
 	import contextlib as @VAR_contextlib@
+	import json as @VAR_json@
 	import os as @VAR_os@
 	import pathlib as @VAR_pathlib@
 	import subprocess as @VAR_subprocess@
@@ -31,9 +31,12 @@ if @VAR_startup_file@:
 	@VAR_os@.chdir({cwd})
 	@VAR_os@.environ["FUNCTERM_CURRENT_SHELL"] = "python"
 
-	def @VAR_helper@(*@VAR_arguments@):
+	def @VAR_helper@(*@VAR_arguments@, capture=False):
 	    @VAR_helper_executable@ = @VAR_os@.environ["{HELPER_EXECUTABLE_ENV}"]
-	    @VAR_subprocess@.run([@VAR_helper_executable@, *@VAR_arguments@], check=True)
+	    return @VAR_subprocess@.run(
+	        [@VAR_helper_executable@, *@VAR_arguments@], check=True,
+	        capture_output=capture, text=capture, encoding="utf-8" if capture else None,
+	    ).stdout
 
 	def @VAR_prepend_shim@():
 	    @VAR_shim@ = @VAR_os@.environ["FUNCTERM_SHIM_DIR"]
@@ -46,15 +49,16 @@ if @VAR_startup_file@:
 	    exec(compile(@VAR_ast@.Interactive(@VAR_tree@.body), "<functerm>", "single"), @VAR_namespace@, @VAR_namespace@)
 
 	def _functerm_dispatch():
-	    @VAR_root@ = @VAR_pathlib@.Path(@VAR_os@.environ["FUNCTERM_SESSION_ROOT"])
-	    @VAR_dispatch@ = @VAR_root@ / "{SESSION_STATE_DIRECTORY}" / "{DISPATCH_FILE}"
-	    @VAR_command_id@ = @VAR_dispatch@.read_text(encoding="utf-8")
-	    @VAR_dispatch@.unlink()
-	    @VAR_directory@ = @VAR_root@ / "{SESSION_COMMANDS_DIRECTORY}" / @VAR_command_id@
+	    @VAR_receipt@ = @VAR_json@.loads(@VAR_helper@(
+	        "internal-claim-command", "--session-root",
+	        @VAR_os@.environ["FUNCTERM_SESSION_ROOT"], "--shell", "python", capture=True,
+	    ))
+	    @VAR_command_id@ = @VAR_receipt@["command_id"]
+	    @VAR_directory@ = @VAR_pathlib@.Path(@VAR_receipt@["directory"])
 	    @VAR_input_directory@ = @VAR_directory@ / "{COMMAND_INPUT_DIRECTORY}"
 	    @VAR_output_directory@ = @VAR_directory@ / "{COMMAND_OUTPUT_DIRECTORY}"
 	    @VAR_source@ = (@VAR_input_directory@ / "{COMMAND_FILE}").read_text(encoding="utf-8")
-	    @VAR_working_directory@ = (@VAR_input_directory@ / "{COMMAND_WORKING_DIRECTORY_FILE}").read_text(encoding="utf-8")
+	    @VAR_working_directory@ = @VAR_receipt@["working_directory"]
 	    @VAR_stdout_file@ = @VAR_output_directory@ / "{STDOUT_FILE}"
 	    @VAR_stderr_file@ = @VAR_output_directory@ / "{STDERR_FILE}"
 	    @VAR_previous_id@ = @VAR_os@.environ.get("{COMMAND_ID_ENV}")
@@ -65,7 +69,6 @@ if @VAR_startup_file@:
 	    @VAR_exit_code@ = 0
 	    @VAR_started@ = @VAR_time@.perf_counter()
 	    try:
-	        @VAR_helper@("internal-ensure-shims", "--directory", @VAR_os@.environ["FUNCTERM_SHIM_DIR"])
 	        @VAR_prepend_shim@()
 	        @VAR_os@.chdir(@VAR_working_directory@)
 	        @VAR_helper@("internal-write-start", "--command-id", @VAR_command_id@, "--directory", str(@VAR_directory@))

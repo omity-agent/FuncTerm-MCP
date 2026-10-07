@@ -91,6 +91,9 @@ impl ShellChoice {
     pub(crate) fn command_script(self, command: &str) -> String {
         drivers::command_script(self, command)
     }
+    pub(crate) fn prepare_command(self, directory: &Path, session_root: &Path) -> Result<()> {
+        drivers::prepare_command(self, directory, session_root)
+    }
     pub(crate) fn keyboard_bytes(self, bytes: &[u8]) -> Cow<'_, [u8]> {
         drivers::keyboard_bytes(self, bytes)
     }

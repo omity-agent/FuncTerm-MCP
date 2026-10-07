@@ -89,7 +89,7 @@ fn spawn_daemon(env: &[(String, String)], service_name: &str) -> ChildGuard {
     apply_daemon_flags(&mut command);
     super::test_environment::apply(&mut command, env);
     command.env("FUNCTERM_DAEMON_READY_STDOUT", "1");
-    let mut child = ChildGuard::new(command.spawn().unwrap());
+    let mut child = ChildGuard::spawn(&mut command).unwrap();
     wait_for_daemon(child.child_mut(), service_name);
     child
 }

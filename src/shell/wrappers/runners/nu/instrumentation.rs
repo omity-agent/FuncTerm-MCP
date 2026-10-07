@@ -10,6 +10,18 @@ const EXIT_HOOK: &str = "def exit [@VAR_exit_code@: int = 0, --abort] {
     %exit $@VAR_exit_code@ --abort=$abort
 }";
 pub(super) fn render(template_text: &str) -> String {
+    let runner = render_functions(template_text);
+    let state_functions = render_functions(capture_state::FUNCTIONS);
+    let wrapper = format!(
+        "{runner}\n{state_functions}\n{}",
+        template::nushell_dispatcher()
+    );
+    VariableNamespace::new().render(&wrapper)
+}
+pub(super) fn render_worker(template_text: &str) -> String {
+    VariableNamespace::new().render(&render_functions(template_text))
+}
+fn render_functions(template_text: &str) -> String {
     let exit_hook = template_text.replace("@NUSHELL_EXIT_HOOK@", EXIT_HOOK);
     let exit_signal = exit_hook.replace("@NUSHELL_EXIT_REQUEST@", EXIT_REQUEST_FILE);
     let stateful = exit_signal.replace("@NUSHELL_STATE_FUNCTIONS@", capture_state::FUNCTIONS);
@@ -17,14 +29,5 @@ pub(super) fn render(template_text: &str) -> String {
         "@NUSHELL_PROTECTED_ENVIRONMENT@",
         &variables::nushell_protected_environment_names(),
     );
-    let runner = template::render_command_function(&protected, POSIX_COMMAND_FUNCTION);
-    let state_functions = capture_state::FUNCTIONS.replace(
-        "@NUSHELL_PROTECTED_ENVIRONMENT@",
-        &variables::nushell_protected_environment_names(),
-    );
-    let wrapper = format!(
-        "{runner}\n{state_functions}\n{}",
-        template::nushell_dispatcher()
-    );
-    VariableNamespace::new().render(&wrapper)
+    template::render_command_function(&protected, POSIX_COMMAND_FUNCTION)
 }

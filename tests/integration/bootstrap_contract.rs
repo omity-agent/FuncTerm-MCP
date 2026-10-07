@@ -2,10 +2,9 @@ use crate::support::{
     locked_with_env, parse_command_result, parse_tab_created, required_executable, run_cli,
     send_command, temp_dir,
 };
+use crate::terminal_fixture;
 use functerm::shell::quote;
 use portable_pty::CommandBuilder;
-#[path = "terminal_fixture.rs"]
-mod terminal_fixture;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -24,6 +23,7 @@ fn powershell_profile_functions_and_prompt_survive_protocol_repair() {
         "function Profile-Function {{ 'PROFILE_FUNCTION_LOADED' }}
 function prompt {{ 'CUSTOM_PROFILE_PROMPT> ' }}
 Set-Alias -Name f -Value Write-Output
+Set-Alias -Name Invoke-FuncTermHelper -Value Write-Output
 Set-PSReadLineOption -HistorySaveStyle SaveIncrementally
 $env:FUNCTERM_SESSION_ROOT = 'broken'
 $env:FUNCTERM_HELPER_EXECUTABLE = 'broken'

@@ -41,7 +41,6 @@ function @FUNCTION@ {
     Set-FuncTermShimPath
     $@VAR_inputDir@ = Join-Path $@VAR_Directory@ '@INPUT_DIR@'
     $@VAR_outputDir@ = Join-Path $@VAR_Directory@ '@OUTPUT_DIR@'
-    $@VAR_stateDir@ = Join-Path $@VAR_Directory@ '@STATE_DIR@'
     $@VAR_stdoutFile@ = Join-Path $@VAR_outputDir@ '@STDOUT@'
     $@VAR_stderrFile@ = Join-Path $@VAR_outputDir@ '@STDERR@'
     $@VAR_scriptFile@ = Join-Path $@VAR_inputDir@ '@SCRIPT@'
@@ -64,7 +63,6 @@ function @FUNCTION@ {
     $env:@COMMAND_ID_ENV@ = $@VAR_CommandId@
     $env:@COMMAND_DIR_ENV@ = $@VAR_Directory@
     try {
-        Ensure-FuncTermShims
         Set-FuncTermShimPath
         Set-Location -LiteralPath $@VAR_WorkingDirectory@
         $global:LASTEXITCODE = $null
@@ -129,31 +127,18 @@ function @FUNCTION@ {
             }
         }
         Set-FuncTermShimPath
-        $null = [IO.Directory]::CreateDirectory($@VAR_stateDir@)
         if ([string]::IsNullOrEmpty($env:@HELPER_ENV@)) {
             [Console]::Error.WriteLine('@HELPER_ENV@ is not set')
             $@VAR_exitCode@ = 1
         }
         else {
             $@VAR_currentDirectory@ = $ExecutionContext.SessionState.Path.CurrentFileSystemLocation.ProviderPath
-            $@VAR_helperStart@ = [Diagnostics.ProcessStartInfo]::new($env:@HELPER_ENV@)
-            $@VAR_helperStart@.UseShellExecute = $false
-            $@VAR_helperStart@.ArgumentList.Add('internal-write-done')
-            $@VAR_helperStart@.ArgumentList.Add('--command-id')
-            $@VAR_helperStart@.ArgumentList.Add($@VAR_CommandId@)
-            $@VAR_helperStart@.ArgumentList.Add('--exit-code')
-            $@VAR_helperStart@.ArgumentList.Add([string]$@VAR_exitCode@)
-            $@VAR_helperStart@.ArgumentList.Add('--time-consumption')
-            $@VAR_helperStart@.ArgumentList.Add($@VAR_timeConsumption@)
-            $@VAR_helperStart@.ArgumentList.Add('--cwd')
-            $@VAR_helperStart@.ArgumentList.Add($@VAR_currentDirectory@)
-            $@VAR_helperStart@.ArgumentList.Add('--directory')
-            $@VAR_helperStart@.ArgumentList.Add($@VAR_Directory@)
-            $@VAR_helperProcess@ = [Diagnostics.Process]::Start($@VAR_helperStart@)
-            $@VAR_helperProcess@.WaitForExit()
-            if ($@VAR_helperProcess@.ExitCode -ne 0) {
-                $@VAR_exitCode@ = $@VAR_helperProcess@.ExitCode
-            }
+            $null = Invoke-FuncTermHelper -@VAR_Arguments@ @(
+                'internal-write-done', '--command-id', $@VAR_CommandId@,
+                '--exit-code', [string]$@VAR_exitCode@,
+                '--time-consumption', $@VAR_timeConsumption@,
+                '--cwd', $@VAR_currentDirectory@, '--directory', $@VAR_Directory@
+            )
         }
         if ($null -eq $@VAR_previousCommandId@) {
             Remove-Item Env:@COMMAND_ID_ENV@ -ErrorAction SilentlyContinue

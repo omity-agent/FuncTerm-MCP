@@ -59,6 +59,13 @@ pub(super) enum CliCommand {
     #[command(hide = true)]
     InternalTimeMillis,
     #[command(hide = true)]
+    InternalClaimCommand {
+        #[arg(long)]
+        session_root: PathBuf,
+        # [arg (long , value_parser = ShellChoice :: from_canonical_name)]
+        shell: ShellChoice,
+    },
+    #[command(hide = true)]
     InternalWriteDone {
         #[arg(long)]
         command_id: String,

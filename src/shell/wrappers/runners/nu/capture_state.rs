@@ -26,7 +26,7 @@ pub(super) const FUNCTIONS: &str = r#"def save_nushell_state [
         | save --force --raw $@VAR_config_state_file@
     let @VAR_declarations@ = scope commands
         | where type == custom
-        | where name not-in ['banner' 'pwd' 'exit' 'save_nushell_state' 'f' 'functerm_run_command' 'ensure_nushell_shims' 'write_nushell_config' 'restore_nushell_environment']
+        | where name not-in ['banner' 'pwd' 'exit' 'save_nushell_state' 'f' 'functerm_run_command' 'ensure_nushell_shims' 'restore_nushell_environment']
         | uniq-by name
         | each {|@VAR_item@| view source $@VAR_item@.name }
     let @VAR_aliases@ = scope aliases

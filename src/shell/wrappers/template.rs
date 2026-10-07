@@ -1,9 +1,9 @@
 use crate::contract::{
-    COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, COMMAND_INPUT_DIRECTORY,
-    COMMAND_OUTPUT_DIRECTORY, COMMAND_POWERSHELL_SCRIPT_FILE, COMMAND_SCRIPT_FILE,
-    COMMAND_STATE_DIRECTORY, COMMAND_WORKING_DIRECTORY_FILE, DISPATCH_FILE, DONE_FILE,
-    HELPER_EXECUTABLE_ENV, POSIX_COMMAND_FUNCTION, POWERSHELL_COMMAND_FUNCTION,
-    SESSION_COMMANDS_DIRECTORY, SESSION_STATE_DIRECTORY, STDERR_FILE, STDOUT_FILE,
+    CLAIM_RECEIPT_FILE, COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV,
+    COMMAND_INPUT_DIRECTORY, COMMAND_OUTPUT_DIRECTORY, COMMAND_POWERSHELL_SCRIPT_FILE,
+    COMMAND_SCRIPT_FILE, COMMAND_STATE_DIRECTORY, DONE_FILE, HELPER_EXECUTABLE_ENV,
+    POSIX_COMMAND_FUNCTION, POWERSHELL_COMMAND_FUNCTION, SESSION_STATE_DIRECTORY, STDERR_FILE,
+    STDOUT_FILE,
 };
 use crate::shell::shims::SESSION_ROOT_ENV;
 const COMMON: [(&str, &str); 9] = [
@@ -39,71 +39,58 @@ pub(in crate::shell) fn cmd_dispatcher() -> String {
     let rendered = render(
         CMD_DISPATCHER,
         &[
-            ("@DISPATCH@", DISPATCH_FILE),
-            ("@SESSION_COMMANDS@", SESSION_COMMANDS_DIRECTORY),
+            ("@CLAIM@", CLAIM_RECEIPT_FILE),
             ("@SESSION_STATE@", SESSION_STATE_DIRECTORY),
-            ("@WORKING_DIRECTORY@", COMMAND_WORKING_DIRECTORY_FILE),
         ],
     );
     super::VariableNamespace::new().render(&rendered)
 }
 pub(super) fn powershell_dispatcher() -> String {
     let session_root_env = SESSION_ROOT_ENV;
-    let state_directory = SESSION_STATE_DIRECTORY;
-    let dispatch_file = DISPATCH_FILE;
-    let commands_directory = SESSION_COMMANDS_DIRECTORY;
-    let input_directory = COMMAND_INPUT_DIRECTORY;
-    let working_directory_file = COMMAND_WORKING_DIRECTORY_FILE;
     let runner = POWERSHELL_COMMAND_FUNCTION;
-    format!(
-        r"function f {{
+    format ! ("function f {{
     try {{
-        $@VAR_dispatchFile@ = Join-Path $env:{session_root_env} '{state_directory}\{dispatch_file}'
-        $@VAR_commandId@ = [IO.File]::ReadAllText($@VAR_dispatchFile@, [Text.Encoding]::UTF8)
-        [IO.File]::Delete($@VAR_dispatchFile@)
-        $@VAR_directory@ = Join-Path $env:{session_root_env} ('{commands_directory}\' + $@VAR_commandId@)
-        $@VAR_workingDirectoryFile@ = Join-Path $@VAR_directory@ '{input_directory}\{working_directory_file}'
-        $@VAR_workingDirectory@ = [IO.File]::ReadAllText($@VAR_workingDirectoryFile@, [Text.Encoding]::UTF8)
-        . {runner} -@VAR_CommandId@ $@VAR_commandId@ -@VAR_Directory@ $@VAR_directory@ -@VAR_WorkingDirectory@ $@VAR_workingDirectory@
+        $@VAR_receipt@ = Invoke-FuncTermHelper -@VAR_Arguments@ @(
+            'internal-claim-command', '--session-root', $env:{session_root_env}, '--shell', 'powershell'
+        ) | ConvertFrom-Json
+        . {runner} -@VAR_CommandId@ $@VAR_receipt@.command_id -@VAR_Directory@ $@VAR_receipt@.directory -@VAR_WorkingDirectory@ $@VAR_receipt@.working_directory
     }}
     finally {{
         @POWERSHELL_STATE_CLEANUP@
     }}
-}}",
-    )
+}}")
 }
 pub(super) fn posix_dispatcher() -> String {
     let session_root_env = SESSION_ROOT_ENV;
     let state_directory = SESSION_STATE_DIRECTORY;
-    let dispatch_file = DISPATCH_FILE;
-    let commands_directory = SESSION_COMMANDS_DIRECTORY;
-    let input_directory = COMMAND_INPUT_DIRECTORY;
-    let working_directory_file = COMMAND_WORKING_DIRECTORY_FILE;
+    let receipt_file = CLAIM_RECEIPT_FILE;
+    let helper_env = HELPER_EXECUTABLE_ENV;
     let runner = POSIX_COMMAND_FUNCTION;
     format!(
         r#"f() {{
-    local @VAR_dispatch_file@="${{{session_root_env}}}/{state_directory}/{dispatch_file}"
+    local @VAR_helper@="${{{helper_env}}}"
+    @VAR_helper@="$(functerm_posix_path "$@VAR_helper@")" || return 1
+    local @VAR_receipt_file@="${{{session_root_env}}}/{state_directory}/{receipt_file}"
+    @VAR_receipt_file@="$(functerm_posix_path "$@VAR_receipt_file@")" || return 1
+    "$@VAR_helper@" internal-claim-command --session-root "${{{session_root_env}}}" --shell "$FUNCTERM_CURRENT_SHELL" > "$@VAR_receipt_file@" || return 1
     local @VAR_command_id@
-    @VAR_command_id@="$(cat "$@VAR_dispatch_file@")" || return 1
-    rm -f -- "$@VAR_dispatch_file@" || return 1
-    local @VAR_native_directory@="${{{session_root_env}}}/{commands_directory}/$@VAR_command_id@"
-    local @VAR_working_directory_file@="$@VAR_native_directory@/{input_directory}/{working_directory_file}"
+    local @VAR_native_directory@
     local @VAR_working_directory@
-    @VAR_working_directory@="$(cat "$@VAR_working_directory_file@")" || return 1
+    {{
+        IFS= read -r -d '' @VAR_command_id@ &&
+        IFS= read -r -d '' @VAR_native_directory@ &&
+        IFS= read -r -d '' @VAR_working_directory@
+    }} < "$@VAR_receipt_file@" || return 1
     {runner} "$@VAR_command_id@" "$@VAR_native_directory@" "$@VAR_working_directory@"
 }}"#,
     )
 }
 pub(super) fn nushell_dispatcher() -> String {
     let session_root_env = SESSION_ROOT_ENV;
-    let state_directory = SESSION_STATE_DIRECTORY;
-    let dispatch_file = DISPATCH_FILE;
-    let commands_directory = SESSION_COMMANDS_DIRECTORY;
-    let input_directory = COMMAND_INPUT_DIRECTORY;
-    let working_directory_file = COMMAND_WORKING_DIRECTORY_FILE;
+    let helper_env = HELPER_EXECUTABLE_ENV;
     let runner = POSIX_COMMAND_FUNCTION;
     format!(
-        "def --env f [] {{\n    let @VAR_dispatch_file@ = ($env.{session_root_env} | path join '{state_directory}' '{dispatch_file}')\n    let @VAR_command_id@ = (open --raw $@VAR_dispatch_file@)\n    rm --force $@VAR_dispatch_file@\n    let @VAR_directory@ = ($env.{session_root_env} | path join '{commands_directory}' $@VAR_command_id@)\n    let @VAR_working_directory@ = (open --raw ($@VAR_directory@ | path join '{input_directory}' '{working_directory_file}'))\n    {runner} $@VAR_command_id@ $@VAR_directory@ $@VAR_working_directory@\n}}",
+        "def --env f [] {{\n    let @VAR_helper@ = $env.{helper_env}\n    let @VAR_result@ = (^$@VAR_helper@ internal-claim-command --session-root $env.{session_root_env} --shell nu | complete)\n    if $@VAR_result@.exit_code != 0 {{\n        print --stderr $@VAR_result@.stderr\n        return\n    }}\n    let @VAR_receipt@ = ($@VAR_result@.stdout | from json)\n    {runner} $@VAR_receipt@.command_id $@VAR_receipt@.directory $@VAR_receipt@.working_directory\n}}",
     )
 }
 fn render(template: &str, extra: &[(&str, &str)]) -> String {
@@ -114,11 +101,20 @@ fn render(template: &str, extra: &[(&str, &str)]) -> String {
     text
 }
 const CMD_DISPATCHER: &str = r#"@echo off
-set "@VAR_dispatch_file@=%FUNCTERM_SESSION_ROOT%\@SESSION_STATE@\@DISPATCH@"
-set /p "@VAR_command_id@="<"%@VAR_dispatch_file@%" || exit /b 1
-del /q "%@VAR_dispatch_file@%" || exit /b 1
-set "@VAR_directory@=%FUNCTERM_SESSION_ROOT%\@SESSION_COMMANDS@\%@VAR_command_id@%"
-set /p "@VAR_working_directory@="<"%@VAR_directory@%\@INPUT_DIR@\@WORKING_DIRECTORY@" || exit /b 1
+set "@VAR_receipt_file@=%FUNCTERM_SESSION_ROOT%\@SESSION_STATE@\@CLAIM@"
+"%@HELPER_ENV@%" internal-claim-command --session-root "%FUNCTERM_SESSION_ROOT%" --shell cmd > "%@VAR_receipt_file@%" || exit /b 1
+set "@VAR_command_id@="
+set "@VAR_directory@="
+set "@VAR_working_directory@="
+for /f "usebackq delims=" %%r in ("%@VAR_receipt_file@%") do (
+    if not defined @VAR_command_id@ (
+        set "@VAR_command_id@=%%r"
+    ) else if not defined @VAR_directory@ (
+        set "@VAR_directory@=%%r"
+    ) else (
+        set "@VAR_working_directory@=%%r"
+    )
+)
 call "%~dp0cmd_run.bat" "%@VAR_command_id@%" "%@VAR_directory@%" "%@VAR_working_directory@%"
 exit /b %ERRORLEVEL%
 "#;

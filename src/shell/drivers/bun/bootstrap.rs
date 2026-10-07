@@ -1,13 +1,13 @@
 mod output_capture;
 use crate::contract::{
     COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, COMMAND_INPUT_DIRECTORY,
-    COMMAND_OUTPUT_DIRECTORY, COMMAND_WORKING_DIRECTORY_FILE, DISPATCH_FILE, HELPER_EXECUTABLE_ENV,
-    SESSION_COMMANDS_DIRECTORY, SESSION_STATE_DIRECTORY, STDERR_FILE, STDOUT_FILE,
+    COMMAND_OUTPUT_DIRECTORY, DISPATCH_FILE, HELPER_EXECUTABLE_ENV, SESSION_STATE_DIRECTORY,
+    STDERR_FILE, STDOUT_FILE,
 };
 pub(super) fn script(cwd: &str, ready: &str) -> String {
     let bootstrap = format!(
         r#"import {{ spawnSync as @VAR_spawnSync@ }} from "node:child_process";
-	import {{ existsSync as @VAR_existsSync@, readFileSync as @VAR_readFileSync@, rmSync as @VAR_rmSync@, watch as @VAR_watch@, writeFileSync as @VAR_writeFileSync@ }} from "node:fs";
+		import {{ existsSync as @VAR_existsSync@, readFileSync as @VAR_readFileSync@, watch as @VAR_watch@, writeFileSync as @VAR_writeFileSync@ }} from "node:fs";
 	import {{ join as @VAR_join@, delimiter as @VAR_delimiter@ }} from "node:path";
 	import {{ Recoverable as @VAR_Recoverable@, start as @VAR_start@ }} from "node:repl";
 	import {{ format as @VAR_format@, inspect as @VAR_inspect@ }} from "node:util";
@@ -21,12 +21,13 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
 	let @VAR_pendingEvaluations@ = 0;
 	let @VAR_deferredPrompt@;
 	let @VAR_evaluationReturned@ = false;
-	const @VAR_runHelper@ = @VAR_args@ => {{
+		const @VAR_runHelper@ = (@VAR_args@, @VAR_capture@ = false) => {{
 	    const @VAR_helper@ = process.env.{helper_env};
 	    if (!@VAR_helper@) throw new Error("{helper_env} is not set");
-	    const @VAR_result@ = @VAR_spawnSync@(@VAR_helper@, @VAR_args@, {{ env: process.env, stdio: "inherit" }});
+		    const @VAR_result@ = @VAR_spawnSync@(@VAR_helper@, @VAR_args@, {{ env: process.env, stdio: @VAR_capture@ ? "pipe" : "inherit", encoding: "utf8" }});
 	    if (@VAR_result@.error) throw @VAR_result@.error;
-	    if (@VAR_result@.status !== 0) throw new Error(`FuncTerm helper exited with ${{@VAR_result@.status}}`);
+		    if (@VAR_result@.status !== 0) throw new Error(`FuncTerm helper exited with ${{@VAR_result@.status}}: ${{@VAR_result@.stderr ?? ""}}`);
+		    return @VAR_result@.stdout;
 	}};
 	const @VAR_prependShimPath@ = () => {{
 	    const @VAR_shim@ = process.env.FUNCTERM_SHIM_DIR;
@@ -114,20 +115,19 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
 	    if (@VAR_dispatching@ || @VAR_activeCommand@) return;
 	    @VAR_dispatching@ = true;
 	    try {{
-	        const @VAR_commandId@ = @VAR_readFileSync@(@VAR_dispatchFile@, "utf8");
-	        @VAR_rmSync@(@VAR_dispatchFile@);
-	        const @VAR_directory@ = @VAR_join@(process.env.FUNCTERM_SESSION_ROOT, "{commands_directory}", @VAR_commandId@);
+		        const @VAR_receipt@ = JSON.parse(@VAR_runHelper@(["internal-claim-command", "--session-root", process.env.FUNCTERM_SESSION_ROOT, "--shell", "bun"], true));
+		        const @VAR_commandId@ = @VAR_receipt@.command_id;
+		        const @VAR_directory@ = @VAR_receipt@.directory;
 	        const @VAR_input@ = @VAR_join@(@VAR_directory@, "{input_directory}");
 	        const @VAR_output@ = @VAR_join@(@VAR_directory@, "{output_directory}");
 	        const @VAR_source@ = @VAR_readFileSync@(@VAR_join@(@VAR_input@, "{command_file}"), "utf8");
-	        const @VAR_workingDirectory@ = @VAR_readFileSync@(@VAR_join@(@VAR_input@, "{working_directory_file}"), "utf8");
+		        const @VAR_workingDirectory@ = @VAR_receipt@.working_directory;
 	        const @VAR_previousId@ = process.env.{command_id_env};
 	        const @VAR_previousDirectory@ = process.env.{command_directory_env};
 	        const @VAR_protectedEnvironment@ = {{ ...process.env }};
 	        const @VAR_previousError@ = @VAR_server@.context._error;
 	        process.env.{command_id_env} = @VAR_commandId@;
 	        process.env.{command_directory_env} = @VAR_directory@;
-	        @VAR_runHelper@(["internal-ensure-shims", "--directory", process.env.FUNCTERM_SHIM_DIR]);
 	        @VAR_prependShimPath@();
 	        process.chdir(@VAR_workingDirectory@);
 	        @VAR_runHelper@(["internal-write-start", "--command-id", @VAR_commandId@, "--directory", @VAR_directory@]);
@@ -172,11 +172,9 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
         helper_env = HELPER_EXECUTABLE_ENV,
         session_state = SESSION_STATE_DIRECTORY,
         dispatch_file = DISPATCH_FILE,
-        commands_directory = SESSION_COMMANDS_DIRECTORY,
         input_directory = COMMAND_INPUT_DIRECTORY,
         output_directory = COMMAND_OUTPUT_DIRECTORY,
         command_file = COMMAND_FILE,
-        working_directory_file = COMMAND_WORKING_DIRECTORY_FILE,
         command_id_env = COMMAND_ID_ENV,
         command_directory_env = COMMAND_DIRECTORY_ENV,
         stdout_file = STDOUT_FILE,

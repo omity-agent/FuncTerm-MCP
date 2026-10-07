@@ -1,6 +1,6 @@
 use anyhow::{Context as _, Result};
 use std::io::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
 pub(crate) fn write_once(destination: &Path, contents: impl AsRef<[u8]>) -> Result<()> {
     publish_once(destination, |file| file.write_all(contents.as_ref()))
@@ -62,4 +62,19 @@ fn temporary_sibling(destination: &Path) -> Result<NamedTempFile> {
         .context("published file has no parent")?;
     fs_err::create_dir_all(parent)?;
     NamedTempFile::new_in(parent).context("failed to create atomic publication file")
+}
+pub(crate) fn path_text(path: &Path, role: &str) -> Result<String> {
+    path.to_str()
+        .map(str::to_owned)
+        .ok_or_else(|| anyhow::anyhow!("{role} is not valid UTF-8: {}", path.display()))
+}
+pub(crate) fn resolve(input: Option<&Path>) -> Result<PathBuf> {
+    let base = std::env::current_dir().context("failed to locate program working directory")?;
+    let Some(raw_path) = input else {
+        return Ok(base);
+    };
+    if raw_path.is_absolute() {
+        return Ok(raw_path.to_path_buf());
+    }
+    Ok(base.join(raw_path))
 }

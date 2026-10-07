@@ -5,7 +5,7 @@ use std::path::Path;
 pub fn native_path(path: &Path) -> Result<String> {
     crate::text::path_text(path, "shell path")
 }
-#[must_use]
+#[must_use = "the quoted value is intended to be inserted into a CMD invocation"]
 #[inline]
 pub fn cmd_string(value: &str) -> String {
     format!("\"{}\"", value.replace('"', "\"\""))
@@ -14,7 +14,7 @@ pub fn cmd_string(value: &str) -> String {
 pub fn powershell_path(path: &Path) -> Result<String> {
     Ok(powershell_string(&native_path(path)?))
 }
-#[must_use]
+#[must_use = "the encoded value is intended to be inserted into a PowerShell expression"]
 #[inline]
 pub fn powershell_string(value: &str) -> String {
     format!(
@@ -26,7 +26,7 @@ pub fn powershell_string(value: &str) -> String {
 pub fn nushell_path(path: &Path) -> Result<String> {
     Ok(nushell_string(&native_path(path)?))
 }
-#[must_use]
+#[must_use = "the encoded value is intended to be inserted into a NuShell expression"]
 #[inline]
 pub fn nushell_string(value: &str) -> String {
     format!(
@@ -34,7 +34,7 @@ pub fn nushell_string(value: &str) -> String {
         STANDARD.encode(value.as_bytes())
     )
 }
-#[must_use]
+#[must_use = "the quoted value is intended to be inserted into a POSIX invocation"]
 #[inline]
 pub fn posix_string(value: &str) -> String {
     shell_words::quote(value).into_owned()

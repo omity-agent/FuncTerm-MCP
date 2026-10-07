@@ -18,6 +18,13 @@ pub(crate) async fn run() -> Result<()> {
         }
         CliCommand::InternalLaunchDaemon => crate::runtime::client::run_daemon_launcher(),
         CliCommand::InternalTimeMillis => print_result(crate::app::command_state::time_millis()),
+        CliCommand::InternalClaimCommand {
+            session_root,
+            shell,
+        } => print_result(crate::app::command_state::claim_command(
+            &session_root,
+            shell,
+        )),
         CliCommand::InternalWriteDone {
             command_id,
             exit_code,

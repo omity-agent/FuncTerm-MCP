@@ -8,6 +8,7 @@ pub(crate) const COMMAND_OUTPUT_DIRECTORY: &str = "output";
 pub(crate) const COMMAND_POWERSHELL_SCRIPT_FILE: &str = "command.ps1";
 pub(crate) const COMMAND_STATE_DIRECTORY: &str = "state";
 pub(crate) const DISPATCH_FILE: &str = "dispatch";
+pub(crate) const CLAIM_RECEIPT_FILE: &str = "claim";
 pub(crate) const DISPATCHER_COMMAND: &str = "f";
 pub(crate) const DONE_FILE: &str = "done.json";
 pub(crate) const EARLY_DONE_DIRECTORY: &str = ".early-done";

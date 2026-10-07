@@ -11,12 +11,6 @@ impl PosixDialect {
             Self::Zsh => "    emulate -L zsh\n    setopt sh_word_split\n",
         }
     }
-    pub(super) const fn mkdir(self) -> &'static str {
-        match self {
-            Self::Bash => "mkdir -p",
-            Self::Zsh => "mkdir -p --",
-        }
-    }
     pub(super) fn previous_flags(self) -> String {
         match self {
             Self::Bash => format!(

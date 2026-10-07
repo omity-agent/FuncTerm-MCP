@@ -49,7 +49,11 @@ fn close_current_from_nested_shell_targets_its_own_tab() {
     let target = create_tab(&temp_root(), SHELL);
     let other = create_tab(&temp_root(), SHELL);
     let nested = send_command(&target.tab_id, SHELL, 5.0);
-    assert!(parse_command_result(&nested).finished);
+    assert!(
+        parse_command_result(&nested).finished,
+        "nested launch: {nested:?}; terminal: {:?}",
+        run_cli(&["view", &target.tab_id])
+    );
     #[cfg(windows)]
     let command = "& $env:FUNCTERM_HELPER_EXECUTABLE close --current";
     #[cfg(unix)]

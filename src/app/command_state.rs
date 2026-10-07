@@ -4,6 +4,9 @@ use serde::Serialize;
 use std::io::Write;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
+mod claim;
+mod receipt;
+pub(crate) use claim::claim_command;
 pub(crate) fn time_millis() -> Result<String> {
     let elapsed = SystemTime::now()
         .duration_since(UNIX_EPOCH)

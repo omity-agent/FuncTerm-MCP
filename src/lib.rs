@@ -3,7 +3,8 @@
 #![cfg_attr(windows, feature(windows_process_extensions_inherit_handles))]
 mod app;
 mod engine;
-pub(crate) use app::{cli, contract, path_text as text, publication};
+pub(crate) use app::filesystem as publication;
+pub(crate) use app::{cli, contract, filesystem as text};
 pub(crate) use engine::{mcp, runtime, shim};
 pub mod shell;
 extern crate alloc;

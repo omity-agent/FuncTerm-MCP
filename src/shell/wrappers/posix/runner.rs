@@ -2,8 +2,8 @@ use super::super::{start, variables};
 use super::PosixDialect;
 use crate::contract::{
     COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, COMMAND_INPUT_DIRECTORY,
-    COMMAND_OUTPUT_DIRECTORY, COMMAND_STATE_DIRECTORY, HELPER_EXECUTABLE_ENV,
-    POSIX_COMMAND_FUNCTION, STDERR_FILE, STDOUT_FILE,
+    COMMAND_OUTPUT_DIRECTORY, HELPER_EXECUTABLE_ENV, POSIX_COMMAND_FUNCTION, STDERR_FILE,
+    STDOUT_FILE,
 };
 pub(super) fn command_function(dialect: PosixDialect) -> String {
     format!(
@@ -16,8 +16,6 @@ pub(super) fn command_function(dialect: PosixDialect) -> String {
 	    @VAR_working_directory@="$(functerm_posix_path "$@VAR_working_directory@")" || return 1
 	    local @VAR_input_dir@="$@VAR_directory@/{input_dir}"
 	    local @VAR_output_dir@="$@VAR_directory@/{output_dir}"
-	    local @VAR_state_dir@="$@VAR_directory@/{state_dir}"
-	    {mkdir} "$@VAR_input_dir@" "$@VAR_output_dir@" "$@VAR_state_dir@" || return 1
 	    local @VAR_stdout_file@="$@VAR_output_dir@/{stdout}"
 	    local @VAR_stderr_file@="$@VAR_output_dir@/{stderr}"
 	    local @VAR_command_file@="$@VAR_input_dir@/{command_file}"
@@ -27,17 +25,6 @@ pub(super) fn command_function(dialect: PosixDialect) -> String {
 	{environment_snapshot}
 	    export {command_id_env}="$@VAR_command_id@"
 	    export {command_dir_env}="$@VAR_directory@"
-	    if ! functerm_ensure_shims; then
-	        local @VAR_publish_result@=0
-	        functerm_publish_done "$@VAR_command_id@" 1 "0ns" "$PWD" "$@VAR_native_directory@" || @VAR_publish_result@=$?
-	        functerm_restore_command_environment \
-	            "$@VAR_had_previous_command_id@" "$@VAR_previous_command_id@" \
-	            "$@VAR_had_previous_command_directory@" "$@VAR_previous_command_directory@"
-	        if [ "$@VAR_publish_result@" -ne 0 ]; then
-	            return "$@VAR_publish_result@"
-	        fi
-	        return 1
-	    fi
 		    functerm_ensure_shim_path || return 1
 	    local @VAR_script@
 	    if ! @VAR_script@="$(cat "$@VAR_command_file@" 2> "$@VAR_stderr_file@")"; then
@@ -52,7 +39,6 @@ pub(super) fn command_function(dialect: PosixDialect) -> String {
 	        fi
 	        return 1
 	    fi
-	    rm -f -- "$@VAR_command_file@" || return 1
 	    if ! {cd} "$@VAR_working_directory@"; then
 	        local @VAR_publish_result@=0
 	        functerm_publish_done "$@VAR_command_id@" 1 "0ns" "$PWD" "$@VAR_native_directory@" || @VAR_publish_result@=$?
@@ -80,6 +66,11 @@ pub(super) fn command_function(dialect: PosixDialect) -> String {
 	    {{ eval "$@VAR_script@"; }} > "$@VAR_stdout_file@" 2> "$@VAR_stderr_file@"
 	    local @VAR_exit_code@=$?
 	{environment_restore}
+	    local @VAR_environment_restore_result@=$?
+	    if [ "$@VAR_environment_restore_result@" -ne 0 ]; then
+	        printf '%s\n' 'failed to restore shell shim path' >> "$@VAR_stderr_file@"
+	        @VAR_exit_code@=1
+	    fi
 	    local @VAR_command_finished_at@
 	    @VAR_command_finished_at@="$(functerm_command_time_millis)" || return 1
 	    local @VAR_time_consumption@="$((@VAR_command_finished_at@ - @VAR_command_started_at@))ms"
@@ -89,7 +80,6 @@ pub(super) fn command_function(dialect: PosixDialect) -> String {
 	    if [ -f "$@VAR_stderr_file@" ]; then
 	        cat "$@VAR_stderr_file@" >&2 || return 1
 	    fi
-	    {mkdir} "$@VAR_state_dir@" || return 1
 	    if ! functerm_publish_done "$@VAR_command_id@" "$@VAR_exit_code@" "$@VAR_time_consumption@" "$PWD" "$@VAR_native_directory@"; then
 	        functerm_restore_command_environment \
 	            "$@VAR_had_previous_command_id@" "$@VAR_previous_command_id@" \
@@ -141,26 +131,11 @@ functerm_command_time_millis() {{
 	    fi
 	    @VAR_helper@="$(functerm_posix_path "$@VAR_helper@")" || return 1
 	    "$@VAR_helper@" internal-time-millis
-}}
-functerm_ensure_shims() {{
-{emulate}    local @VAR_shim_dir@="${{FUNCTERM_SHIM_DIR-}}"
-	    if [ -z "$@VAR_shim_dir@" ]; then
-	        return 0
-	    fi
-	    local @VAR_helper@="${{{helper_env}-}}"
-	    if [ -z "$@VAR_helper@" ]; then
-	        printf '%s is not set\n' "{helper_env}" >&2
-	        return 1
-	    fi
-	    @VAR_helper@="$(functerm_posix_path "$@VAR_helper@")" || return 1
-	    "$@VAR_helper@" internal-ensure-shims --directory "$@VAR_shim_dir@"
 }}"#,
         name = POSIX_COMMAND_FUNCTION,
         emulate = dialect.emulate(),
-        mkdir = dialect.mkdir(),
         input_dir = COMMAND_INPUT_DIRECTORY,
         output_dir = COMMAND_OUTPUT_DIRECTORY,
-        state_dir = COMMAND_STATE_DIRECTORY,
         stdout = STDOUT_FILE,
         stderr = STDERR_FILE,
         command_file = COMMAND_FILE,

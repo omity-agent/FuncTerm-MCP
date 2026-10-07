@@ -19,10 +19,6 @@ set "@VAR_directory@=%~2"
 set "@VAR_working_directory@=%~3"
 set "@VAR_input_dir@=%@VAR_directory@%\@INPUT_DIR@"
 set "@VAR_output_dir@=%@VAR_directory@%\@OUTPUT_DIR@"
-set "@VAR_state_dir@=%@VAR_directory@%\@STATE_DIR@"
-if not exist "%@VAR_input_dir@%" mkdir "%@VAR_input_dir@%" || exit /b 1
-if not exist "%@VAR_output_dir@%" mkdir "%@VAR_output_dir@%" || exit /b 1
-if not exist "%@VAR_state_dir@%" mkdir "%@VAR_state_dir@%" || exit /b 1
 set "@VAR_stdout_file@=%@VAR_output_dir@%\@STDOUT@"
 set "@VAR_stderr_file@=%@VAR_output_dir@%\@STDERR@"
 set "@VAR_script_file@=%@VAR_input_dir@%\@SCRIPT@"
@@ -35,20 +31,6 @@ set "@VAR_previous_command_id@=%@COMMAND_ID_ENV@%"
 set "@VAR_previous_command_directory@=%@COMMAND_DIR_ENV@%"
 set "@COMMAND_ID_ENV@=%@VAR_command_id@%"
 set "@COMMAND_DIR_ENV@=%@VAR_directory@%"
-if not "%FUNCTERM_SHIM_DIR%"=="" (
-    if "%@HELPER_ENV@%"=="" (
-        echo @HELPER_ENV@ is not set 1>&2
-        call :publish_done 1
-        call :restore_command_environment
-        exit /b 1
-    )
-    "%@HELPER_ENV@%" internal-ensure-shims --directory "%FUNCTERM_SHIM_DIR%"
-    if errorlevel 1 (
-        call :publish_done 1
-        call :restore_command_environment
-        exit /b 1
-    )
-)
 call :prepend_functerm_paths
 cd /d "%@VAR_working_directory@%"
 if errorlevel 1 (
@@ -95,7 +77,6 @@ if %@VAR_command_elapsed@% LSS 0 set /a @VAR_command_elapsed@+=86400000
 set "@VAR_time_consumption@=%@VAR_command_elapsed@%ms"
 if exist "%@VAR_stdout_file@%" type "%@VAR_stdout_file@%"
 if exist "%@VAR_stderr_file@%" type "%@VAR_stderr_file@%" 1>&2
-if not exist "%@VAR_state_dir@%" mkdir "%@VAR_state_dir@%" || exit /b 1
 call :publish_done %@VAR_exit_code@%
 if errorlevel 1 (
     call :restore_command_environment
