@@ -59,7 +59,7 @@ pub(crate) async fn run() -> Result<()> {
                 )?,
                 starting_shell,
                 load_profile: settings.shell_load_profile && !no_profile,
-                environment: EnvironmentSnapshot::for_new_tab_request(),
+                environment: EnvironmentSnapshot::capture(),
             };
             print_result(interface::execute(&settings, request).await)
         }

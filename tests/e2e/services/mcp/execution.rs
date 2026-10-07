@@ -16,7 +16,7 @@ pub(super) fn create_tabs(session: &mut McpSession) -> [String; 2] {
             .unwrap_or_else(|| panic!("tab index should exist"))
             .pointer("/result/tab_id")
             .and_then(Value::as_str)
-            .unwrap()
+            .unwrap_or_else(|| panic!("tab creation failed: {response}"))
             .to_owned()
     })
 }

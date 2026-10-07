@@ -1,4 +1,6 @@
+extern crate alloc;
 use crate::support::{TestGuard, locked_with_env};
+use alloc::rc::Rc;
 use core::time::Duration;
 use rmcp::serde_json::{Value, json};
 use std::{
@@ -12,23 +14,31 @@ pub(super) struct McpSession {
     input: ChildStdin,
     responses: Receiver<Value>,
     sequence: u64,
-    _daemon: TestGuard,
+    _daemon: Rc<TestGuard>,
 }
 impl McpSession {
     pub(super) fn new() -> Self {
         Self::with_arguments(&[])
     }
     pub(super) fn with_arguments(arguments: &[&str]) -> Self {
-        let daemon = locked_with_env(&[]);
-        let mut child = Command::new(env!("CARGO_BIN_EXE_functerm"))
+        let daemon = Rc::new(locked_with_env(&[]));
+        let environment = daemon.env();
+        Self::with_context(daemon, arguments, &environment)
+    }
+    pub(super) fn with_context(
+        daemon: Rc<TestGuard>,
+        arguments: &[&str],
+        environment: &[(String, String)],
+    ) -> Self {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_functerm"));
+        command
             .arg("mcp")
             .args(arguments)
-            .envs(daemon.env())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .spawn()
-            .unwrap();
+            .stderr(Stdio::inherit());
+        crate::support::apply_test_environment(&mut command, environment);
+        let mut child = command.spawn().unwrap();
         let input = child.stdin.take().unwrap();
         let stdout = child.stdout.take().unwrap();
         let (sender, responses) = mpsc::channel();

@@ -43,10 +43,8 @@ impl ShellLauncher {
         starting_directory: &Path,
         starting_shell: ShellChoice,
         load_profile: bool,
-        environment: &EnvironmentSnapshot,
+        client_environment: &EnvironmentSnapshot,
     ) -> Result<Arc<ShellSession>> {
-        let tab_environment = EnvironmentSnapshot::tab_launch_environment(environment)
-            .context("failed to construct tab environment")?;
         let tab_root = temp::tab_root(&self.generation_root, tab_id);
         let tab_state = temp::tab_state_directory(&tab_root);
         let command_root = temp::tab_commands_directory(&tab_root);
@@ -58,7 +56,7 @@ impl ShellLauncher {
             &tab_root,
             &self.shim_dir,
             starting_shell,
-            &tab_environment,
+            client_environment,
             starting_directory,
         )?;
         managed_environment.push((shims::TAB_ID_ENV.into(), tab_id.into()));
@@ -85,8 +83,8 @@ impl ShellLauncher {
             })
             .context("failed to open pty")?;
         let executable =
-            starting_shell.executable(&self.settings, &tab_environment, starting_directory)?;
-        let mut command = CommandBuilder::new(executable);
+            starting_shell.executable(&self.settings, client_environment, starting_directory)?;
+        let mut command = CommandBuilder::new(&executable);
         command.env_clear();
         let ready_file = startup.ready_file.clone();
         apply_startup(&mut command, startup);
@@ -139,7 +137,16 @@ impl ShellLauncher {
                 return Err(error).context("failed to start pty reader");
             }
         };
-        if let Err(error) = startup_events.wait(&mut child, &ready_file, &screen, startup_timeout) {
+        let initialized = startup_events
+            .wait(&mut child, &ready_file, &screen, startup_timeout)
+            .with_context(|| {
+                format!(
+                    "failed to initialize {} at {executable} with shim directory {}",
+                    starting_shell.canonical_name(),
+                    self.shim_dir.display(),
+                )
+            });
+        if let Err(error) = initialized {
             process::cleanup(child.as_mut(), "unregistered shell child");
             drop(retained_slave);
             drop(pair.master);

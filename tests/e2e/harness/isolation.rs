@@ -1,4 +1,4 @@
-use super::executable::is_functerm_runtime_shim;
+use super::executable::is_functerm_shim_directory;
 use std::ffi::{OsStr, OsString};
 use std::process::Command;
 pub(crate) fn apply(command: &mut Command, environment: &[(String, String)]) {
@@ -27,7 +27,7 @@ fn sanitize_inherited(command: &mut Command) {
 }
 fn sanitize_path(path: &OsStr) -> OsString {
     let entries = std::env::split_paths(path)
-        .filter(|entry| !is_functerm_runtime_shim(entry))
+        .filter(|entry| !is_functerm_shim_directory(entry))
         .collect::<Vec<_>>();
     std::env::join_paths(entries).unwrap()
 }

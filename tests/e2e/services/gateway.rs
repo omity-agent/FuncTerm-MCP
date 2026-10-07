@@ -2,6 +2,9 @@
 #[path = "mcp/execution.rs"]
 mod execution;
 #[cfg(test)]
+#[path = "mcp/inheritance.rs"]
+mod inheritance;
+#[cfg(test)]
 #[path = "mcp/input_delivery.rs"]
 mod input_delivery;
 #[cfg(test)]

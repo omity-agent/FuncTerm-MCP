@@ -11,9 +11,9 @@ pub(crate) fn real(name: &str) -> Option<PathBuf> {
         .find(|path| !is_functerm_runtime_shim(path) && !is_windows_subsystem_bash(path))
 }
 pub(crate) fn is_functerm_runtime_shim(path: &Path) -> bool {
-    let Some(shims) = path.parent() else {
-        return false;
-    };
+    path.parent().is_some_and(is_functerm_shim_directory)
+}
+pub(crate) fn is_functerm_shim_directory(shims: &Path) -> bool {
     let Some(generation) = named_parent(shims, "shims") else {
         return false;
     };

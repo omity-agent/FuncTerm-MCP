@@ -24,7 +24,7 @@ impl Operation for NewTabExec {
             starting_directory,
             starting_shell: self.starting_shell,
             load_profile: settings.shell_load_profile,
-            environment: EnvironmentSnapshot::for_new_tab_request(),
+            environment: EnvironmentSnapshot::capture(),
         })
     }
     fn output(payload: Payload) -> Result<CallToolResult, String> {
