@@ -13,6 +13,7 @@ pub(crate) struct Settings {
     pub(crate) terminal_model_title: String,
     pub(crate) shell_startup_timeout_seconds: f64,
     pub(crate) shell_load_profile: bool,
+    pub(crate) unix_normal_user: String,
     pub(crate) powershell: Vec<String>,
     pub(crate) bash: Vec<String>,
     pub(crate) nushell: Vec<String>,
@@ -28,6 +29,10 @@ pub(crate) struct IpcSettings {
     pub(crate) setup_timeout_seconds: f64,
     pub(crate) max_frame_bytes: usize,
     pub(crate) blocking_concurrency: usize,
+    #[cfg(windows)]
+    pub(crate) windows_access_control: String,
+    #[cfg(windows)]
+    pub(crate) windows_security_label: String,
 }
 impl IpcSettings {
     pub(crate) fn setup_timeout(&self) -> Result<Duration> {
@@ -72,6 +77,7 @@ pub(crate) fn load() -> Result<Settings> {
         toml::from_str::<Settings>(SETTINGS).context("failed to parse embedded settings")?;
     settings.ipc.validate()?;
     apply_string_override(DAEMON_SERVICE_NAME_ENV, &mut settings.daemon_service_name);
+    apply_string_override("FUNCTERM_UNIX_NORMAL_USER", &mut settings.unix_normal_user);
     for (name, candidates) in [
         ("FUNCTERM_POWERSHELL", &mut settings.powershell),
         ("FUNCTERM_BASH", &mut settings.bash),

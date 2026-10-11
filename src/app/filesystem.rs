@@ -61,7 +61,11 @@ fn temporary_sibling(destination: &Path) -> Result<NamedTempFile> {
         .parent()
         .context("published file has no parent")?;
     fs_err::create_dir_all(parent)?;
-    NamedTempFile::new_in(parent).context("failed to create atomic publication file")
+    let temporary =
+        NamedTempFile::new_in(parent).context("failed to create atomic publication file")?;
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    crate::engine::privileges::inherit_publication_acl(temporary.path())?;
+    Ok(temporary)
 }
 pub(crate) fn path_text(path: &Path, role: &str) -> Result<String> {
     path.to_str()

@@ -46,15 +46,20 @@ where
             .context("failed to receive IPC frame")
     }
 }
-pub(crate) fn listener(service_name: &str) -> Result<LocalSocketListener> {
+pub(crate) fn listener(service_name: &str, settings: &IpcSettings) -> Result<LocalSocketListener> {
+    #[cfg(unix)]
+    let _settings = settings;
     let socket_name = socket_name(service_name);
     let name = socket_name
         .as_str()
         .to_ns_name::<GenericNamespaced>()
         .context("failed to create daemon socket name")?;
-    ListenerOptions::new()
-        .name(name)
-        .try_overwrite(true)
+    let options = ListenerOptions::new().name(name).try_overwrite(true);
+    #[cfg(windows)]
+    let secured = super::pipe_policy::configure(options, settings)?;
+    #[cfg(unix)]
+    let secured = options;
+    secured
         .create_tokio()
         .context("failed to listen on daemon IPC socket")
 }

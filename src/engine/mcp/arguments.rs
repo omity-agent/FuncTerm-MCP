@@ -9,6 +9,24 @@ use std::path::Path;
 pub(super) struct NewTabExec {
     pub(super) starting_directory: Option<String>,
     pub(super) starting_shell: ShellChoice,
+    #[serde(default)]
+    pub(super) elevated: bool,
+}
+#[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[schemars(inline)]
+pub(super) struct FixedNewTabExec {
+    pub(super) starting_directory: Option<String>,
+    pub(super) starting_shell: ShellChoice,
+}
+impl FixedNewTabExec {
+    pub(super) fn with_privilege(self, elevated: bool) -> NewTabExec {
+        NewTabExec {
+            starting_directory: self.starting_directory,
+            starting_shell: self.starting_shell,
+            elevated,
+        }
+    }
 }
 impl NewTabExec {
     pub(super) fn starting_directory_path(&self) -> Option<&Path> {

@@ -13,6 +13,9 @@ mod inspection;
 #[cfg(test)]
 #[path = "mcp/policy.rs"]
 mod policy;
+#[cfg(test)]
+#[path = "mcp/tool_restrictions.rs"]
+mod tool_restrictions;
 #[path = "mcp/wire.rs"]
 mod wire;
 use rmcp::serde_json::{Value, json};

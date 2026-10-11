@@ -32,6 +32,7 @@ impl Manager {
         starting_directory: PathBuf,
         starting_shell: ShellChoice,
         load_profile: bool,
+        elevated: bool,
         environment: EnvironmentSnapshot,
     ) -> Result<String> {
         let manager = Arc::clone(self);
@@ -41,6 +42,7 @@ impl Manager {
                     &starting_directory,
                     starting_shell,
                     load_profile,
+                    elevated,
                     &environment,
                 )
             })
@@ -51,6 +53,7 @@ impl Manager {
         starting_directory: &Path,
         starting_shell: ShellChoice,
         load_profile: bool,
+        elevated: bool,
         environment: &EnvironmentSnapshot,
     ) -> Result<String> {
         if !starting_directory.is_dir() {
@@ -65,6 +68,7 @@ impl Manager {
             starting_directory,
             starting_shell,
             load_profile,
+            elevated,
             environment,
         )?;
         self.tabs.insert(tab::Tab::new(

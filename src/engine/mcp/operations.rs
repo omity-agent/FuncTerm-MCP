@@ -24,6 +24,7 @@ impl Operation for NewTabExec {
             starting_directory,
             starting_shell: self.starting_shell,
             load_profile: settings.shell_load_profile,
+            elevated: self.elevated,
             environment: EnvironmentSnapshot::capture(),
         })
     }

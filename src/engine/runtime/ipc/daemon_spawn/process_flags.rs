@@ -103,46 +103,13 @@ fn current_job_state() -> JobState {
 }
 #[cfg(windows)]
 pub(super) fn spawn_with_shell_parent(mut command: Command) -> Result<std::process::Child> {
-    use std::os::windows::io::{AsRawHandle as _, FromRawHandle as _, OwnedHandle};
-    use std::os::windows::process::{CommandExt as _, ProcThreadAttributeList};
-    use windows::Win32::System::Threading::{
-        OpenProcess, PROC_THREAD_ATTRIBUTE_PARENT_PROCESS, PROCESS_CREATE_PROCESS,
-    };
-    use windows::Win32::UI::WindowsAndMessaging::{GetShellWindow, GetWindowThreadProcessId};
-    let shell_window = unsafe { GetShellWindow() };
-    anyhow::ensure!(
-        !shell_window.is_invalid(),
-        "Windows shell window was not found"
-    );
-    let mut shell_process_id = 0_u32;
-    unsafe {
-        GetWindowThreadProcessId(shell_window, Some(&raw mut shell_process_id));
-    }
-    anyhow::ensure!(
-        shell_process_id != 0,
-        "Windows shell process id was not found"
-    );
-    let process = unsafe { OpenProcess(PROCESS_CREATE_PROCESS, false, shell_process_id) }
-        .context("failed to open Windows shell process")?;
-    let shell_process = unsafe { OwnedHandle::from_raw_handle(process.0) };
-    let parent = shell_process.as_raw_handle();
-    let parent_attribute = usize::try_from(PROC_THREAD_ATTRIBUTE_PARENT_PROCESS)
-        .context("parent process attribute does not fit usize")?;
-    let attributes = unsafe {
-        ProcThreadAttributeList::build().raw_attribute(
-            parent_attribute,
-            core::ptr::addr_of!(parent),
-            core::mem::size_of_val(&parent),
-        )
-    }
-    .finish()
-    .context("failed to build launcher process attributes")?;
+    use std::os::windows::process::CommandExt as _;
+    use windows::Win32::System::Threading::PROCESS_CREATE_PROCESS;
+    let shell_process = crate::engine::privileges::desktop_host::open(PROCESS_CREATE_PROCESS)?;
     command
         .creation_flags(windows_creation_flags_for_job(JobState::NotInJob))
         .inherit_handles(false);
-    command
-        .spawn_with_attributes(&attributes)
-        .context("failed to spawn process through Windows shell process")
+    crate::engine::privileges::desktop_host::spawn(&mut command, &shell_process)
 }
 #[cfg(not(windows))]
 pub(super) fn spawn_with_shell_parent(_command: Command) -> Result<std::process::Child> {

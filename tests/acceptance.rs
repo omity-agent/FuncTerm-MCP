@@ -8,6 +8,9 @@ mod bootstrap_contract;
 #[path = "integration/job_isolation.rs"]
 mod job_isolation;
 #[cfg(test)]
+#[path = "integration/permission_policy.rs"]
+mod permission_policy;
+#[cfg(test)]
 #[path = "e2e/streams.rs"]
 mod routing;
 #[cfg(test)]

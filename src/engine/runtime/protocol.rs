@@ -19,6 +19,7 @@ pub(crate) enum Request {
         starting_directory: PathBuf,
         starting_shell: ShellChoice,
         load_profile: bool,
+        elevated: bool,
         environment: EnvironmentSnapshot,
     },
     Close {

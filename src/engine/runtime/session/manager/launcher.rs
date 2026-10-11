@@ -1,27 +1,31 @@
 #[cfg(windows)]
 mod host_wait;
+mod spawn_builder;
 mod startup;
 use super::process;
 use super::shell_session::{ShellSession, ShellSessionParts};
 use crate::contract::DISPATCH_FILE;
+use crate::engine::privileges::ShellIdentity;
 use crate::runtime::config::Settings;
 use crate::runtime::protocol::EnvironmentSnapshot;
 use crate::runtime::session::observation::PathWatch;
 use crate::runtime::session::terminal::{Terminal, start_reader};
 use crate::runtime::temp;
-use crate::shell::{ShellChoice, ShellStartup, shims};
+use crate::shell::{ShellChoice, shims};
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use core::time::Duration;
 use notify::RecursiveMode;
 use parking_lot::Mutex;
-use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+use portable_pty::PtySize;
 use std::path::Path;
 use tastty_core::TerminalSize;
 pub(super) struct ShellLauncher {
     settings: Settings,
     generation_root: std::path::PathBuf,
     shim_dir: std::path::PathBuf,
+    #[cfg(unix)]
+    runtime_root: std::path::PathBuf,
 }
 impl ShellLauncher {
     pub(super) fn new(settings: Settings) -> Result<Self> {
@@ -35,6 +39,8 @@ impl ShellLauncher {
             settings,
             generation_root,
             shim_dir,
+            #[cfg(unix)]
+            runtime_root: root,
         })
     }
     pub(super) fn launch(
@@ -43,9 +49,23 @@ impl ShellLauncher {
         starting_directory: &Path,
         starting_shell: ShellChoice,
         load_profile: bool,
+        elevated: bool,
         client_environment: &EnvironmentSnapshot,
     ) -> Result<Arc<ShellSession>> {
+        let identity = ShellIdentity::resolve(elevated, &self.settings)?;
         let tab_root = temp::tab_root(&self.generation_root, tab_id);
+        let shim_dir = self
+            .shim_dir
+            .join(if elevated { "elevated" } else { "normal" });
+        fs_err::create_dir_all(&tab_root)?;
+        fs_err::create_dir_all(&shim_dir)?;
+        #[cfg(unix)]
+        identity.prepare_workspace(
+            &self.runtime_root,
+            &self.generation_root,
+            &tab_root,
+            &shim_dir,
+        )?;
         let tab_state = temp::tab_state_directory(&tab_root);
         let command_root = temp::tab_commands_directory(&tab_root);
         fs_err::create_dir_all(&tab_state)?;
@@ -54,7 +74,7 @@ impl ShellLauncher {
         let mut managed_environment = shims::environment(
             &self.settings,
             &tab_root,
-            &self.shim_dir,
+            &shim_dir,
             starting_shell,
             client_environment,
             starting_directory,
@@ -74,33 +94,24 @@ impl ShellLauncher {
             0,
             &self.settings.terminal_model_title,
         )?);
-        let pair = native_pty_system()
-            .openpty(PtySize {
+        let executable =
+            starting_shell.executable(&self.settings, client_environment, starting_directory)?;
+        let ready_file = startup.ready_file.clone();
+        let spawned = spawn_builder::launch(
+            &executable,
+            startup,
+            starting_directory,
+            &identity,
+            PtySize {
                 rows: self.settings.terminal_rows,
                 cols: self.settings.terminal_cols,
                 pixel_width: 0,
                 pixel_height: 0,
-            })
-            .context("failed to open pty")?;
-        let executable =
-            starting_shell.executable(&self.settings, client_environment, starting_directory)?;
-        let mut command = CommandBuilder::new(&executable);
-        command.env_clear();
-        let ready_file = startup.ready_file.clone();
-        apply_startup(&mut command, startup);
-        command.cwd(starting_directory);
+            },
+        )?;
         let process_tree = process::ProcessTree::new();
-        let mut child = pair
-            .slave
-            .spawn_command(command)
-            .context("failed to spawn shell")?;
-        #[cfg(windows)]
-        let retained_slave = Some(pair.slave);
-        #[cfg(not(windows))]
-        let retained_slave = {
-            drop(pair.slave);
-            None
-        };
+        let mut child = spawned.child;
+        let retained_slave = spawned.slave;
         if let Err(error) = process_tree
             .attach(child.as_ref())
             .context("failed to guard shell process tree")
@@ -108,19 +119,7 @@ impl ShellLauncher {
             process::cleanup(child.as_mut(), "unregistered shell child");
             return Err(error);
         }
-        let reader = pair
-            .master
-            .try_clone_reader()
-            .map_err(|error| {
-                process::cleanup(child.as_mut(), "unregistered shell child");
-                anyhow::anyhow!(error)
-            })
-            .context("failed to clone pty reader")?;
-        let writer_io = pair.master.take_writer().map_err(|error| {
-            process::cleanup(child.as_mut(), "unregistered shell child");
-            anyhow::anyhow!(error)
-        })?;
-        let writer = Arc::new(Mutex::new(writer_io));
+        let writer = Arc::new(Mutex::new(spawned.writer));
         let startup_timeout =
             Duration::try_from_secs_f64(self.settings.shell_startup_timeout_seconds)
                 .context("shell_startup_timeout_seconds must be finite and non-negative")?;
@@ -128,7 +127,7 @@ impl ShellLauncher {
         let reader_worker = match start_reader(
             Arc::clone(&screen),
             Arc::clone(&writer),
-            reader,
+            spawned.reader,
             startup_events.reader_exit_notifier(),
         ) {
             Ok(worker) => worker,
@@ -143,13 +142,13 @@ impl ShellLauncher {
                 format!(
                     "failed to initialize {} at {executable} with shim directory {}",
                     starting_shell.canonical_name(),
-                    self.shim_dir.display(),
+                    shim_dir.display(),
                 )
             });
         if let Err(error) = initialized {
             process::cleanup(child.as_mut(), "unregistered shell child");
             drop(retained_slave);
-            drop(pair.master);
+            drop(spawned.master);
             process::join_reader(reader_worker, "pty reader thread");
             return Err(error);
         }
@@ -174,10 +173,4 @@ impl ShellLauncher {
 }
 fn runtime_generation() -> String {
     format!("{}-{}", std::process::id(), nanoid::nanoid!())
-}
-pub(super) fn apply_startup(command: &mut CommandBuilder, startup: ShellStartup) {
-    for (name, value) in startup.env {
-        command.env(name, value);
-    }
-    command.args(startup.args);
 }

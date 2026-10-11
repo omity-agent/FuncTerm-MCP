@@ -1,3 +1,4 @@
+use crate::engine::privileges::PrivilegeMode;
 use crate::runtime::{client, config::Settings, protocol::Request};
 use crate::shell::ShellChoice;
 use anyhow::{Context as _, Result, ensure};
@@ -17,6 +18,12 @@ pub(super) enum CliCommand {
             help = "Disable Shell Profile loading for all Tabs created by this MCP server"
         )]
         no_profile: bool,
+        #[arg(
+            long,
+            value_enum,
+            help = "Fix New Tab permissions and hide its elevated input"
+        )]
+        privilege_mode: Option<PrivilegeMode>,
     },
     Daemon,
     NewTab {
@@ -26,6 +33,11 @@ pub(super) enum CliCommand {
         starting_shell: ShellChoice,
         #[arg(long, help = "Disable Shell Profile loading")]
         no_profile: bool,
+        #[arg(
+            long,
+            help = "Use Root/administrator permissions already held by the Daemon"
+        )]
+        elevated: bool,
     },
     Close {
         #[arg(long, required_unless_present = "current", conflicts_with = "current")]
@@ -56,6 +68,24 @@ pub(super) enum CliCommand {
     },
     #[command(hide = true)]
     InternalLaunchDaemon,
+    #[cfg(unix)]
+    #[command(hide = true)]
+    InternalRunShell {
+        #[arg(long)]
+        uid: u32,
+        #[arg(last = true, required = true)]
+        command: Vec<std::ffi::OsString>,
+    },
+    #[cfg(windows)]
+    #[command(hide = true)]
+    InternalPtyHost {
+        #[arg(long)]
+        rows: u16,
+        #[arg(long)]
+        cols: u16,
+        #[arg(last = true, required = true)]
+        command: Vec<std::ffi::OsString>,
+    },
     #[command(hide = true)]
     InternalTimeMillis,
     #[command(hide = true)]

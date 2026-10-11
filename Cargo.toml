@@ -130,11 +130,11 @@ same-file = "*"
 serde = { version = "*", features = ["derive", "unstable"] }
 serde_bytes = "*"
 shell-words = "*"
-sonic-rs = "*"
 snmalloc-rs = { git = "https://github.com/microsoft/snmalloc", features = [
     "native-cpu",
     "lto",
 ] }
+sonic-rs = { git = "https://github.com/cloudwego/sonic-rs" }
 strum = { version = "*", features = ["derive"] }
 sugar_path = "*"
 tastty-core = "*"
@@ -158,12 +158,19 @@ which = "*"
 rmp-serde = "*"
 
 [target.'cfg(unix)'.dependencies]
+exacl = "*"
+nix = { version = "*", features = ["user"] }
+privdrop = "*"
 rustix = { version = "*", features = ["process"] }
 
 [target.'cfg(windows)'.dependencies]
+os_pipe = "*"
+widestring = "*"
+windows-spawn = "*"
 windows = { version = "*", features = [
     "Win32_Foundation",
     "Win32_Security",
+    "Win32_Security_Authorization",
     "Win32_System_Console",
     "Win32_System_JobObjects",
     "Win32_System_Threading",

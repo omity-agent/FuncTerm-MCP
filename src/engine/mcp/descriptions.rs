@@ -3,9 +3,17 @@ use crate::runtime::config::{McpSettings, ToolDescription};
 use alloc::{borrow::Cow, collections::BTreeMap, sync::Arc};
 use anyhow::{Context as _, Result, bail};
 use rmcp::{handler::server::router::tool::ToolRouter, model::Tool, serde_json::Value};
-pub(super) fn apply(router: &mut ToolRouter<McpServer>, descriptions: &McpSettings) -> Result<()> {
+pub(super) fn apply(
+    router: &mut ToolRouter<McpServer>,
+    descriptions: &McpSettings,
+    fixed_privilege: bool,
+) -> Result<()> {
+    let mut new_tab = descriptions.new_tab.clone();
+    if fixed_privilege {
+        new_tab.exec_parameters.remove("elevated");
+    }
     let tools = [
-        ("new_tab", &descriptions.new_tab),
+        ("new_tab", &new_tab),
         ("manual_write", &descriptions.manual_write),
         ("send_command", &descriptions.send_command),
         ("view", &descriptions.view),

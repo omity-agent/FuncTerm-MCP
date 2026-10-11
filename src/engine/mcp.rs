@@ -4,9 +4,10 @@ mod collection;
 mod descriptions;
 mod operations;
 mod output;
+use crate::engine::privileges::PrivilegeMode;
 use crate::runtime::config::Settings;
-use anyhow::Result;
-use arguments::{ManualWriteExec, NewTabExec, SendCommandExec, ViewRequest};
+use anyhow::{Context as _, Result};
+use arguments::{FixedNewTabExec, ManualWriteExec, NewTabExec, SendCommandExec, ViewRequest};
 use batch::{ExecBatch, TimedBatch};
 use collection::BatchOutput;
 use rmcp::{
@@ -18,6 +19,7 @@ use rmcp::{
 #[derive(Clone, Debug)]
 struct McpServer {
     settings: Settings,
+    privilege_mode: Option<PrivilegeMode>,
     tool_router: ToolRouter<Self>,
 }
 #[expect(
@@ -28,11 +30,20 @@ struct McpServer {
 impl ServerHandler for McpServer {}
 # [tool_router (router = tool_router)]
 impl McpServer {
-    fn new(settings: Settings) -> Result<Self> {
+    fn new(settings: Settings, privilege_mode: Option<PrivilegeMode>) -> Result<Self> {
         let mut tool_router = Self::tool_router();
-        descriptions::apply(&mut tool_router, &settings.mcp)?;
+        let mut fixed_route = tool_router
+            .map
+            .remove("fixed_new_tab")
+            .context("fixed New Tab route is missing")?;
+        if privilege_mode.is_some() {
+            fixed_route.attr.name = "new_tab".into();
+            tool_router.map.insert("new_tab".into(), fixed_route);
+        }
+        descriptions::apply(&mut tool_router, &settings.mcp, privilege_mode.is_some())?;
         Ok(Self {
             settings,
+            privilege_mode,
             tool_router,
         })
     }
@@ -42,6 +53,21 @@ impl McpServer {
         Parameters(request): Parameters<ExecBatch<NewTabExec>>,
     ) -> Result<CallToolResult, String> {
         batch::run(&self.settings, request.exec, None).await
+    }
+    # [tool (name = "fixed_new_tab" , output_schema = schema_for_output ::< BatchOutput < output :: NewTabOutput <'static >>> ())]
+    async fn fixed_new_tab(
+        &self,
+        Parameters(request): Parameters<ExecBatch<FixedNewTabExec>>,
+    ) -> Result<CallToolResult, String> {
+        let mode = self
+            .privilege_mode
+            .ok_or("MCP privilege mode is not fixed")?;
+        let entries = request
+            .exec
+            .into_iter()
+            .map(|entry| entry.with_privilege(mode.elevated()))
+            .collect();
+        batch::run(&self.settings, entries, None).await
     }
     # [tool (name = "manual_write" , output_schema = schema_for_output ::< BatchOutput < output :: ManualWriteOutput <'static >>> ())]
     async fn manual_write(
@@ -70,8 +96,8 @@ impl McpServer {
         .await
     }
 }
-pub(crate) async fn run(settings: Settings) -> Result<()> {
-    let service = McpServer::new(settings)?
+pub(crate) async fn run(settings: Settings, privilege_mode: Option<PrivilegeMode>) -> Result<()> {
+    let service = McpServer::new(settings, privilege_mode)?
         .serve(rmcp::transport::stdio())
         .await?;
     service.waiting().await?;

@@ -38,7 +38,7 @@ async fn run_inner(settings: Settings, startup_reporter: &mut StartupReporter) -
             .await
             .context("daemon initialization worker failed")??,
     );
-    let listener = crate::runtime::transport::listener(&service_name)?;
+    let listener = crate::runtime::transport::listener(&service_name, &ipc)?;
     startup_reporter.ready()?;
     let mut workers = JoinSet::new();
     loop {

@@ -13,6 +13,7 @@ pub(super) async fn execute(manager: &Arc<Manager>, request: Request) -> Result<
             starting_directory,
             starting_shell,
             load_profile,
+            elevated,
             environment,
         } => {
             let tab_id = manager
@@ -20,6 +21,7 @@ pub(super) async fn execute(manager: &Arc<Manager>, request: Request) -> Result<
                     starting_directory,
                     starting_shell,
                     load_profile,
+                    elevated,
                     environment,
                 )
                 .await?;

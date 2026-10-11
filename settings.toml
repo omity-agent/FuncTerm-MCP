@@ -19,6 +19,10 @@ shell_startup_timeout_seconds = 30.0
 # 默认加载 Shell Profile；mcp 和 new-tab 的 --no-profile 可关闭加载。
 shell_load_profile = true
 
+# Root Daemon 创建普通权限 Tab 时使用的 Unix 用户；留空时使用 Daemon 的真实 UID 或 SUDO_UID。
+# 可通过 FUNCTERM_UNIX_NORMAL_USER 指定；无法确定非 Root 用户时创建失败。
+unix_normal_user = ""
+
 # PowerShell 可执行文件候选
 powershell = ["pwsh", "powershell"]
 
@@ -50,6 +54,13 @@ max_frame_bytes = 67108864
 # Daemon 中可同时执行的阻塞操作数
 blocking_concurrency = 32
 
+# Windows IPC 仅授予 SYSTEM 及 Daemon 用户访问权限；{user_sid} 从进程令牌读取。
+windows_access_control = "D:P(A;;GA;;;SY)(A;;GA;;;{user_sid})"
+
+# 中等完整性标签允许已获 DACL 授权的普通权限 Shell 访问管理员 Daemon。
+# 仅配置 SACL，不在该项中设置 DACL、所有者及组。
+windows_security_label = "S:(ML;;NW;;;ME)"
+
 # MCP 工具及其参数的描述；描述设为空字符串时不向 MCP 客户端提供该描述。
 [mcp.new_tab]
 description = "打开一个新的终端标签页。返回 tab_id"
@@ -60,6 +71,7 @@ exec = ""
 [mcp.new_tab.exec_parameters]
 starting_directory = "初始位置。已有的 Tab 也可通过 send_command 改变 cwd（如 `cd` 命令）。"
 starting_shell = "启动时使用的交互式命令环境。Shell 适合系统交互、调度已有外部程序，缺点是逻辑复杂时可靠性低；Python REPL 标准库和数据处理生态强；TypeScript REPL（Bun）性能更优，且在 JS/TS 项目中实用。已有的 Tab 也可通过 send_command 切换 Shell 或进入 REPL（如在 Bash 中使用 `python` 命令）。"
+elevated = "默认为 false（普通权限）"
 
 [mcp.manual_write]
 description = "手动写入键盘输入。适用于使用 TUI 程序、点击快捷键等场景。调用时需在 text 和 bytes 中选择一个传入。"

@@ -9,14 +9,24 @@ use clap::Parser as _;
 use std::path::Path;
 pub(crate) async fn run() -> Result<()> {
     let args = Args::parse();
-    match args
-        .command
-        .unwrap_or(CliCommand::Mcp { no_profile: false })
-    {
+    match args.command.unwrap_or(CliCommand::Mcp {
+        no_profile: false,
+        privilege_mode: None,
+    }) {
         CliCommand::InternalEnsureShims { directory } => {
             crate::shell::shims::ensure_directory(&directory)
         }
         CliCommand::InternalLaunchDaemon => crate::runtime::client::run_daemon_launcher(),
+        #[cfg(unix)]
+        CliCommand::InternalRunShell { uid, command } => {
+            crate::engine::privileges::run_shell(uid, &command)
+        }
+        #[cfg(windows)]
+        CliCommand::InternalPtyHost {
+            rows,
+            cols,
+            command,
+        } => crate::engine::privileges::stream_host::run(rows, cols, command),
         CliCommand::InternalTimeMillis => print_result(crate::app::command_state::time_millis()),
         CliCommand::InternalClaimCommand {
             session_root,
@@ -43,10 +53,13 @@ pub(crate) async fn run() -> Result<()> {
                 &settings.terminal_model_title,
             )
         }
-        CliCommand::Mcp { no_profile } => {
+        CliCommand::Mcp {
+            no_profile,
+            privilege_mode,
+        } => {
             let mut settings = config::load()?;
             settings.shell_load_profile &= !no_profile;
-            crate::mcp::run(settings).await
+            crate::mcp::run(settings, privilege_mode).await
         }
         CliCommand::Daemon => crate::runtime::daemon::run(config::load()?).await,
         CliCommand::Close { tab_id, current: _ } => {
@@ -58,6 +71,7 @@ pub(crate) async fn run() -> Result<()> {
             starting_directory,
             starting_shell,
             no_profile,
+            elevated,
         } => {
             let settings = config::load()?;
             let request = Request::NewTab {
@@ -66,6 +80,7 @@ pub(crate) async fn run() -> Result<()> {
                 )?,
                 starting_shell,
                 load_profile: settings.shell_load_profile && !no_profile,
+                elevated,
                 environment: EnvironmentSnapshot::capture(),
             };
             print_result(interface::execute(&settings, request).await)
