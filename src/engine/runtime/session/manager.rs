@@ -6,7 +6,8 @@ use crate::runtime::config::Settings;
 use crate::runtime::protocol::EnvironmentSnapshot;
 use crate::shell::ShellChoice;
 use alloc::sync::Arc;
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result, bail, ensure};
+use parking_lot::RwLock;
 use shell_session::process;
 use std::path::{Path, PathBuf};
 use tokio::sync::Semaphore;
@@ -14,6 +15,7 @@ pub(crate) struct Manager {
     launcher: launcher::ShellLauncher,
     tabs: tab::TabDirectory,
     blocking: BlockingExecutor,
+    accepting_tabs: RwLock<bool>,
 }
 impl Manager {
     pub(crate) async fn close(&self, tab_id: &str) -> Result<()> {
@@ -25,7 +27,18 @@ impl Manager {
             launcher: launcher::ShellLauncher::new(settings)?,
             tabs: tab::TabDirectory::default(),
             blocking,
+            accepting_tabs: RwLock::new(true),
         })
+    }
+    pub(crate) async fn shutdown(self: &Arc<Self>) -> Result<()> {
+        let manager = Arc::clone(self);
+        self.blocking
+            .run(move || {
+                *manager.accepting_tabs.write() = false;
+                Ok(())
+            })
+            .await?;
+        self.tabs.close_all().await
     }
     pub(crate) async fn new_tab(
         self: &Arc<Self>,
@@ -56,6 +69,8 @@ impl Manager {
         elevated: bool,
         environment: &EnvironmentSnapshot,
     ) -> Result<String> {
+        let accepting = self.accepting_tabs.read();
+        ensure!(*accepting, "daemon is shutting down");
         if !starting_directory.is_dir() {
             bail!(
                 "starting_directory does not exist or is not a directory: {}",
@@ -76,6 +91,7 @@ impl Manager {
             session,
             self.blocking.clone(),
         )?);
+        drop(accepting);
         Ok(tab_id)
     }
 }

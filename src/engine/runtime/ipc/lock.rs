@@ -49,6 +49,13 @@ pub(crate) fn acquire_startup(service_name: &str) -> Result<DaemonLock> {
         _guard: guard,
     })
 }
+pub(super) fn wait_for_exit(service_name: &str) -> Result<()> {
+    let lock = create_lock(service_name, "instance")?;
+    let _guard = lock
+        .lock()
+        .context("failed to wait for daemon instance shutdown")?;
+    Ok(())
+}
 fn create_lock(service_name: &str, kind: &str) -> Result<NamedLock> {
     let name = super::transport::lock_name(service_name, kind);
     NamedLock::create(&name).with_context(|| format!("failed to create daemon {kind} lock"))

@@ -48,6 +48,9 @@ python = ["python3", "python"]
 # IPC 连接建立与 Daemon 探测的最长等待秒数
 setup_timeout_seconds = 15.0
 
+# daemon stop/restart 等待所有终端会话清理完成的最长秒数。
+shutdown_timeout_seconds = 45.0
+
 # 单条 IPC 消息的最大字节数
 max_frame_bytes = 67108864
 

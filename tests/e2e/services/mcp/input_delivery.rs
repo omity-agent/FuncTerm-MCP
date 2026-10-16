@@ -39,6 +39,7 @@ fn mcp_manual_write_delivers_text_and_bytes_to_distinct_tabs() {
         .collect();
     let written = session . call ("manual_write" , json ! ({ "exec" : [{ "tab_id" : first , "text" : "FIRST\r\n" } , { "tab_id" : second , "bytes" : b"SECOND\r\n" . to_vec () }] , "wait_timeout" : 2_u64 })) ;
     assert_eq!(entries(&written).len(), 2);
+    assert_eq!(super::boundaries::text_documents(&written).len(), 2);
     assert!(
         entries(&written)
             .iter()

@@ -1,8 +1,29 @@
-use super::Tab;
+use super::{Tab, TabDirectory};
 use crate::runtime::session::manager::command::CommandWait;
 use alloc::sync::Arc;
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, bail};
 use core::time::Duration;
+impl TabDirectory {
+    pub(in crate::engine::runtime::session::manager) async fn close_all(&self) -> Result<()> {
+        let tabs: Vec<_> = self
+            .tabs
+            .iter()
+            .map(|entry| Arc::clone(entry.value()))
+            .collect();
+        let results = futures_util::future::join_all(tabs.iter().map(Tab::close)).await;
+        let failures: Vec<_> = results
+            .into_iter()
+            .zip(&tabs)
+            .filter_map(|(result, tab)| {
+                result.err().map(|error| format!("{}: {error:#}", tab.id()))
+            })
+            .collect();
+        if !failures.is_empty() {
+            bail!("failed to close daemon Tabs: {}", failures.join("; "));
+        }
+        Ok(())
+    }
+}
 impl Tab {
     pub(super) async fn close(self: &Arc<Self>) -> Result<()> {
         let _operation = self.operation.lock().await;

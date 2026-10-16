@@ -17,10 +17,6 @@ pub(super) fn spawn_detached(
 pub(super) fn needs_shell_parent_daemon_spawn() -> bool {
     matches!(current_job_state(), JobState::ForbidsBreakaway)
 }
-#[cfg(not(windows))]
-pub(super) const fn needs_shell_parent_daemon_spawn() -> bool {
-    false
-}
 #[cfg(windows)]
 const fn windows_creation_flags(job: JobState) -> u32 {
     windows_creation_flags_for_job(job)
@@ -107,17 +103,30 @@ fn current_job_state() -> JobState {
     }
 }
 #[cfg(windows)]
-pub(super) fn spawn_with_shell_parent(mut command: Command) -> Result<std::process::Child> {
-    use std::os::windows::process::CommandExt as _;
-    use windows::Win32::PROCESS_CREATE_PROCESS;
-    let shell_process =
-        crate::engine::privileges::desktop_host::open(u32::try_from(PROCESS_CREATE_PROCESS)?)?;
+pub(super) fn spawn_with_shell_parent(service_name: &str) -> Result<()> {
+    use windows::Win32::{
+        PROCESS_CREATE_PROCESS, PROCESS_DUP_HANDLE, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    use windows_spawn::{CreationFlags, ParentProcess, SpawnOptions, Stdio};
+    let access = u32::try_from(
+        PROCESS_CREATE_PROCESS | PROCESS_DUP_HANDLE | PROCESS_QUERY_LIMITED_INFORMATION,
+    )?;
+    let shell_process = crate::engine::privileges::desktop_host::open(access)?;
+    let parent = ParentProcess::from_handle(shell_process)?;
+    let executable = std::env::current_exe().context("failed to locate current executable")?;
+    let mut command = windows_spawn::Command::new(executable);
     command
-        .creation_flags(windows_creation_flags_for_job(JobState::NotInJob))
-        .inherit_handles(false);
-    crate::engine::privileges::desktop_host::spawn(&mut command, &shell_process)
-}
-#[cfg(not(windows))]
-pub(super) fn spawn_with_shell_parent(_command: Command) -> Result<std::process::Child> {
-    anyhow::bail!("Windows shell parent launch is only available on Windows")
+        .arg(super::DAEMON_SUBCOMMAND)
+        .env("FUNCTERM_DAEMON_SERVICE_NAME", service_name)
+        .env_remove(super::READY_STDOUT_ENV)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    let options = SpawnOptions::new()
+        .parent_process(&parent)
+        .creation_flags(CreationFlags::DETACHED_PROCESS);
+    let _daemon = command
+        .spawn_with(options)
+        .context("failed to spawn detached daemon through Windows shell parent")?;
+    Ok(())
 }

@@ -1,8 +1,8 @@
-use super::interface::{self, Args, CliCommand};
-use crate::runtime::config;
+use super::interface::{self, Args, CliCommand, DaemonCommand};
 use crate::runtime::protocol::{
-    EnvironmentSnapshot, KeyboardInput, Request, wait_timeout_from_seconds,
+    EnvironmentSnapshot, KeyboardInput, Request, format::line_terminated, wait_timeout_from_seconds,
 };
+use crate::runtime::{config, service_control};
 use anyhow::{Context as _, Result};
 use base64_turbo::STANDARD;
 use clap::Parser as _;
@@ -17,6 +17,7 @@ pub(crate) async fn run() -> Result<()> {
             crate::shell::shims::ensure_directory(&directory)
         }
         CliCommand::InternalLaunchDaemon => crate::runtime::client::run_daemon_launcher(),
+        CliCommand::InternalRunDaemon => crate::runtime::daemon::run(config::load()?).await,
         #[cfg(unix)]
         CliCommand::InternalRunShell { uid, command } => {
             crate::engine::privileges::run_shell(uid, &command)
@@ -61,7 +62,30 @@ pub(crate) async fn run() -> Result<()> {
             settings.shell_load_profile &= !no_profile;
             crate::mcp::run(settings, privilege_mode).await
         }
-        CliCommand::Daemon => crate::runtime::daemon::run(config::load()?).await,
+        CliCommand::Daemon { command } => {
+            let settings = config::load()?;
+            let message = match command {
+                DaemonCommand::Start => {
+                    if service_control::start(&settings).await? {
+                        "daemon started"
+                    } else {
+                        "daemon is already running"
+                    }
+                }
+                DaemonCommand::Stop => {
+                    if service_control::stop(&settings).await? {
+                        "daemon stopped"
+                    } else {
+                        "daemon is not running"
+                    }
+                }
+                DaemonCommand::Restart => {
+                    service_control::restart(&settings).await?;
+                    "daemon restarted"
+                }
+            };
+            print_result(Ok(message.to_owned()))
+        }
         CliCommand::Close { tab_id, current: _ } => {
             let target = interface::close_target(tab_id)?;
             let settings = config::load()?;
@@ -135,8 +159,8 @@ pub(crate) async fn run() -> Result<()> {
     }
 }
 fn print_result(result: Result<String>) -> Result<()> {
-    let text = result?;
-    println!("{text}");
+    let text = line_terminated(result?);
+    print!("{text}");
     Ok(())
 }
 fn write_done(

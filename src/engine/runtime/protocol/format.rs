@@ -3,48 +3,24 @@ impl Payload {
     pub(crate) fn into_plain_text(self) -> String {
         match self {
             Self::Pong => element("PONG", ""),
+            Self::ShutdownComplete => element("DAEMON_STOPPED", ""),
             Self::TabCreated { tab_id } => tab_created_plain_text(&tab_id),
             Self::TabClosed { tab_id } => element("TAB_CLOSED", &tab_id),
-            Self::KeyboardWritten { view } => view.tab_plain_text(false),
+            Self::KeyboardWritten { view } => view.plain_text(false, None),
             Self::CommandAccepted {
                 command_id,
                 end_reason: _,
                 view,
-            } => view.command_plain_text(false, Some(&command_id)),
+            } => view.plain_text(false, Some(&command_id)),
             Self::View(view) => view.into_plain_text(),
         }
     }
 }
 impl ViewResult {
     pub(crate) fn into_plain_text(self) -> String {
-        match self {
-            Self::Tab {
-                shell,
-                screen,
-                note,
-            } => tab_plain_text(&shell, &screen, &note, true),
-            Self::Command {
-                shell,
-                command,
-                note,
-            } => command_plain_text(&shell, &command, &note, true, None),
-        }
+        self.plain_text(true, None)
     }
-    fn tab_plain_text(self, include_alive: bool) -> String {
-        match self {
-            Self::Tab {
-                shell,
-                screen,
-                note,
-            } => tab_plain_text(&shell, &screen, &note, include_alive),
-            Self::Command {
-                shell,
-                command,
-                note,
-            } => command_plain_text(&shell, &command, &note, include_alive, None),
-        }
-    }
-    fn command_plain_text(self, include_alive: bool, command_id: Option<&str>) -> String {
+    fn plain_text(self, include_alive: bool, command_id: Option<&str>) -> String {
         match self {
             Self::Tab {
                 shell,
@@ -58,6 +34,13 @@ impl ViewResult {
             } => command_plain_text(&shell, &command, &note, include_alive, command_id),
         }
     }
+}
+#[must_use = "the returned text contains the line terminator"]
+pub(crate) fn line_terminated(mut text: String) -> String {
+    if !text.ends_with('\n') {
+        text.push('\n');
+    }
+    text
 }
 pub(crate) fn tab_created_plain_text(tab_id: &str) -> String {
     element("TAB_ID", tab_id)
@@ -104,26 +87,22 @@ fn command_text(command: &CommandView, command_id: Option<&str>) -> String {
     let exit_code = presentation
         .exit_code
         .map_or_else(String::new, |code| code.to_string());
-    let mut items = Vec::new();
+    let mut text = String::new();
     if let Some(id) = presentation.command_id {
-        items.push(element("COMMAND_ID", id));
+        append_element(&mut text, "COMMAND_ID", id);
     }
-    items.extend([
-        element("STDOUT", presentation.stdout),
-        element("STDERR", presentation.stderr),
-        element("EXIT_CODE", &exit_code),
-        element(
-            "TIME_CONSUMPTION",
-            &super::time_consumption::adaptive(command.time_consumption),
-        ),
-        element("FINISHED", &presentation.finished.to_string()),
-    ]);
-    items.join("\n")
+    append_element(&mut text, "STDOUT", presentation.stdout);
+    append_element(&mut text, "STDERR", presentation.stderr);
+    append_element(&mut text, "EXIT_CODE", &exit_code);
+    append_element(
+        &mut text,
+        "TIME_CONSUMPTION",
+        &super::time_consumption::adaptive(command.time_consumption),
+    );
+    append_element(&mut text, "FINISHED", &presentation.finished.to_string());
+    text
 }
 fn append_element(text: &mut String, tag: &str, content: &str) {
-    if !text.is_empty() {
-        text.push('\n');
-    }
     text.push('<');
     text.push_str(tag);
     text.push_str(">\n");
@@ -135,7 +114,7 @@ fn append_element(text: &mut String, tag: &str, content: &str) {
     }
     text.push_str("</");
     text.push_str(tag);
-    text.push('>');
+    text.push_str(">\n");
 }
 fn element(tag: &str, content: &str) -> String {
     let mut text = String::new();

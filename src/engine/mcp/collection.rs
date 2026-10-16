@@ -1,3 +1,4 @@
+use crate::runtime::protocol::format::line_terminated;
 use rmcp::{
     model::{CallToolResult, ContentBlock},
     serde_json::Value,
@@ -30,7 +31,7 @@ pub(super) fn combine(
             }
             Err(error) => {
                 failed = true;
-                content.push(ContentBlock::text(error.clone()));
+                content.push(ContentBlock::text(line_terminated(error.clone())));
                 results.push(EntryResult::Failure { error });
             }
         }

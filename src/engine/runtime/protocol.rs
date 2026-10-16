@@ -15,6 +15,7 @@ pub(crate) use presentation::{CommandPresentation, ShellPresentation};
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
 pub(crate) enum Request {
     Ping,
+    Shutdown,
     NewTab {
         starting_directory: PathBuf,
         starting_shell: ShellChoice,
@@ -55,6 +56,7 @@ pub(crate) enum Response {
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
 pub(crate) enum Payload {
     Pong,
+    ShutdownComplete,
     TabCreated {
         tab_id: String,
     },

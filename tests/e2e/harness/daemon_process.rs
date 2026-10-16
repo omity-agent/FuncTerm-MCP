@@ -33,6 +33,13 @@ impl TestGuard {
 }
 impl Drop for TestGuard {
     fn drop(&mut self) {
+        let stopped = super::command::run_cli_with_env(&["daemon", "stop"], &self.env);
+        if !stopped.status.success() {
+            eprintln!(
+                "failed to stop test daemon: {}",
+                String::from_utf8_lossy(&stopped.stderr)
+            );
+        }
         set_active_env(&self.previous_env);
     }
 }
@@ -82,7 +89,7 @@ fn unique_service_name() -> String {
 fn spawn_daemon(env: &[(String, String)], service_name: &str) -> ChildGuard {
     let mut command = Command::new(exe());
     command
-        .arg("daemon")
+        .arg("internal-run-daemon")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit());

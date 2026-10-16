@@ -27,6 +27,7 @@ pub(crate) struct Settings {
 #[derive(Clone, Debug, Deserialize)]
 pub(crate) struct IpcSettings {
     pub(crate) setup_timeout_seconds: f64,
+    pub(crate) shutdown_timeout_seconds: f64,
     pub(crate) max_frame_bytes: usize,
     pub(crate) blocking_concurrency: usize,
     #[cfg(windows)]
@@ -39,10 +40,18 @@ impl IpcSettings {
         Duration::try_from_secs_f64(self.setup_timeout_seconds)
             .context("ipc.setup_timeout_seconds must be finite and non-negative")
     }
+    pub(crate) fn shutdown_timeout(&self) -> Result<Duration> {
+        Duration::try_from_secs_f64(self.shutdown_timeout_seconds)
+            .context("ipc.shutdown_timeout_seconds must be finite and non-negative")
+    }
     fn validate(&self) -> Result<()> {
         ensure!(
             !self.setup_timeout()?.is_zero(),
             "IPC setup timeout is zero"
+        );
+        ensure!(
+            !self.shutdown_timeout()?.is_zero(),
+            "IPC shutdown timeout is zero"
         );
         ensure!(
             self.max_frame_bytes > 0 && u32::try_from(self.max_frame_bytes).is_ok(),

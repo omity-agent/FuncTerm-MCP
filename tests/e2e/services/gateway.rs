@@ -1,4 +1,7 @@
 #[cfg(test)]
+#[path = "mcp/boundaries.rs"]
+mod boundaries;
+#[cfg(test)]
 #[path = "mcp/execution.rs"]
 mod execution;
 #[cfg(test)]

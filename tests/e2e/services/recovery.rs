@@ -12,9 +12,9 @@ fn daemon_accepts_clients_after_restart() {
     let initial = parse_command_result(&send_command(&previous.tab_id, "echo BEFORE_RESTART", 5.0));
     assert_eq!(initial.exit_code, Some(0_i32));
     assert!(initial.stdout.contains("BEFORE_RESTART"));
-    let duplicate = run_cli_with_env(&["daemon"], &guard.env());
-    assert!(!duplicate.status.success());
-    assert!(String::from_utf8_lossy(&duplicate.stderr).contains("daemon is already running"));
+    let duplicate = run_cli_with_env(&["daemon", "start"], &guard.env());
+    assert!(duplicate.status.success());
+    assert!(String::from_utf8_lossy(&duplicate.stdout).contains("daemon is already running"));
     guard.restart_daemon();
     let tab = create_tab(&temp_root(), system_shell_name());
     let view = parse_tab_view(&run_cli_with_env(&["view", &tab.tab_id], &guard.env()));

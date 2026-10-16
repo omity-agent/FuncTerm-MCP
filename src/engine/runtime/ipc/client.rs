@@ -18,6 +18,13 @@ impl DaemonClient {
                 .await?;
         Ok(Self { stream })
     }
+    pub(crate) async fn connect_if_running(settings: &Settings) -> Result<Option<Self>> {
+        match Self::connect(settings).await {
+            Ok(client) => Ok(Some(client)),
+            Err(error) if endpoint_absent(&error) => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
     pub(crate) async fn call(&mut self, request: Request) -> Result<Payload> {
         let kind = RequestKind::from(&request);
         self.stream.send(request).await?;
@@ -31,40 +38,16 @@ pub(crate) async fn ensure_daemon(settings: &Settings) -> Result<()> {
     if probe(settings).await? {
         return Ok(());
     }
-    let service = settings.daemon_service_name.clone();
-    let _startup_lock =
-        tokio::task::spawn_blocking(move || crate::runtime::daemon_lock::acquire_startup(&service))
-            .await
-            .context("daemon startup lock worker failed")??;
-    if probe(settings).await? {
-        return Ok(());
-    }
-    let service_name = settings.daemon_service_name.clone();
-    let timeout = settings.ipc.setup_timeout()?;
-    let spawned = tokio::task::spawn_blocking(move || {
-        super::daemon_spawn::spawn_daemon(&service_name, timeout)
-    })
-    .await
-    .context("daemon launch worker failed")?;
-    if let Err(error) = spawned
-        && !is_daemon_already_running(&error)
-    {
-        return Err(error);
-    }
-    if probe(settings).await? {
-        return Ok(());
-    }
-    bail!("daemon startup completed without accepting IPC connections")
+    super::service_control::start(settings).await?;
+    Ok(())
 }
 pub(crate) fn run_daemon_launcher() -> Result<()> {
     let settings = crate::runtime::config::load()?;
     super::daemon_spawn::run_launcher(&settings.daemon_service_name)
 }
-async fn probe(settings: &Settings) -> Result<bool> {
-    let mut client = match DaemonClient::connect(settings).await {
-        Ok(client) => client,
-        Err(error) if endpoint_absent(&error) => return Ok(false),
-        Err(error) => return Err(error),
+pub(super) async fn probe(settings: &Settings) -> Result<bool> {
+    let Some(mut client) = DaemonClient::connect_if_running(settings).await? else {
+        return Ok(false);
     };
     tokio::time::timeout(settings.ipc.setup_timeout()?, client.call(Request::Ping))
         .await
@@ -78,7 +61,4 @@ fn endpoint_absent(error: &anyhow::Error) -> bool {
             io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused
         )
     })
-}
-fn is_daemon_already_running(error: &anyhow::Error) -> bool {
-    crate::runtime::daemon_lock::already_running_service_name(error).is_some()
 }

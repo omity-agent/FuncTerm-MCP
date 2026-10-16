@@ -1,11 +1,13 @@
 use crate::runtime::config::Settings;
 use crate::runtime::daemon::report::StartupReporter;
-use crate::runtime::protocol::Response;
+use crate::runtime::protocol::{Payload, Request, Response};
 use crate::runtime::session::Manager;
+use crate::runtime::transport::ServerConnection;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use interprocess::local_socket::tokio::prelude::*;
 use std::io;
+use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 mod control_signal;
 mod dispatch;
@@ -41,8 +43,58 @@ async fn run_inner(settings: Settings, startup_reporter: &mut StartupReporter) -
     let listener = crate::runtime::transport::listener(&service_name, &ipc)?;
     startup_reporter.ready()?;
     let mut workers = JoinSet::new();
-    loop {
-        tokio::select! { accepted = listener . accept () => match accepted { Ok (stream) => { let connection = crate :: runtime :: transport :: ServerConnection :: new (stream , & ipc) ; workers . spawn (serve_connection (Arc :: clone (& manager) , connection)) ; } Err (error) if recoverable_accept_error (& error) => { eprintln ! ("recoverable IPC accept error: {error}") ; } Err (error) => return Err (error) . context ("failed to accept IPC request") , } , Some (result) = workers . join_next () , if ! workers . is_empty () => { match result { Ok (Ok (())) => { } Ok (Err (error)) => eprintln ! ("IPC connection failed: {error:#}") , Err (error) => eprintln ! ("IPC connection task failed: {error}") , } } }
+    let (shutdown, mut shutdown_requests) = mpsc::channel(1);
+    let mut shutdown_connection = loop {
+        tokio::select! {
+            accepted = listener.accept() => match accepted {
+                Ok(stream) => {
+                    let connection = ServerConnection::new(stream, &ipc);
+                    workers.spawn(serve_connection(
+                        Arc::clone(&manager),
+                        connection,
+                        shutdown.clone(),
+                    ));
+                }
+                Err(error) if recoverable_accept_error(&error) => {
+                    eprintln!("recoverable IPC accept error: {error}");
+                }
+                Err(error) => return Err(error).context("failed to accept IPC request"),
+            },
+            Some(connection) = shutdown_requests.recv() => break connection,
+            Some(result) = workers.join_next(), if !workers.is_empty() => {
+                report_worker(result);
+            }
+        }
+    };
+    drop(listener);
+    drop(shutdown_requests);
+    workers.abort_all();
+    while let Some(result) = workers.join_next().await {
+        report_worker(result);
+    }
+    let stopped = manager.shutdown().await;
+    let response = response_from(stopped.as_ref().map(|&()| Payload::ShutdownComplete));
+    let sent = shutdown_connection.send(response).await;
+    stopped?;
+    sent.context("failed to acknowledge daemon shutdown")
+}
+fn report_worker(result: Result<Result<()>, tokio::task::JoinError>) {
+    match result {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => eprintln!("IPC connection failed: {error:#}"),
+        Err(error) if error.is_cancelled() => {}
+        Err(error) => eprintln!("IPC connection task failed: {error}"),
+    }
+}
+fn response_from<E>(result: Result<Payload, E>) -> Response
+where
+    E: core::fmt::Display,
+{
+    match result {
+        Ok(payload) => Response::Ok { payload },
+        Err(error) => Response::Err {
+            message: format!("{error:#}"),
+        },
     }
 }
 fn recoverable_accept_error(error: &io::Error) -> bool {
@@ -79,15 +131,18 @@ const fn recoverable_platform_accept_error(_error: &io::Error) -> bool {
 }
 async fn serve_connection(
     manager: Arc<Manager>,
-    mut connection: crate::runtime::transport::ServerConnection,
+    mut connection: ServerConnection,
+    shutdown: mpsc::Sender<ServerConnection>,
 ) -> Result<()> {
     while let Some(request) = connection.receive_or_eof().await? {
-        let response = match dispatch::execute(&manager, request).await {
-            Ok(payload) => Response::Ok { payload },
-            Err(error) => Response::Err {
-                message: format!("{error:#}"),
-            },
-        };
+        if matches!(request, Request::Shutdown) {
+            shutdown
+                .send(connection)
+                .await
+                .map_err(|error| anyhow::anyhow!("failed to request daemon shutdown: {error}"))?;
+            return Ok(());
+        }
+        let response = response_from(dispatch::execute(&manager, request).await);
         connection.send(response).await?;
     }
     Ok(())

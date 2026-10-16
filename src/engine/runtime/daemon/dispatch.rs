@@ -1,10 +1,11 @@
 use crate::runtime::protocol::{Payload, Request};
 use crate::runtime::session::Manager;
 use alloc::sync::Arc;
-use anyhow::Result;
+use anyhow::{Result, bail};
 pub(super) async fn execute(manager: &Arc<Manager>, request: Request) -> Result<Payload> {
     match request {
         Request::Ping => Ok(Payload::Pong),
+        Request::Shutdown => bail!("shutdown requests require daemon lifecycle control"),
         Request::Close { tab_id } => {
             manager.close(&tab_id).await?;
             Ok(Payload::TabClosed { tab_id })

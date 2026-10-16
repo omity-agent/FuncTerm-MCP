@@ -1,5 +1,8 @@
 #![cfg_attr(windows, feature(windows_process_extensions_raw_attribute))]
 #[cfg(test)]
+#[path = "integration/administration.rs"]
+mod administration;
+#[cfg(test)]
 #[cfg(windows)]
 #[path = "integration/bootstrap_contract.rs"]
 mod bootstrap_contract;

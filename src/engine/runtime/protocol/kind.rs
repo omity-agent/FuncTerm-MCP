@@ -14,6 +14,7 @@ impl RequestKind {
     const fn response_kind(self) -> PayloadKind {
         match self {
             Self::Ping => PayloadKind::Pong,
+            Self::Shutdown => PayloadKind::ShutdownComplete,
             Self::NewTab => PayloadKind::TabCreated,
             Self::Close => PayloadKind::TabClosed,
             Self::ManualWrite => PayloadKind::KeyboardWritten,

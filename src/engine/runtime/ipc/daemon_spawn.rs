@@ -5,7 +5,7 @@ use anyhow::{Context as _, Result, bail};
 use core::time::Duration;
 use std::process::{Command, Stdio};
 mod process_flags;
-const DAEMON_SUBCOMMAND: &str = "daemon";
+const DAEMON_SUBCOMMAND: &str = "internal-run-daemon";
 const LAUNCHER_SUBCOMMAND: &str = "internal-launch-daemon";
 #[derive(Clone, Copy)]
 pub(super) enum StartupProcess {
@@ -29,25 +29,11 @@ pub(crate) fn run_launcher(service_name: &str) -> Result<()> {
     }
 }
 fn spawn_daemon_child(service_name: &str) -> Result<()> {
+    #[cfg(windows)]
     if process_flags::needs_shell_parent_daemon_spawn() {
-        return spawn_daemon_child_through_shell_parent(service_name);
+        return process_flags::spawn_with_shell_parent(service_name);
     }
     let _daemon = spawn_daemon_process(service_name).context("failed to spawn detached daemon")?;
-    Ok(())
-}
-fn spawn_daemon_child_through_shell_parent(service_name: &str) -> Result<()> {
-    let current_exe = std::env::current_exe().context("failed to locate current executable")?;
-    let mut command = Command::new(current_exe);
-    command.envs(std::env::vars_os());
-    command
-        .arg(DAEMON_SUBCOMMAND)
-        .env("FUNCTERM_DAEMON_SERVICE_NAME", service_name)
-        .env_remove(READY_STDOUT_ENV)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    let _daemon = process_flags::spawn_with_shell_parent(command)
-        .context("failed to spawn detached daemon")?;
     Ok(())
 }
 fn startup_file() -> std::path::PathBuf {

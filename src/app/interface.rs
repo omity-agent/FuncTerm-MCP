@@ -25,7 +25,10 @@ pub(super) enum CliCommand {
         )]
         privilege_mode: Option<PrivilegeMode>,
     },
-    Daemon,
+    Daemon {
+        #[command(subcommand)]
+        command: DaemonCommand,
+    },
     NewTab {
         #[arg(long)]
         starting_directory: Option<PathBuf>,
@@ -68,6 +71,8 @@ pub(super) enum CliCommand {
     },
     #[command(hide = true)]
     InternalLaunchDaemon,
+    #[command(hide = true)]
+    InternalRunDaemon,
     #[cfg(unix)]
     #[command(hide = true)]
     InternalRunShell {
@@ -120,6 +125,15 @@ pub(super) enum CliCommand {
         #[arg(long)]
         directory: PathBuf,
     },
+}
+#[derive(Subcommand)]
+pub(super) enum DaemonCommand {
+    /// Start the daemon in the background and wait until it is ready.
+    Start,
+    /// Stop the daemon and terminate all of its Tabs and running commands.
+    Stop,
+    /// Stop the daemon, then start a fresh background instance.
+    Restart,
 }
 pub(crate) fn close_target(tab_id: Option<String>) -> Result<String> {
     if let Some(id) = tab_id {
