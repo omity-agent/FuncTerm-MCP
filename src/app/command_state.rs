@@ -31,11 +31,12 @@ pub(crate) fn write_start(command_id: &str, directory: &Path, model_title: &str)
 }
 #[cfg(windows)]
 fn restore_model_title(_output: &mut impl Write, title: &str) -> Result<()> {
-    use windows::Win32::System::Console::SetConsoleTitleW;
+    use windows::Win32::SetConsoleTitleW;
     use windows::core::PCWSTR;
     crate::contract::validate_window_title(title)?;
     let wide_title: Vec<u16> = title.encode_utf16().chain(core::iter::once(0)).collect();
     unsafe { SetConsoleTitleW(PCWSTR(wide_title.as_ptr())) }
+        .ok()
         .context("failed to restore terminal model title")
 }
 #[cfg(unix)]

@@ -59,22 +59,19 @@ fn recoverable_accept_error(error: &io::Error) -> bool {
 }
 #[cfg(windows)]
 fn recoverable_platform_accept_error(error: &io::Error) -> bool {
-    use windows::Win32::Foundation::{
+    use windows::Win32::{
         ERROR_BROKEN_PIPE, ERROR_NO_DATA, ERROR_OPERATION_ABORTED, ERROR_PIPE_NOT_CONNECTED,
     };
     let Some(code) = error.raw_os_error() else {
         return false;
     };
-    let Ok(unsigned_code) = u32::try_from(code) else {
-        return false;
-    };
     [
-        ERROR_BROKEN_PIPE.0,
-        ERROR_NO_DATA.0,
-        ERROR_OPERATION_ABORTED.0,
-        ERROR_PIPE_NOT_CONNECTED.0,
+        ERROR_BROKEN_PIPE,
+        ERROR_NO_DATA,
+        ERROR_OPERATION_ABORTED,
+        ERROR_PIPE_NOT_CONNECTED,
     ]
-    .contains(&unsigned_code)
+    .contains(&code)
 }
 #[cfg(not(windows))]
 const fn recoverable_platform_accept_error(_error: &io::Error) -> bool {

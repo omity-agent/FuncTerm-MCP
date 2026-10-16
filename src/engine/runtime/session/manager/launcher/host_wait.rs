@@ -6,8 +6,7 @@ use portable_pty::Child;
 use std::os::windows::io::{AsRawHandle as _, BorrowedHandle, OwnedHandle};
 use std::sync::mpsc;
 use std::thread;
-use windows::Win32::Foundation::{HANDLE, WAIT_FAILED, WAIT_OBJECT_0};
-use windows::Win32::System::Threading::{INFINITE, WaitForSingleObject};
+use windows::Win32::{INFINITE, WAIT_FAILED, WAIT_OBJECT_0, WaitForSingleObject};
 pub(super) fn monitor_child(
     child: &(dyn Child + Send + Sync),
     sender: mpsc::Sender<StartupEvent>,
@@ -38,14 +37,15 @@ pub(super) fn monitor_child(
     Ok(())
 }
 fn wait_for_process(handle: OwnedHandle) -> Result<()> {
-    let windows_handle = HANDLE(handle.as_raw_handle());
+    let windows_handle = handle.as_raw_handle();
     let wait_result = unsafe { WaitForSingleObject(windows_handle, INFINITE) };
+    let wait_error = (wait_result == WAIT_FAILED).then(std::io::Error::last_os_error);
     drop(handle);
+    if let Some(error) = wait_error {
+        return Err(error).context("failed to wait for shell process");
+    }
     match wait_result {
-        WAIT_OBJECT_0 => Ok(()),
-        WAIT_FAILED => {
-            Err(std::io::Error::last_os_error()).context("failed to wait for shell process")
-        }
+        result if result == WAIT_OBJECT_0.0.cast_unsigned() => Ok(()),
         unexpected => bail!("unexpected shell process wait result {unexpected:?}"),
     }
 }

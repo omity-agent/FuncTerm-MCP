@@ -2,15 +2,11 @@ use super::desktop_host;
 use crate::runtime::config::Settings;
 use anyhow::{Context as _, Result, ensure};
 use std::os::windows::io::{AsRawHandle as _, FromRawHandle as _, OwnedHandle};
-use windows::Win32::Foundation::{HANDLE, HLOCAL, LocalFree};
-use windows::Win32::Security::Authorization::ConvertSidToStringSidW;
-use windows::Win32::Security::{
-    GetTokenInformation, SECURITY_MAX_SID_SIZE, TOKEN_ELEVATION, TOKEN_INFORMATION_CLASS,
-    TOKEN_QUERY, TOKEN_USER, TokenElevation, TokenUser,
-};
-use windows::Win32::System::Threading::{
-    GetCurrentProcess, OpenProcessToken, PROCESS_CREATE_PROCESS, PROCESS_DUP_HANDLE,
-    PROCESS_QUERY_LIMITED_INFORMATION,
+use windows::Win32::{
+    ConvertSidToStringSidW, GetCurrentProcess, GetTokenInformation, HANDLE, LocalFree,
+    OpenProcessToken, PROCESS_CREATE_PROCESS, PROCESS_DUP_HANDLE,
+    PROCESS_QUERY_LIMITED_INFORMATION, SECURITY_MAX_SID_SIZE, TOKEN_ELEVATION,
+    TOKEN_INFORMATION_CLASS, TOKEN_QUERY, TOKEN_USER, TokenElevation, TokenUser,
 };
 use windows::core::PWSTR;
 pub(crate) struct ShellIdentity {
@@ -35,11 +31,13 @@ impl ShellIdentity {
     }
 }
 pub(super) fn current_token() -> Result<OwnedHandle> {
-    let mut handle = HANDLE::default();
+    let mut handle: HANDLE = core::ptr::null_mut();
+    let access = u32::try_from(TOKEN_QUERY)?;
     let process = unsafe { GetCurrentProcess() };
-    unsafe { OpenProcessToken(process, TOKEN_QUERY, &raw mut handle) }
+    unsafe { OpenProcessToken(process, access, &raw mut handle) }
+        .ok()
         .context("failed to open Daemon process token")?;
-    Ok(unsafe { OwnedHandle::from_raw_handle(handle.0) })
+    Ok(unsafe { OwnedHandle::from_raw_handle(handle) })
 }
 fn token_information<T>(token: &OwnedHandle, class: TOKEN_INFORMATION_CLASS) -> Result<T>
 where
@@ -50,13 +48,14 @@ where
     let size = u32::try_from(core::mem::size_of::<T>())?;
     unsafe {
         GetTokenInformation(
-            HANDLE(token.as_raw_handle()),
+            token.as_raw_handle(),
             class,
             Some(core::ptr::from_mut(&mut value).cast()),
             size,
             &raw mut returned,
         )
     }
+    .ok()
     .context("failed to query process token")?;
     ensure!(
         returned == size,
@@ -68,13 +67,16 @@ pub(super) fn is_elevated(token: &OwnedHandle) -> Result<bool> {
     Ok(token_information::<TOKEN_ELEVATION>(token, TokenElevation)?.TokenIsElevated != 0)
 }
 pub(super) fn normal_parent() -> Result<OwnedHandle> {
-    let parent = desktop_host::open(
+    let access = u32::try_from(
         PROCESS_CREATE_PROCESS | PROCESS_DUP_HANDLE | PROCESS_QUERY_LIMITED_INFORMATION,
     )?;
-    let mut handle = HANDLE::default();
-    unsafe { OpenProcessToken(HANDLE(parent.as_raw_handle()), TOKEN_QUERY, &raw mut handle) }
+    let parent = desktop_host::open(access)?;
+    let mut handle: HANDLE = core::ptr::null_mut();
+    let token_access = u32::try_from(TOKEN_QUERY)?;
+    unsafe { OpenProcessToken(parent.as_raw_handle(), token_access, &raw mut handle) }
+        .ok()
         .context("failed to open ordinary desktop user token")?;
-    let token = unsafe { OwnedHandle::from_raw_handle(handle.0) };
+    let token = unsafe { OwnedHandle::from_raw_handle(handle) };
     ensure!(
         !is_elevated(&token)?,
         "cannot create a normal Tab: the Windows desktop is running as administrator"
@@ -89,13 +91,14 @@ pub(crate) fn user_sid() -> Result<String> {
     let mut returned = 0;
     unsafe {
         GetTokenInformation(
-            HANDLE(token.as_raw_handle()),
+            token.as_raw_handle(),
             TokenUser,
             Some(storage.as_mut_ptr().cast()),
             size,
             &raw mut returned,
         )
     }
+    .ok()
     .context("failed to query Daemon user SID")?;
     ensure!(
         usize::try_from(returned)? >= core::mem::size_of::<TOKEN_USER>() && returned <= size,
@@ -104,11 +107,12 @@ pub(crate) fn user_sid() -> Result<String> {
     let user = unsafe { storage.as_ptr().cast::<TOKEN_USER>().read() };
     let mut text = PWSTR::null();
     unsafe { ConvertSidToStringSidW(user.User.Sid, &raw mut text) }
+        .ok()
         .context("failed to format Daemon user SID")?;
     let decoded = unsafe { text.to_string() };
-    let freed = unsafe { LocalFree(Some(HLOCAL(text.0.cast()))) };
+    let freed = unsafe { LocalFree(text.0.cast()) };
     ensure!(
-        freed.0.is_null(),
+        freed.is_null(),
         "failed to release Daemon SID string allocation"
     );
     decoded.context("Daemon user SID is not valid UTF-16")

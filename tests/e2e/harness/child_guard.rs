@@ -26,7 +26,7 @@ impl ChildGuard {
     #[cfg(windows)]
     pub(crate) fn spawn(command: &mut Command) -> Result<Self> {
         use std::os::windows::process::{CommandExt as _, ProcThreadAttributeList};
-        use windows::Win32::System::Threading::PROC_THREAD_ATTRIBUTE_JOB_LIST;
+        use windows::Win32::PROC_THREAD_ATTRIBUTE_JOB_LIST;
         let job = create_test_job()?;
         let handles = [job.as_raw_handle()];
         let attribute = usize::try_from(PROC_THREAD_ATTRIBUTE_JOB_LIST)
@@ -46,9 +46,9 @@ impl ChildGuard {
     pub(crate) fn terminate(&mut self) {
         #[cfg(windows)]
         {
-            use windows::Win32::Foundation::HANDLE;
-            use windows::Win32::System::JobObjects::TerminateJobObject;
-            unsafe { TerminateJobObject(HANDLE(self.job.as_raw_handle()), 1_u32) }
+            use windows::Win32::TerminateJobObject;
+            unsafe { TerminateJobObject(self.job.as_raw_handle(), 1_u32) }
+                .ok()
                 .context("failed to terminate test job")
                 .unwrap();
         }
@@ -65,27 +65,30 @@ impl ChildGuard {
 }
 #[cfg(windows)]
 fn create_test_job() -> Result<OwnedHandle> {
-    use windows::Win32::Foundation::HANDLE;
-    use windows::Win32::System::JobObjects::{
+    use windows::Win32::{
         CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
         JobObjectExtendedLimitInformation, SetInformationJobObject,
     };
     use windows::core::PCWSTR;
-    let raw_job =
-        unsafe { CreateJobObjectW(None, PCWSTR::null()) }.context("failed to create test job")?;
-    let job = unsafe { OwnedHandle::from_raw_handle(raw_job.0) };
+    let raw_job = unsafe { CreateJobObjectW(None, PCWSTR::null()) };
+    if raw_job.is_null() {
+        return Err(std::io::Error::last_os_error()).context("failed to create test job");
+    }
+    let job = unsafe { OwnedHandle::from_raw_handle(raw_job) };
     let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
-    limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    limits.BasicLimitInformation.LimitFlags = u32::try_from(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)
+        .context("test job limit flags do not fit u32")?;
     let size = u32::try_from(core::mem::size_of_val(&limits))
         .context("test job information size does not fit u32")?;
     unsafe {
         SetInformationJobObject(
-            HANDLE(job.as_raw_handle()),
+            job.as_raw_handle(),
             JobObjectExtendedLimitInformation,
             core::ptr::from_ref(&limits).cast(),
             size,
         )
     }
+    .ok()
     .context("failed to configure test job")?;
     Ok(job)
 }

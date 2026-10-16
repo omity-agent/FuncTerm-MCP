@@ -82,15 +82,22 @@ pub(crate) fn daemon_privileged() -> bool {
 #[cfg(windows)]
 pub(crate) fn daemon_privileged() -> bool {
     use std::os::windows::io::{FromRawHandle as _, OwnedHandle};
-    use windows::Win32::Foundation::HANDLE;
-    use windows::Win32::Security::{
-        GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation,
+    use windows::Win32::{
+        GetCurrentProcess, GetTokenInformation, OpenProcessToken, TOKEN_ELEVATION, TOKEN_QUERY,
+        TokenElevation,
     };
-    use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
     let process = unsafe { GetCurrentProcess() };
-    let mut handle = HANDLE::default();
-    unsafe { OpenProcessToken(process, TOKEN_QUERY, &raw mut handle) }.unwrap();
-    let _token = unsafe { OwnedHandle::from_raw_handle(handle.0) };
+    let mut handle = core::ptr::null_mut();
+    unsafe {
+        OpenProcessToken(
+            process,
+            u32::try_from(TOKEN_QUERY).unwrap(),
+            &raw mut handle,
+        )
+    }
+    .ok()
+    .unwrap();
+    let _token = unsafe { OwnedHandle::from_raw_handle(handle) };
     let mut elevation = TOKEN_ELEVATION::default();
     let mut returned = 0;
     unsafe {
@@ -102,6 +109,7 @@ pub(crate) fn daemon_privileged() -> bool {
             &raw mut returned,
         )
     }
+    .ok()
     .unwrap();
     elevation.TokenIsElevated != 0
 }
