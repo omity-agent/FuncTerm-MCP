@@ -17,7 +17,7 @@ impl Tab {
                 if !session.is_alive()? {
                     target_tab.close_session(&session)?;
                     anyhow::bail!(
-                        "tab id {} was generated, but its shell is gone",
+                        "\"{}\" exists in the records, but the tab has been closed. Did you run an exit command within it?",
                         target_tab.id()
                     );
                 }

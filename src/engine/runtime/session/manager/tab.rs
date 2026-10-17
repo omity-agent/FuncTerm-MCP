@@ -126,7 +126,7 @@ impl Tab {
     pub(super) fn live_session(&self) -> Result<Arc<ShellSession>> {
         let session = self.state.lock().session.clone();
         session.map_or_else(
-            || bail!("tab id {} was generated, but its shell is gone", self.id),
+            || bail!("\"{}\" exists in the records, but the tab has been closed. Did you run an exit command within it?", self.id),
             Ok,
         )
     }

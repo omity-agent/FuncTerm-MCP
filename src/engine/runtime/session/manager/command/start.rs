@@ -46,7 +46,7 @@ impl Tab {
         let session = self.live_session()?;
         if !session.is_alive()? {
             self.close_session(&session)?;
-            anyhow::bail!("tab id {} was generated, but its shell is gone", self.id());
+            anyhow::bail!("\"{}\" exists in the records, but the tab has been closed. Did you run an exit command within it?", self.id());
         }
         session.refresh_choice()?;
         self.remember(&session)?;
