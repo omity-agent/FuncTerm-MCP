@@ -51,7 +51,7 @@ pub(crate) fn assert_powershell_primary_prompt(view: &TabView) {
     );
     let final_line = view.screen.lines().next_back().unwrap_or_default();
     assert!(
-        final_line.starts_with("PS ") && final_line.ends_with("> "),
+        final_line == "PS> " || (final_line.starts_with("PS ") && final_line.ends_with("> ")),
         "PowerShell should finish at its primary prompt:\n{}",
         view.screen
     );

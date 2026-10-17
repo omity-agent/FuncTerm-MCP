@@ -33,10 +33,16 @@ pub(super) fn interactive_arguments(arguments: &[std::ffi::OsString]) -> bool {
         .all(|value| matches!(value.as_str(), "/d" | "/q" | "/k"))
 }
 fn initialization_script(context: StartupContext<'_>) -> Result<String> {
+    let style = if context.ignore_shell_style {
+        "set \"NO_COLOR=1\"\r\nprompt $G\r\n"
+    } else {
+        ""
+    };
     Ok(format!(
-        "@echo off\r\n{}\r\nset {CURRENT_SHELL_ENV}=cmd\r\nset \"PATH=%~dp0;%FUNCTERM_SHIM_DIR%;%PATH%\"\r\ndoskey /listsize=0 >nul 2>nul\r\ndoskey f=\r\ncd /d {}\r\ntype nul > {}\r\n",
+        "@echo off\r\n{}\r\nset {CURRENT_SHELL_ENV}=cmd\r\n{}\r\nset \"PATH=%~dp0;%FUNCTERM_SHIM_DIR%;%PATH%\"\r\ndoskey /listsize=0 >nul 2>nul\r\ndoskey f=\r\ncd /d {}\r\ntype nul > {}\r\n",
         startup_environment(crate::shell::ShellChoice::Cmd, context.environment)?
             .replace('\n', "\r\n"),
+        style,
         quote::cmd_string(&quote::native_path(context.cwd)?),
         quote::cmd_string(&quote::native_path(context.ready_file)?)
     ))

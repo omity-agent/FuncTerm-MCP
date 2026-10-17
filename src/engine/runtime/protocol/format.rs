@@ -103,6 +103,9 @@ fn command_text(command: &CommandView, command_id: Option<&str>) -> String {
     text
 }
 fn append_element(text: &mut String, tag: &str, content: &str) {
+    if !text.is_empty() {
+        text.push('\n');
+    }
     text.push('<');
     text.push_str(tag);
     text.push_str(">\n");
@@ -114,7 +117,7 @@ fn append_element(text: &mut String, tag: &str, content: &str) {
     }
     text.push_str("</");
     text.push_str(tag);
-    text.push_str(">\n");
+    text.push('>');
 }
 fn element(tag: &str, content: &str) -> String {
     let mut text = String::new();

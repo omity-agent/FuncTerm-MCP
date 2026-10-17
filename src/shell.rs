@@ -45,6 +45,7 @@ impl ShellChoice {
         cwd: &Path,
         session_root: &Path,
         load_profile: bool,
+        ignore_shell_style: bool,
         environment: &EnvironmentSnapshot,
     ) -> Result<ShellStartup> {
         let state_directory = session_root.join("state");
@@ -55,11 +56,27 @@ impl ShellChoice {
         let mut variables = environment.variables();
         variables.retain(|pair| {
             !crate::runtime::protocol::environment_name_equals(&pair.0, shims::LOAD_PROFILE_ENV)
+                && !crate::runtime::protocol::environment_name_equals(
+                    &pair.0,
+                    shims::IGNORE_SHELL_STYLE_ENV,
+                )
+                && (!ignore_shell_style
+                    || !crate::runtime::protocol::environment_name_equals(
+                        &pair.0,
+                        shims::NO_COLOR_ENV,
+                    ))
         });
         variables.push((
             shims::LOAD_PROFILE_ENV.into(),
             if load_profile { "1" } else { "0" }.into(),
         ));
+        variables.push((
+            shims::IGNORE_SHELL_STYLE_ENV.into(),
+            if ignore_shell_style { "1" } else { "0" }.into(),
+        ));
+        if ignore_shell_style {
+            variables.push((shims::NO_COLOR_ENV.into(), "1".into()));
+        }
         let launch_environment = EnvironmentSnapshot::from_variables(variables);
         let startup = drivers::startup(
             self,
@@ -68,6 +85,7 @@ impl ShellChoice {
                 startup_directory: &startup_directory,
                 ready_file: &ready_file,
                 load_profile,
+                ignore_shell_style,
                 environment: &launch_environment,
             },
         )?;

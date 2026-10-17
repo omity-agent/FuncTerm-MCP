@@ -13,6 +13,7 @@ pub(crate) struct Settings {
     pub(crate) terminal_model_title: String,
     pub(crate) shell_startup_timeout_seconds: f64,
     pub(crate) shell_load_profile: bool,
+    pub(crate) shell_ignore_style: bool,
     pub(crate) unix_normal_user: String,
     pub(crate) powershell: Vec<String>,
     pub(crate) bash: Vec<String>,

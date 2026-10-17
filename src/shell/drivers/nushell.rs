@@ -31,10 +31,29 @@ pub(super) fn interactive_arguments(arguments: &[std::ffi::OsString]) -> bool {
     })
 }
 fn initialization_script(context: StartupContext<'_>) -> Result<String> {
+    let style = if context.ignore_shell_style {
+        "$env.NO_COLOR = '1'
+$env.config.use_ansi_coloring = false
+$env.PROMPT_COMMAND = ''
+$env.PROMPT_COMMAND_RIGHT = ''
+$env.PROMPT_INDICATOR = '> '
+$env.PROMPT_INDICATOR_VI_INSERT = '> '
+$env.PROMPT_INDICATOR_VI_NORMAL = '> '
+$env.PROMPT_MULTILINE_INDICATOR = '> '
+$env.TRANSIENT_PROMPT_COMMAND = ''
+$env.TRANSIENT_PROMPT_COMMAND_RIGHT = ''
+$env.TRANSIENT_PROMPT_MULTILINE_INDICATOR = ''
+$env.config.render_right_prompt_on_last_line = false
+$env.config.shell_integration = { osc2: false, osc7: false, osc8: false, osc9_9: false, osc133: false, osc633: false, reset_application_mode: false }
+"
+    } else {
+        ""
+    };
     Ok(format!(
-        "{}\n$env.{CURRENT_SHELL_ENV} = 'nu'\n{}\ncd {}\nensure_nushell_shims\nsave_nushell_state {} {} {} {}\n'' | save --force --raw {}\n",
+        "{}\n$env.{CURRENT_SHELL_ENV} = 'nu'\n{}\n{}\ncd {}\nensure_nushell_shims\nsave_nushell_state {} {} {} {}\n'' | save --force --raw {}\n",
         startup_environment(crate::shell::ShellChoice::NuShell, context.environment)?,
         nushell_wrapper(),
+        style,
         quote::nushell_path(context.cwd)?,
         quote::nushell_path(&context.startup_directory.join("initial-directory.txt"))?,
         quote::nushell_path(&context.ready_file.with_file_name("nushell-env.nuon"))?,

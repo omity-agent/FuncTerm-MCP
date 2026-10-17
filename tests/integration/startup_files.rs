@@ -35,7 +35,7 @@ set -o history
     assert_eq!(loaded.exit_code, Some(1_i32));
     let viewed = run_cli(&["view", &created.tab_id]);
     assert!(
-        String::from_utf8(viewed.stdout)
+        !String::from_utf8(viewed.stdout)
             .unwrap()
             .contains("CUSTOM_PROFILE_PROMPT")
     );

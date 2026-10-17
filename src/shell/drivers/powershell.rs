@@ -34,12 +34,46 @@ pub(super) fn interactive_arguments(arguments: &[std::ffi::OsString]) -> bool {
     powershell_interactive_arguments(&values)
 }
 fn initialization_script(context: StartupContext<'_>) -> Result<String> {
+    let style = if context.ignore_shell_style {
+        r"$env:NO_COLOR = '1'
+if (Microsoft.PowerShell.Utility\Get-Variable PSStyle -ErrorAction SilentlyContinue) {
+    $PSStyle.OutputRendering = 'PlainText'
+}"
+    } else {
+        ""
+    };
+    let prompt = if context.ignore_shell_style {
+        format!(
+            "function prompt {{
+    if (-not $script:@VAR_readyWritten@) {{
+        [IO.File]::WriteAllText({}, '')
+        $script:@VAR_readyWritten@ = $true
+    }}
+    'PS> '
+}}",
+            quote::powershell_path(context.ready_file)?
+        )
+    } else {
+        format!(
+            r"$script:@VAR_originalPrompt@ = (Microsoft.PowerShell.Core\Get-Command prompt -CommandType Function).ScriptBlock
+function prompt {{
+    $@VAR_promptText@ = & $script:@VAR_originalPrompt@
+    if (-not $script:@VAR_readyWritten@) {{
+        [IO.File]::WriteAllText({}, '')
+        $script:@VAR_readyWritten@ = $true
+    }}
+    $@VAR_promptText@
+}}",
+            quote::powershell_path(context.ready_file)?
+        )
+    };
     let initialization = format!(
-        "{}\n{INPUT_GUARD}\n$env:{CURRENT_SHELL_ENV} = 'powershell'\n{}\nMicrosoft.PowerShell.Management\\Set-Location -LiteralPath {}\n$script:@VAR_readyWritten@ = $false\n$script:@VAR_originalPrompt@ = (Microsoft.PowerShell.Core\\Get-Command prompt -CommandType Function).ScriptBlock\nfunction prompt {{\n    $@VAR_promptText@ = & $script:@VAR_originalPrompt@\n    if (-not $script:@VAR_readyWritten@) {{\n        [IO.File]::WriteAllText({}, '')\n        $script:@VAR_readyWritten@ = $true\n    }}\n    $@VAR_promptText@\n}}",
+        "{}\n{INPUT_GUARD}\n$env:{CURRENT_SHELL_ENV} = 'powershell'\n{}\n{}\nMicrosoft.PowerShell.Management\\Set-Location -LiteralPath {}\n$script:@VAR_readyWritten@ = $false\n{}",
         startup_environment(crate::shell::ShellChoice::PowerShell, context.environment)?,
         powershell_wrapper(),
+        style,
         quote::powershell_path(context.cwd)?,
-        quote::powershell_path(context.ready_file)?
+        prompt
     );
     Ok(crate::shell::wrappers::VariableNamespace::new().render(&initialization))
 }

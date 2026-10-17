@@ -8,12 +8,14 @@ use std::ffi::{OsStr, OsString};
 use std::path::Path;
 pub(crate) const ACTIVE_SHELL_FILE_ENV: &str = "FUNCTERM_ACTIVE_SHELL_FILE";
 pub(crate) const CURRENT_SHELL_ENV: &str = "FUNCTERM_CURRENT_SHELL";
+pub(crate) const IGNORE_SHELL_STYLE_ENV: &str = "FUNCTERM_IGNORE_SHELL_STYLE";
 pub(crate) const LOAD_PROFILE_ENV: &str = "FUNCTERM_LOAD_PROFILE";
+pub(crate) const NO_COLOR_ENV: &str = "NO_COLOR";
 pub(crate) const PATH_ENV: &str = "PATH";
 pub(crate) const SESSION_ROOT_ENV: &str = "FUNCTERM_SESSION_ROOT";
 pub(crate) const SHIM_DIR_ENV: &str = "FUNCTERM_SHIM_DIR";
 pub(crate) const TAB_ID_ENV: &str = "FUNCTERM_TAB_ID";
-pub(crate) const PROTECTED_ENVIRONMENT_NAMES: [&str; 15] = [
+pub(crate) const PROTECTED_ENVIRONMENT_NAMES: [&str; 16] = [
     TAB_ID_ENV,
     DAEMON_SERVICE_NAME_ENV,
     SHIM_DIR_ENV,
@@ -21,6 +23,7 @@ pub(crate) const PROTECTED_ENVIRONMENT_NAMES: [&str; 15] = [
     ACTIVE_SHELL_FILE_ENV,
     HELPER_EXECUTABLE_ENV,
     CURRENT_SHELL_ENV,
+    IGNORE_SHELL_STYLE_ENV,
     LOAD_PROFILE_ENV,
     "FUNCTERM_REAL_POWERSHELL",
     "FUNCTERM_REAL_BASH",

@@ -40,3 +40,10 @@ pub(super) fn load_profile(arguments: &[OsString]) -> anyhow::Result<bool> {
     });
     Ok(inherited && !disabled)
 }
+pub(super) fn ignore_shell_style() -> anyhow::Result<bool> {
+    match std::env::var(crate::shell::shims::IGNORE_SHELL_STYLE_ENV)?.as_str() {
+        "1" => Ok(true),
+        "0" => Ok(false),
+        value => anyhow::bail!("invalid Shell style policy: {value}"),
+    }
+}

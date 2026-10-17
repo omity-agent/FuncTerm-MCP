@@ -20,14 +20,20 @@ if @VAR_startup_file@:
         crate::shell::ShellChoice::Python,
         context.environment,
     )?;
+    let style = if context.ignore_shell_style {
+        "@VAR_os@.environ[\"NO_COLOR\"] = \"1\"\n@VAR_os@.environ[\"PYTHON_COLORS\"] = \"0\"\n@VAR_sys@.ps1 = \">>> \"\n@VAR_sys@.ps2 = \"... \"\n"
+    } else {
+        ""
+    };
     let bootstrap = format ! (r#"import ast as @VAR_ast@
 	import contextlib as @VAR_contextlib@
 	import json as @VAR_json@
 	import os as @VAR_os@
 	import pathlib as @VAR_pathlib@
 	import subprocess as @VAR_subprocess@
+	import sys as @VAR_sys@
 	import time as @VAR_time@
-	{profile}{protected_environment}
+	{profile}{protected_environment}{style}
 	@VAR_os@.chdir({cwd})
 	@VAR_os@.environ["FUNCTERM_CURRENT_SHELL"] = "python"
 
@@ -116,7 +122,7 @@ if @VAR_startup_file@:
 	        else:
 	            @VAR_os@.environ["{COMMAND_DIRECTORY_ENV}"] = @VAR_previous_directory@
 	@VAR_pathlib@.Path({ready}).touch()
-	"#) . replace ("\n\t" , "\n") ;
+		"#) . replace ("\n\t" , "\n") ;
     let protected = bootstrap.replace(
         "@PYTHON_PROTECTED_ENVIRONMENT@",
         &crate::shell::wrappers::quoted_protected_environment_names(),

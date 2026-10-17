@@ -88,7 +88,7 @@ impl TabDirectory {
         if let Some(found_tab) = matching_tab {
             return Ok(found_tab);
         }
-        bail!("unknown tab id {tab_id}")
+        bail!("Unknown Tab ID \"{tab_id}\", The ID does not exist, or the Tab has been reclaimed.")
     }
     fn next_id(&self, prefix: &str) -> String {
         loop {

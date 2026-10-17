@@ -1,4 +1,3 @@
-use crate::runtime::protocol::format::line_terminated;
 use rmcp::{
     model::{CallToolResult, ContentBlock},
     serde_json::Value,
@@ -26,12 +25,12 @@ pub(super) fn combine(
                 let value = result
                     .structured_content
                     .ok_or_else(|| "tool result has no structured content".to_owned())?;
-                content.extend(result.content);
+                append_content(&mut content, result.content)?;
                 results.push(EntryResult::Success { result: value });
             }
             Err(error) => {
                 failed = true;
-                content.push(ContentBlock::text(line_terminated(error.clone())));
+                append_content(&mut content, vec![ContentBlock::text(error.clone())])?;
                 results.push(EntryResult::Failure { error });
             }
         }
@@ -42,4 +41,30 @@ pub(super) fn combine(
     combined.structured_content = Some(structured);
     combined.is_error = Some(failed);
     Ok(combined)
+}
+fn append_content(
+    content: &mut Vec<ContentBlock>,
+    mut entry: Vec<ContentBlock>,
+) -> Result<(), String> {
+    if !content.is_empty() {
+        let previous = content
+            .pop()
+            .ok_or_else(|| "MCP output content unexpectedly became empty".to_owned())?;
+        let separated = match previous {
+            ContentBlock::Text(mut text) => {
+                if !text.text.ends_with('\n') {
+                    text.text.push('\n');
+                }
+                ContentBlock::Text(text)
+            }
+            ContentBlock::Image(_)
+            | ContentBlock::Audio(_)
+            | ContentBlock::Resource(_)
+            | ContentBlock::ResourceLink(_)
+            | _ => return Err("MCP output contains a non-text content block".to_owned()),
+        };
+        content.push(separated);
+    }
+    content.append(&mut entry);
+    Ok(())
 }

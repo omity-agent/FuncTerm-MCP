@@ -84,6 +84,7 @@ impl ShellLauncher {
             starting_directory,
             &tab_root,
             load_profile,
+            self.settings.shell_ignore_style,
             &EnvironmentSnapshot::from_variables(managed_environment),
         )?;
         let screen = Arc::new(Terminal::new(

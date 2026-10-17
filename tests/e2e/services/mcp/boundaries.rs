@@ -18,7 +18,7 @@ fn mcp_xml_documents_stay_on_separate_lines_across_batches_and_calls() {
         json!({"exec": [{"starting_shell": SHELL}, {"starting_shell": SHELL}]}),
     );
     let creation_text = text_documents(&created).concat();
-    assert!(creation_text.contains("</TAB_ID>\n<TAB_ID>\n"));
+    assert!(creation_text.contains("</TAB_ID>\n<TAB_ID>"));
     let tab_id = entries(&created)
         .first()
         .unwrap()
@@ -45,11 +45,10 @@ fn mcp_xml_documents_stay_on_separate_lines_across_batches_and_calls() {
     let command_text = text_documents(&accepted).concat();
     let view_text = text_documents(&viewed).concat();
     assert!(command_text.contains("RAW<tag> & text"));
-    assert!(view_text.contains("</NOTE>\n<SHELL>\n"));
-    let consecutive = [creation_text, command_text, view_text].concat();
-    assert!(consecutive.contains("</TAB_ID>\n<SHELL>\n"));
-    assert!(consecutive.contains("</NOTE>\n<SHELL>\n"));
-    assert!(!consecutive.contains("</NOTE><SHELL>"));
+    assert!(view_text.contains("</NOTE>\n<SHELL>"));
+    assert!(!creation_text.ends_with('\n'));
+    assert!(!command_text.ends_with('\n'));
+    assert!(!view_text.ends_with('\n'));
     drop(session);
 }
 
@@ -68,7 +67,7 @@ fn mcp_error_blocks_are_separated_without_changing_structured_errors() {
     assert_eq!(documents.len(), 5);
     for (entry, document) in entries(&response).iter().zip(&documents) {
         if let Some(error) = entry.get("error").and_then(Value::as_str) {
-            assert_eq!(document.strip_suffix('\n'), Some(error));
+            assert_eq!(document.trim_end_matches('\n'), error);
         }
     }
     for pair in documents.windows(2) {
@@ -108,10 +107,15 @@ pub(super) fn text_documents(response: &Value) -> Vec<&str> {
     assert_eq!(blocks.len(), entries(response).len());
     blocks
         .iter()
-        .map(|block| {
+        .enumerate()
+        .map(|(index, block)| {
             let text = block.get("text").and_then(Value::as_str).unwrap();
-            assert!(text.ends_with('\n'), "unterminated text document: {text:?}");
-            assert!(!text.ends_with("\n\n"), "extra blank line: {text:?}");
+            let is_last = index + 1 == blocks.len();
+            assert_eq!(
+                text.ends_with('\n'),
+                !is_last,
+                "invalid document boundary: {text:?}"
+            );
             assert!(!text.starts_with('\n'), "leading blank line: {text:?}");
             text
         })

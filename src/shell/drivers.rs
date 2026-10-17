@@ -16,6 +16,7 @@ pub(crate) struct StartupContext<'value> {
     pub(crate) startup_directory: &'value Path,
     pub(crate) ready_file: &'value Path,
     pub(crate) load_profile: bool,
+    pub(crate) ignore_shell_style: bool,
     pub(crate) environment: &'value crate::runtime::protocol::EnvironmentSnapshot,
 }
 pub(crate) struct ShellInvocation {

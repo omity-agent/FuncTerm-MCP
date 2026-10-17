@@ -72,6 +72,7 @@ fn run_interactive(choice: ShellChoice, arguments: &[std::ffi::OsString]) -> Res
         &cwd,
         &session_root,
         routing::load_profile(arguments)?,
+        routing::ignore_shell_style()?,
         &crate::runtime::protocol::EnvironmentSnapshot::capture(),
     )?;
     let ready_file = startup.ready_file.clone();

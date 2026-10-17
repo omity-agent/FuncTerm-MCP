@@ -10,7 +10,7 @@ use std::{
     path::{Path, PathBuf},
 };
 #[test]
-fn powershell_profile_functions_and_prompt_survive_protocol_repair() {
+fn powershell_profile_functions_survive_while_prompt_style_is_ignored() {
     let _guard = locked_with_env(&[]);
     let root = session_root("powershell", "Write-Output $env:FUNCTERM_SESSION_ROOT");
     let directory = prepare_command(
@@ -46,7 +46,8 @@ Write-Output (Get-PSReadLineOption).HistorySaveStyle
     ]);
     command.arg(script);
     let text = terminal_fixture::run(command);
-    assert!(text.contains("CUSTOM_PROFILE_PROMPT"), "{text}");
+    assert!(text.contains("PS> "), "{text}");
+    assert!(!text.contains("CUSTOM_PROFILE_PROMPT"), "{text}");
     assert!(text.contains("SaveNothing"), "{text}");
     assert_result(&directory, "PROFILE_FUNCTION_LOADED\n0");
 }

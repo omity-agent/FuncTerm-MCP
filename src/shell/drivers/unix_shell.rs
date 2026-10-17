@@ -31,12 +31,17 @@ pub(super) fn bash_startup(context: StartupContext<'_>) -> Result<DriverStartup>
 fi
 @VAR_aliases_enabled@=0
 if builtin shopt -q expand_aliases; then @VAR_aliases_enabled@=1; fi
-builtin shopt -u expand_aliases
-builtin bind '"\C-j": accept-line'
-"#;
+    builtin shopt -u expand_aliases
+    builtin bind '"\C-j": accept-line'
+    "#;
     let restore = "if builtin test \"$@VAR_aliases_enabled@\" = 1; then builtin shopt -s expand_aliases; fi\nbuiltin unset @VAR_aliases_enabled@\n";
     let initialization = initialization_script(context, "bash", &bash_wrapper(), ">", restore)?;
-    let script = format!("{profile}{guard}{DISPATCH_ALIAS_GUARD}{initialization}");
+    let style = if context.ignore_shell_style {
+        BASH_PLAIN_STYLE
+    } else {
+        ""
+    };
+    let script = format!("{profile}{style}{guard}{DISPATCH_ALIAS_GUARD}{initialization}");
     fs_err::write(&init_path, VariableNamespace::new().render(&script))?;
     Ok(DriverStartup {
         args: vec![
@@ -81,7 +86,12 @@ pub(super) fn zsh_startup(context: StartupContext<'_>) -> Result<DriverStartup> 
         ""
     };
     let guard = format!(
-        "if builtin test \"$@VAR_zdotdir_set@\" = x; then\n    builtin export ZDOTDIR=\"$@VAR_user_zdotdir@\"\nelse\n    builtin unset ZDOTDIR\nfi\nbuiltin unset @VAR_user_zdotdir@ @VAR_zdotdir_set@\n{rc_profile}builtin typeset @VAR_aliases_enabled@=0\nif [[ -o aliases ]]; then @VAR_aliases_enabled@=1; fi\nbuiltin setopt noaliases\nbuiltin bindkey '^J' accept-line\n"
+        "if builtin test \"$@VAR_zdotdir_set@\" = x; then\n    builtin export ZDOTDIR=\"$@VAR_user_zdotdir@\"\nelse\n    builtin unset ZDOTDIR\nfi\nbuiltin unset @VAR_user_zdotdir@ @VAR_zdotdir_set@\n{rc_profile}{style}builtin typeset @VAR_aliases_enabled@=0\nif [[ -o aliases ]]; then @VAR_aliases_enabled@=1; fi\nbuiltin setopt noaliases\nbuiltin bindkey '^J' accept-line\n",
+        style = if context.ignore_shell_style {
+            ZSH_PLAIN_STYLE
+        } else {
+            ""
+        },
     );
     let restore = "if builtin test \"$@VAR_aliases_enabled@\" = 1; then builtin setopt aliases; fi\nbuiltin unset @VAR_aliases_enabled@\n";
     let initialization = initialization_script(context, "zsh", &zsh_wrapper(), ">|", restore)?;
@@ -99,6 +109,24 @@ pub(super) fn zsh_startup(context: StartupContext<'_>) -> Result<DriverStartup> 
 }
 const DISPATCH_ALIAS_GUARD: &str =
     "if builtin alias f > /dev/null 2>&1; then\n    builtin unalias f\nfi\n";
+const BASH_PLAIN_STYLE: &str = "builtin export NO_COLOR=1
+builtin unset PROMPT_COMMAND
+builtin export PS0=''
+builtin export PS1='> '
+builtin export PS2='> '
+builtin export PS4='+ '
+";
+const ZSH_PLAIN_STYLE: &str = "builtin export NO_COLOR=1
+builtin typeset -ga precmd_functions=()
+builtin typeset -ga preexec_functions=()
+builtin export PROMPT='> '
+builtin export RPROMPT=''
+builtin export PS1='> '
+builtin export RPS1=''
+builtin export PS2='> '
+builtin export PS3='> '
+builtin export PS4='+ '
+";
 fn initialization_script(
     context: StartupContext<'_>,
     shell: &str,
