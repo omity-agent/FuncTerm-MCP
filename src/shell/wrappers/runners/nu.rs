@@ -5,7 +5,7 @@ pub(in crate::shell) use worker_setup::prepare_nushell_command;
 pub(in crate::shell) fn wrapper() -> String {
     instrumentation::render(TEMPLATE)
 }
-const TEMPLATE : & str = "def --env @FUNCTION@ [@VAR_command_id@: string, @VAR_directory@: path, @VAR_working_directory@: path] {
+const TEMPLATE : & str = "def --env @FUNCTION@ [@VAR_command_id@: string, @VAR_directory@: path, @VAR_working_directory@: path, @VAR_separate_output@: bool] {
 	    let @VAR_input_dir@ = ($@VAR_directory@ | path join '@INPUT_DIR@')
 	    let @VAR_output_dir@ = ($@VAR_directory@ | path join '@OUTPUT_DIR@')
 	    let @VAR_state_dir@ = ($@VAR_directory@ | path join '@STATE_DIR@')
@@ -45,23 +45,35 @@ const TEMPLATE : & str = "def --env @FUNCTION@ [@VAR_command_id@: string, @VAR_d
 	            error make {msg: 'failed to publish command start'}
 	        }
 	        let @VAR_command_started_at@ = date now
-	        let @VAR_result@ = (^$@VAR_nushell@ --no-history --config $@VAR_config_file@ --env-config $@VAR_env_config_file@ --commands $@VAR_command@ | complete)
-	        let @VAR_time_consumption@ = ((date now) - $@VAR_command_started_at@) | into string
-	        $@VAR_result@.stdout | save --force --raw $@VAR_stdout_file@
-	        $@VAR_result@.stderr | save --force --raw $@VAR_stderr_file@
-	        if ($@VAR_stdout_file@ | path exists) {
+	        mut @VAR_exit_code@ = 0
+	        if $@VAR_separate_output@ {
+	            let @VAR_result@ = (^$@VAR_nushell@ --no-history --config $@VAR_config_file@ --env-config $@VAR_env_config_file@ --commands $@VAR_command@ | complete)
+	            $@VAR_exit_code@ = $@VAR_result@.exit_code
+	            $@VAR_result@.stdout | save --force --raw $@VAR_stdout_file@
+	            $@VAR_result@.stderr | save --force --raw $@VAR_stderr_file@
 	            print --raw --no-newline (open --raw $@VAR_stdout_file@)
-	        }
-	        if ($@VAR_stderr_file@ | path exists) {
 	            print --raw --no-newline --stderr (open --raw $@VAR_stderr_file@)
+	        } else {
+	            let @VAR_native_exit_code@ = try {
+	                ^$@VAR_nushell@ --no-history --config $@VAR_config_file@ --env-config $@VAR_env_config_file@ --commands $@VAR_command@
+	                0
+	            } catch {|@VAR_native_error@|
+	                if $@VAR_native_error@.exit_code? == null {
+	                    error make $@VAR_native_error@
+	                } else {
+	                    $@VAR_native_error@.exit_code
+	                }
+	            }
+	            $@VAR_exit_code@ = $@VAR_native_exit_code@
 	        }
+	        let @VAR_time_consumption@ = ((date now) - $@VAR_command_started_at@) | into string
 	        let @VAR_command_cwd@ = if ($@VAR_cwd_file@ | path exists) {
 	            open --raw $@VAR_cwd_file@
 	        } else {
 	            $@VAR_working_directory@ | path expand
 	        }
 	        restore_nushell_environment $@VAR_env_state_file@ $@VAR_config_state_file@ $@VAR_previous_env_names@
-	        { cwd: $@VAR_command_cwd@, exit_code: $@VAR_result@.exit_code, time_consumption: $@VAR_time_consumption@ }
+	        { cwd: $@VAR_command_cwd@, exit_code: $@VAR_exit_code@, time_consumption: $@VAR_time_consumption@ }
 	    } catch {|@VAR_error@|
 	        $@VAR_error@.msg | save --append --raw $@VAR_stderr_file@
 	        print --stderr $@VAR_error@.msg

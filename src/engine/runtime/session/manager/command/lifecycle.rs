@@ -3,7 +3,7 @@ use crate::runtime::protocol::CommandSnapshot;
 use crate::runtime::session::keyboard::InputDelivery;
 use crate::runtime::session::observation::PathWatch;
 use crate::runtime::session::records::CommandRecord;
-use crate::runtime::session::terminal::CommandTitle;
+use crate::runtime::session::terminal::CommandCapture;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use core::time::Duration;
@@ -14,7 +14,7 @@ pub(in crate::engine::runtime::session::manager) struct ManagedCommand {
     pub(super) record: CommandRecord,
     started_at: Instant,
     pub(super) state: Mutex<ManagedCommandState>,
-    pub(super) title: Arc<CommandTitle>,
+    pub(super) capture: Arc<CommandCapture>,
     watch: Arc<PathWatch>,
 }
 pub(super) struct ManagedCommandState {
@@ -39,7 +39,7 @@ impl ManagedCommand {
     pub(super) fn new(
         id: String,
         record: CommandRecord,
-        title: Arc<CommandTitle>,
+        capture: Arc<CommandCapture>,
         watch: Arc<PathWatch>,
     ) -> Self {
         tracing :: debug ! (command_id = % id , directory = % record . directory . display () , "command registered");
@@ -52,7 +52,7 @@ impl ManagedCommand {
                 cached_view: None,
                 input: CommandInputHistory::default(),
             }),
-            title,
+            capture,
             watch,
         }
     }
@@ -101,8 +101,8 @@ impl ManagedCommand {
             Err(error) => Err(error),
         }
     }
-    pub(in crate::engine::runtime::session::manager) fn cancel_title_capture(&self) {
-        drop(self.title.cancel());
+    pub(in crate::engine::runtime::session::manager) fn cancel_capture(&self) {
+        drop(self.capture.cancel());
     }
     pub(in crate::engine::runtime::session::manager) async fn wait_started(
         &self,

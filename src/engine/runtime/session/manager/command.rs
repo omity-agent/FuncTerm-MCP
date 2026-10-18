@@ -23,9 +23,12 @@ impl Manager {
         self: &Arc<Self>,
         tab_id: &str,
         command: &str,
+        separate_output: bool,
         wait_timeout: Duration,
     ) -> Result<(String, EndReason, ViewResult)> {
-        self.tabs.send_command(tab_id, command, wait_timeout).await
+        self.tabs
+            .send_command(tab_id, command, separate_output, wait_timeout)
+            .await
     }
     pub(crate) async fn view(&self, id: &str, wait_timeout: Duration) -> Result<ViewResult> {
         self.tabs.view(id, wait_timeout).await

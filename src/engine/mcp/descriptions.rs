@@ -7,15 +7,20 @@ pub(super) fn apply(
     router: &mut ToolRouter<McpServer>,
     descriptions: &McpSettings,
     fixed_privilege: bool,
+    fixed_output: bool,
 ) -> Result<()> {
     let mut new_tab = descriptions.new_tab.clone();
     if fixed_privilege {
         new_tab.exec_parameters.remove("elevated");
     }
+    let mut send_command = descriptions.send_command.clone();
+    if fixed_output {
+        send_command.exec_parameters.remove("separate_output");
+    }
     let tools = [
         ("new_tab", &new_tab),
         ("manual_write", &descriptions.manual_write),
-        ("send_command", &descriptions.send_command),
+        ("send_command", &send_command),
         ("view", &descriptions.view),
     ];
     for (name, description) in tools {

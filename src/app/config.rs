@@ -14,6 +14,7 @@ pub(crate) struct Settings {
     pub(crate) shell_startup_timeout_seconds: f64,
     pub(crate) shell_load_profile: bool,
     pub(crate) shell_ignore_style: bool,
+    pub(crate) command_separate_output: bool,
     pub(crate) unix_normal_user: String,
     pub(crate) powershell: Vec<String>,
     pub(crate) bash: Vec<String>,

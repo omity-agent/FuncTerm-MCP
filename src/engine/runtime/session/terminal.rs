@@ -1,11 +1,12 @@
 mod activity;
 mod io;
 mod output_events;
-mod title;
+mod registry;
+mod transcript;
 pub(super) use self::io::start_reader;
 use self::output_events::{OutputEvent, OutputParser};
-use self::title::CaptureRegistry;
-pub(super) use self::title::CommandTitle;
+use self::registry::CaptureRegistry;
+pub(super) use self::transcript::CommandCapture;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result, bail};
 use event_listener::Event;
@@ -54,7 +55,11 @@ impl Terminal {
             changed: Event::new(),
         })
     }
-    pub(super) fn capture_title(&self, command_id: &str) -> Result<Arc<CommandTitle>> {
+    pub(super) fn capture_command(
+        &self,
+        command_id: &str,
+        separate_output: bool,
+    ) -> Result<Arc<CommandCapture>> {
         let mut state = self.state.lock();
         if let Some(message) = state.reader_failure.as_deref() {
             bail!("cannot start command after terminal reader failure: {message}");
@@ -62,7 +67,7 @@ impl Terminal {
         if state.reader_closed {
             bail!("cannot start command after terminal reader closed");
         }
-        state.captures.register(command_id)
+        state.captures.register(command_id, separate_output)
     }
     pub(super) fn contents(&self) -> String {
         self.state.lock().visible_contents.clone()
@@ -118,6 +123,7 @@ impl TerminalState {
             if consumed == 0 {
                 bail!("terminal protocol parser made no progress");
             }
+            self.captures.record(self.protocol.text())?;
             let (segment, tail) = remaining
                 .split_at_checked(consumed)
                 .context("terminal event offset exceeds PTY output")?;

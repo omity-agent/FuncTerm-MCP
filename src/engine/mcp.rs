@@ -6,8 +6,11 @@ mod operations;
 mod output;
 use crate::engine::privileges::PrivilegeMode;
 use crate::runtime::config::Settings;
+use crate::runtime::protocol::OutputMode;
 use anyhow::{Context as _, Result};
-use arguments::{FixedNewTabExec, ManualWriteExec, NewTabExec, SendCommandExec, ViewRequest};
+use arguments::{
+    FixedCommandExec, FixedNewTabExec, ManualWriteExec, NewTabExec, SendCommandExec, ViewRequest,
+};
 use batch::{ExecBatch, TimedBatch};
 use collection::BatchOutput;
 use rmcp::{
@@ -20,6 +23,7 @@ use rmcp::{
 struct McpServer {
     settings: Settings,
     privilege_mode: Option<PrivilegeMode>,
+    output_mode: Option<OutputMode>,
     tool_router: ToolRouter<Self>,
 }
 #[expect(
@@ -30,7 +34,11 @@ struct McpServer {
 impl ServerHandler for McpServer {}
 # [tool_router (router = tool_router)]
 impl McpServer {
-    fn new(settings: Settings, privilege_mode: Option<PrivilegeMode>) -> Result<Self> {
+    fn new(
+        settings: Settings,
+        privilege_mode: Option<PrivilegeMode>,
+        output_mode: Option<OutputMode>,
+    ) -> Result<Self> {
         let mut tool_router = Self::tool_router();
         let mut fixed_route = tool_router
             .map
@@ -40,10 +48,24 @@ impl McpServer {
             fixed_route.attr.name = "new_tab".into();
             tool_router.map.insert("new_tab".into(), fixed_route);
         }
-        descriptions::apply(&mut tool_router, &settings.mcp, privilege_mode.is_some())?;
+        let mut fixed_command = tool_router
+            .map
+            .remove("fixed_send_command")
+            .context("fixed Send Command route is missing")?;
+        if output_mode.is_some() {
+            fixed_command.attr.name = "send_command".into();
+            tool_router.map.insert("send_command".into(), fixed_command);
+        }
+        descriptions::apply(
+            &mut tool_router,
+            &settings.mcp,
+            privilege_mode.is_some(),
+            output_mode.is_some(),
+        )?;
         Ok(Self {
             settings,
             privilege_mode,
+            output_mode,
             tool_router,
         })
     }
@@ -83,6 +105,19 @@ impl McpServer {
     ) -> Result<CallToolResult, String> {
         batch::run(&self.settings, request.exec, Some(request.wait_timeout)).await
     }
+    #[tool(name = "fixed_send_command", output_schema = schema_for_output::<BatchOutput<output::SendCommandOutput<'static>>>())]
+    async fn fixed_send_command(
+        &self,
+        Parameters(request): Parameters<TimedBatch<FixedCommandExec>>,
+    ) -> Result<CallToolResult, String> {
+        let mode = self.output_mode.ok_or("MCP output mode is not fixed")?;
+        let entries = request
+            .exec
+            .into_iter()
+            .map(|entry| entry.with_output(mode.separate_output()))
+            .collect();
+        batch::run(&self.settings, entries, Some(request.wait_timeout)).await
+    }
     # [tool (name = "view" , output_schema = schema_for_output ::< BatchOutput < output :: ViewOutput <'static >>> ())]
     async fn view(
         &self,
@@ -96,8 +131,12 @@ impl McpServer {
         .await
     }
 }
-pub(crate) async fn run(settings: Settings, privilege_mode: Option<PrivilegeMode>) -> Result<()> {
-    let service = McpServer::new(settings, privilege_mode)?
+pub(crate) async fn run(
+    settings: Settings,
+    privilege_mode: Option<PrivilegeMode>,
+    output_mode: Option<OutputMode>,
+) -> Result<()> {
+    let service = McpServer::new(settings, privilege_mode, output_mode)?
         .serve(rmcp::transport::stdio())
         .await?;
     service.waiting().await?;

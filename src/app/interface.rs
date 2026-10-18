@@ -1,5 +1,9 @@
 use crate::engine::privileges::PrivilegeMode;
-use crate::runtime::{client, config::Settings, protocol::Request};
+use crate::runtime::{
+    client,
+    config::Settings,
+    protocol::{OutputMode, Request},
+};
 use crate::shell::ShellChoice;
 use anyhow::{Context as _, Result, ensure};
 use clap::{Parser, Subcommand};
@@ -24,6 +28,12 @@ pub(super) enum CliCommand {
             help = "Fix New Tab permissions and hide its elevated input"
         )]
         privilege_mode: Option<PrivilegeMode>,
+        #[arg(
+            long,
+            value_enum,
+            help = "Fix command output handling and hide its separate_output input"
+        )]
+        output_mode: Option<OutputMode>,
     },
     Daemon {
         #[command(subcommand)]
@@ -61,6 +71,8 @@ pub(super) enum CliCommand {
         tab_id: String,
         #[arg(long)]
         command: String,
+        #[arg(long, action = clap::ArgAction::Set)]
+        separate_output: Option<bool>,
         #[arg(long, default_value_t = 0.0)]
         wait_timeout: f64,
     },

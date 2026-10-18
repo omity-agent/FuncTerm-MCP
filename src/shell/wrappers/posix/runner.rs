@@ -12,6 +12,7 @@ pub(super) fn command_function(dialect: PosixDialect) -> String {
 	    local @VAR_native_directory@="$2"
 	    local @VAR_directory@="$@VAR_native_directory@"
 	    local @VAR_working_directory@="$3"
+	    local @VAR_separate_output@="$4"
 	    @VAR_directory@="$(functerm_posix_path "$@VAR_directory@")" || return 1
 	    @VAR_working_directory@="$(functerm_posix_path "$@VAR_working_directory@")" || return 1
 	    local @VAR_input_dir@="$@VAR_directory@/{input_dir}"
@@ -63,21 +64,30 @@ pub(super) fn command_function(dialect: PosixDialect) -> String {
 	    fi
 	    local @VAR_command_started_at@
 	    @VAR_command_started_at@="$(functerm_command_time_millis)" || return 1
-	    {{ eval "$@VAR_script@"; }} > "$@VAR_stdout_file@" 2> "$@VAR_stderr_file@"
-	    local @VAR_exit_code@=$?
+	    local @VAR_exit_code@
+	    if [ "$@VAR_separate_output@" = 1 ]; then
+	        {{ eval "$@VAR_script@"; }} > "$@VAR_stdout_file@" 2> "$@VAR_stderr_file@"
+	        @VAR_exit_code@=$?
+	    else
+	        eval "$@VAR_script@"
+	        @VAR_exit_code@=$?
+	    fi
 	{environment_restore}
 	    local @VAR_environment_restore_result@=$?
 	    if [ "$@VAR_environment_restore_result@" -ne 0 ]; then
 	        printf '%s\n' 'failed to restore shell shim path' >> "$@VAR_stderr_file@"
+	        if [ "$@VAR_separate_output@" = 0 ]; then
+	            printf '%s\n' 'failed to restore shell shim path' >&2
+	        fi
 	        @VAR_exit_code@=1
 	    fi
 	    local @VAR_command_finished_at@
 	    @VAR_command_finished_at@="$(functerm_command_time_millis)" || return 1
 	    local @VAR_time_consumption@="$((@VAR_command_finished_at@ - @VAR_command_started_at@))ms"
-	    if [ -f "$@VAR_stdout_file@" ]; then
+	    if [ "$@VAR_separate_output@" = 1 ] && [ -f "$@VAR_stdout_file@" ]; then
 	        cat "$@VAR_stdout_file@" || return 1
 	    fi
-	    if [ -f "$@VAR_stderr_file@" ]; then
+	    if [ "$@VAR_separate_output@" = 1 ] && [ -f "$@VAR_stderr_file@" ]; then
 	        cat "$@VAR_stderr_file@" >&2 || return 1
 	    fi
 	    if ! functerm_publish_done "$@VAR_command_id@" "$@VAR_exit_code@" "$@VAR_time_consumption@" "$PWD" "$@VAR_native_directory@"; then

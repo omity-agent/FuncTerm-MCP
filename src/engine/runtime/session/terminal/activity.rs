@@ -53,7 +53,7 @@ impl Terminal {
         let mut state = self.state.lock();
         state
             .captures
-            .fail_all("PTY reader closed before command title capture completed");
+            .fail_all("PTY reader closed before command capture completed");
         state.reader_closed = true;
         drop(state);
         self.changed.notify(usize::MAX);

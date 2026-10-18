@@ -3,6 +3,7 @@ pub(crate) const COMMAND_ID_ENV: &str = "FUNCTERM_COMMAND_ID";
 pub(crate) const COMMAND_INPUT_DIRECTORY: &str = "input";
 pub(crate) const COMMAND_FILE: &str = "command.txt";
 pub(crate) const COMMAND_SCRIPT_FILE: &str = "command.cmd";
+pub(crate) const COMMAND_SEPARATION_FILE: &str = "separate-output.txt";
 pub(crate) const COMMAND_WORKING_DIRECTORY_FILE: &str = "cwd.txt";
 pub(crate) const COMMAND_OUTPUT_DIRECTORY: &str = "output";
 pub(crate) const COMMAND_POWERSHELL_SCRIPT_FILE: &str = "command.ps1";

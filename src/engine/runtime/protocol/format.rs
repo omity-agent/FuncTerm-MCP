@@ -1,4 +1,4 @@
-use super::{CommandView, Payload, ShellView, ViewResult};
+use super::{CommandView, OutputPresentation, Payload, ShellView, ViewResult};
 impl Payload {
     pub(crate) fn into_plain_text(self) -> String {
         match self {
@@ -91,8 +91,13 @@ fn command_text(command: &CommandView, command_id: Option<&str>) -> String {
     if let Some(id) = presentation.command_id {
         append_element(&mut text, "COMMAND_ID", id);
     }
-    append_element(&mut text, "STDOUT", presentation.stdout);
-    append_element(&mut text, "STDERR", presentation.stderr);
+    match presentation.output {
+        OutputPresentation::Separated { stdout, stderr } => {
+            append_element(&mut text, "STDOUT", stdout);
+            append_element(&mut text, "STDERR", stderr);
+        }
+        OutputPresentation::Terminal { output } => append_element(&mut text, "OUTPUT", output),
+    }
     append_element(&mut text, "EXIT_CODE", &exit_code);
     append_element(
         &mut text,

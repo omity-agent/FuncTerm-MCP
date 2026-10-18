@@ -29,7 +29,7 @@ impl Tab {
         command: &Arc<ManagedCommand>,
     ) -> Result<()> {
         tracing :: debug ! (command_id = % command . id () , done = command . record () . done . try_exists () ?, "observed command completion; awaiting terminal title");
-        let title = command.title.wait_finished().await?;
+        let title = command.capture.wait_finished().await?;
         let tab = Arc::clone(self);
         let managed = Arc::clone(command);
         self.blocking

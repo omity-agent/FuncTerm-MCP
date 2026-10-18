@@ -24,6 +24,7 @@ fn command_claims_preserve_data_and_are_consumed_once() {
             "cmd" => String::from_utf8(output.stdout)
                 .unwrap()
                 .lines()
+                .take(3)
                 .map(str::to_owned)
                 .collect(),
             _ => {
@@ -153,6 +154,7 @@ fn prepare_record(root: &Path, cwd: &str) -> PathBuf {
         fs::write(directory.join("input").join(name), "echo receipt").unwrap();
     }
     fs::write(directory.join("input/cwd.txt"), cwd).unwrap();
+    fs::write(directory.join("input/separate-output.txt"), "true").unwrap();
     fs::write(root.join("state/dispatch"), "receipt-command").unwrap();
     directory
 }

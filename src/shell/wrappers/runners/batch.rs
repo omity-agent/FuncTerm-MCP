@@ -47,7 +47,11 @@ if errorlevel 1 (
 call :command_time_millis
 set "@VAR_command_started_at@=%ERRORLEVEL%"
 set > "%~dp0@VAR_environment_before_file@.txt"
-"%FUNCTERM_REAL_CMD%" /D /Q /V:OFF /S /C ""%~f0" --capture "%~2"" > "%~2\@OUTPUT_DIR@\@STDOUT@" 2> "%~2\@OUTPUT_DIR@\@STDERR@"
+if "%~4"=="1" (
+    "%FUNCTERM_REAL_CMD%" /D /Q /V:OFF /S /C ""%~f0" --capture "%~2"" > "%~2\@OUTPUT_DIR@\@STDOUT@" 2> "%~2\@OUTPUT_DIR@\@STDERR@"
+) else (
+    "%FUNCTERM_REAL_CMD%" /D /Q /V:OFF /S /C ""%~f0" --capture "%~2""
+)
 set "@VAR_exit_code@=%ERRORLEVEL%"
 set "@VAR_worker_exited@="
 if not exist "%~dp0@VAR_exit_code_file@.txt" (
@@ -75,8 +79,8 @@ call :command_time_millis
 set /a @VAR_command_elapsed@=%ERRORLEVEL% - @VAR_command_started_at@
 if %@VAR_command_elapsed@% LSS 0 set /a @VAR_command_elapsed@+=86400000
 set "@VAR_time_consumption@=%@VAR_command_elapsed@%ms"
-if exist "%@VAR_stdout_file@%" type "%@VAR_stdout_file@%"
-if exist "%@VAR_stderr_file@%" type "%@VAR_stderr_file@%" 1>&2
+if "%~4"=="1" if exist "%@VAR_stdout_file@%" type "%@VAR_stdout_file@%"
+if "%~4"=="1" if exist "%@VAR_stderr_file@%" type "%@VAR_stderr_file@%" 1>&2
 call :publish_done %@VAR_exit_code@%
 if errorlevel 1 (
     call :restore_command_environment

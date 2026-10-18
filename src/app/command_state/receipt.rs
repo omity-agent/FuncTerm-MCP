@@ -6,13 +6,17 @@ pub(super) struct CommandReceipt {
     pub(super) command_id: String,
     pub(super) directory: String,
     pub(super) working_directory: String,
+    pub(super) separate_output: bool,
 }
 impl CommandReceipt {
     pub(super) fn encode(&self, shell: ShellChoice) -> Result<String> {
         match shell {
             ShellChoice::Bash | ShellChoice::Zsh => Ok(format!(
-                "{}\0{}\0{}\0",
-                self.command_id, self.directory, self.working_directory
+                "{}\0{}\0{}\0{}\0",
+                self.command_id,
+                self.directory,
+                self.working_directory,
+                u8::from(self.separate_output)
             )),
             ShellChoice::Cmd => {
                 ensure!(
@@ -21,8 +25,11 @@ impl CommandReceipt {
                     "CMD command paths contain line breaks"
                 );
                 Ok(format!(
-                    "{}\n{}\n{}",
-                    self.command_id, self.directory, self.working_directory
+                    "{}\n{}\n{}\n{}",
+                    self.command_id,
+                    self.directory,
+                    self.working_directory,
+                    u8::from(self.separate_output)
                 ))
             }
             ShellChoice::PowerShell

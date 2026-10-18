@@ -41,9 +41,11 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
 	    if (!@VAR_command@) return;
 	    @VAR_activeCommand@ = undefined;
 	    @VAR_server@.writer = @VAR_command@.previousWriter;
-	    @VAR_command@.capture.restore();
-	    @VAR_writeFileSync@(@VAR_join@(@VAR_command@.output, "{stdout_file}"), Buffer.concat(@VAR_command@.capture.stdout));
-	    @VAR_writeFileSync@(@VAR_join@(@VAR_command@.output, "{stderr_file}"), Buffer.concat(@VAR_command@.capture.stderr));
+	    if (@VAR_command@.capture) {{
+	        @VAR_command@.capture.restore();
+	        @VAR_writeFileSync@(@VAR_join@(@VAR_command@.output, "{stdout_file}"), Buffer.concat(@VAR_command@.capture.stdout));
+	        @VAR_writeFileSync@(@VAR_join@(@VAR_command@.output, "{stderr_file}"), Buffer.concat(@VAR_command@.capture.stderr));
+	    }}
 	    const @VAR_elapsed@ = `${{Math.max(1, Math.ceil(performance.now() - @VAR_command@.started))}}ms`;
 	    const @VAR_environmentWasCleared@ = Object.keys(process.env).length === 0;
 	    for (const [@VAR_name@, @VAR_value@] of Object.entries(@VAR_command@.protectedEnvironment)) {{
@@ -132,14 +134,14 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
 	        process.chdir(@VAR_workingDirectory@);
 	        @VAR_runHelper@(["internal-write-start", "--command-id", @VAR_commandId@, "--directory", @VAR_directory@]);
 	        const @VAR_previousWriter@ = @VAR_server@.writer;
-	        @VAR_server@.writer = @VAR_value@ => @VAR_inspect@(@VAR_value@, {{ ...@VAR_previousWriter@.options, colors: false }});
+	        if (@VAR_receipt@.separate_output) @VAR_server@.writer = @VAR_value@ => @VAR_inspect@(@VAR_value@, {{ ...@VAR_previousWriter@.options, colors: false }});
 	        @VAR_activeCommand@ = {{
 	            id: @VAR_commandId@, directory: @VAR_directory@, output: @VAR_output@,
 	            previousId: @VAR_previousId@, previousDirectory: @VAR_previousDirectory@,
 	            protectedEnvironment: @VAR_protectedEnvironment@,
 	            previousError: @VAR_previousError@, previousWriter: @VAR_previousWriter@,
 	            started: performance.now(), failed: false, readingInput: true,
-	            nativeInput: @VAR_source@.trimStart().startsWith("."), capture: @VAR_captureOutput@()
+	            nativeInput: @VAR_source@.trimStart().startsWith("."), capture: @VAR_receipt@.separate_output ? @VAR_captureOutput@() : undefined
 	        }};
 	        @VAR_evaluationReturned@ = true;
 	        @VAR_inputDepth@ += 1;

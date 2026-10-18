@@ -36,7 +36,8 @@ function @FUNCTION@ {
     param(
         [Parameter(Mandatory = $true)][string]$@VAR_CommandId@,
         [Parameter(Mandatory = $true)][string]$@VAR_Directory@,
-        [Parameter(Mandatory = $true)][string]$@VAR_WorkingDirectory@
+        [Parameter(Mandatory = $true)][string]$@VAR_WorkingDirectory@,
+        [Parameter(Mandatory = $true)][bool]$@VAR_SeparateOutput@
     )
     Set-FuncTermShimPath
     $@VAR_inputDir@ = Join-Path $@VAR_Directory@ '@INPUT_DIR@'
@@ -77,8 +78,14 @@ function @FUNCTION@ {
             @POWERSHELL_COMMAND_ERROR_TRAP@
         )
         $@VAR_commandTimer@ = [Diagnostics.Stopwatch]::StartNew()
-        . $@VAR_commandScript@ 2> $@VAR_stderrFile@ | Tee-Object -FilePath $@VAR_stdoutFile@
-        $@VAR_commandSucceeded@ = $?
+        if ($@VAR_SeparateOutput@) {
+            . $@VAR_commandScript@ 2> $@VAR_stderrFile@ | Tee-Object -FilePath $@VAR_stdoutFile@
+            $@VAR_commandSucceeded@ = $?
+        }
+        else {
+            . $@VAR_commandScript@ | Microsoft.PowerShell.Core\\Out-Default
+            $@VAR_commandSucceeded@ = $?
+        }
         $@VAR_commandNativeExitCode@ = $global:LASTEXITCODE
         foreach ($@VAR_error@ in $@VAR_commandErrors@) {
             [IO.File]::AppendAllText($@VAR_stderrFile@, [string]$@VAR_error@ + [Environment]::NewLine, [Text.Encoding]::UTF8)
@@ -99,7 +106,7 @@ function @FUNCTION@ {
         else {
             $@VAR_exitCode@ = 1
         }
-        if ((Test-Path -LiteralPath $@VAR_stderrFile@) -and ((Get-Item -LiteralPath $@VAR_stderrFile@).Length -gt 0)) {
+        if ($@VAR_SeparateOutput@ -and (Test-Path -LiteralPath $@VAR_stderrFile@) -and ((Get-Item -LiteralPath $@VAR_stderrFile@).Length -gt 0)) {
             Get-Content -LiteralPath $@VAR_stderrFile@ | ForEach-Object { [Console]::Error.WriteLine($_) }
         }
     }

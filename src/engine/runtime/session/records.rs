@@ -1,10 +1,10 @@
 use crate::contract::{
     COMMAND_FILE, COMMAND_INPUT_DIRECTORY, COMMAND_OUTPUT_DIRECTORY,
-    COMMAND_POWERSHELL_SCRIPT_FILE, COMMAND_SCRIPT_FILE, COMMAND_STATE_DIRECTORY,
-    COMMAND_WORKING_DIRECTORY_FILE, DONE_FILE, RELEASED_FILE, STARTED_FILE, STDERR_FILE,
-    STDOUT_FILE,
+    COMMAND_POWERSHELL_SCRIPT_FILE, COMMAND_SCRIPT_FILE, COMMAND_SEPARATION_FILE,
+    COMMAND_STATE_DIRECTORY, COMMAND_WORKING_DIRECTORY_FILE, DONE_FILE, RELEASED_FILE,
+    STARTED_FILE, STDERR_FILE, STDOUT_FILE,
 };
-use crate::runtime::protocol::{CommandSnapshot, CommandView};
+use crate::runtime::protocol::{CommandOutput, CommandSnapshot, CommandView};
 use crate::shell::ShellChoice;
 use anyhow::{Context as _, Result, bail};
 use core::time::Duration;
@@ -33,6 +33,7 @@ pub(super) fn create_record(
     command_root: &Path,
     command_id: &str,
     initial_cwd: &Path,
+    separate_output: bool,
 ) -> Result<CommandRecord> {
     let command_dir = command_root.join(command_id);
     let input_dir = command_dir.join(COMMAND_INPUT_DIRECTORY);
@@ -45,6 +46,10 @@ pub(super) fn create_record(
     fs::write(
         &working_directory,
         crate::text::path_text(initial_cwd, "command working directory")?,
+    )?;
+    fs::write(
+        input_dir.join(COMMAND_SEPARATION_FILE),
+        separate_output.to_string(),
     )?;
     Ok(CommandRecord {
         directory: command_dir,
@@ -75,9 +80,15 @@ pub(super) fn read_command_result(
     record: &CommandRecord,
     observed_time_consumption: Duration,
     title: String,
+    terminal_output: Option<String>,
 ) -> Result<CommandSnapshot> {
-    let stdout = read_plain_output(&record.stdout)?;
-    let stderr = read_plain_output(&record.stderr)?;
+    let output = match terminal_output {
+        Some(output) => CommandOutput::Terminal { output },
+        None => CommandOutput::Separated {
+            stdout: read_plain_output(&record.stdout)?,
+            stderr: read_plain_output(&record.stderr)?,
+        },
+    };
     let done = read_done(&record.done)?;
     let exit_code = done.as_ref().map(|file| file.exit_code);
     let finished = done.is_some();
@@ -85,12 +96,11 @@ pub(super) fn read_command_result(
         humantime::parse_duration(&file.time_consumption)
             .context("done file contains an invalid time consumption")
     })?;
-    let note = command_note(&stdout, &stderr, "");
+    let note = command_note(&output, "");
     Ok(CommandSnapshot {
         title,
         command: CommandView {
-            stdout,
-            stderr,
+            output,
             exit_code,
             time_consumption: measured_time_consumption,
             finished,
@@ -105,13 +115,22 @@ pub(super) fn remove_record_directory(record: &CommandRecord) -> Result<()> {
         Err(error) => Err(error.into()),
     }
 }
-pub(super) fn command_note(stdout: &str, stderr: &str, extra: &str) -> String {
+pub(super) fn command_note(output: &CommandOutput, extra: &str) -> String {
     let mut lines = Vec::new();
     if !extra.is_empty() {
         lines.push(extra.to_owned());
     }
-    if stdout.is_empty() && stderr.is_empty() {
-        lines.push("No stdout or stderr content was captured.".to_owned());
+    if output.is_empty() {
+        lines.push(
+            match *output {
+                CommandOutput::Separated {
+                    stdout: _,
+                    stderr: _,
+                } => "No stdout or stderr content was captured.",
+                CommandOutput::Terminal { output: _ } => "No terminal output was captured.",
+            }
+            .to_owned(),
+        );
     }
     lines.join("\n")
 }

@@ -78,26 +78,30 @@ if @VAR_startup_file@:
 	        @VAR_prepend_shim@()
 	        @VAR_os@.chdir(@VAR_working_directory@)
 	        @VAR_helper@("internal-write-start", "--command-id", @VAR_command_id@, "--directory", str(@VAR_directory@))
-	        with @VAR_stdout_file@.open("w", encoding="utf-8") as @VAR_stdout@:
-	            with @VAR_stderr_file@.open("w", encoding="utf-8") as @VAR_stderr@:
-	                with @VAR_contextlib@.redirect_stdout(@VAR_stdout@), @VAR_contextlib@.redirect_stderr(@VAR_stderr@):
-	                    try:
-	                        @VAR_execute@(@VAR_source@, globals())
-	                    except SystemExit as @VAR_system_exit@:
-	                        @VAR_system_exit_code@ = @VAR_system_exit@.code
-	                        if @VAR_system_exit_code@ is None:
-	                            @VAR_exit_code@ = 0
-	                        elif isinstance(@VAR_system_exit_code@, int):
-	                            @VAR_exit_code@ = @VAR_system_exit_code@
-	                        else:
-	                            @VAR_exit_code@ = 1
-	                        raise
-	                    except BaseException:
-	                        @VAR_exit_code@ = 1
-	                        import traceback as @VAR_traceback@
-	                        @VAR_traceback@.print_exc()
-	        print(@VAR_stdout_file@.read_text(encoding="utf-8"), end="")
-	        print(@VAR_stderr_file@.read_text(encoding="utf-8"), end="", file=__import__("sys").stderr)
+	        with @VAR_contextlib@.ExitStack() as @VAR_output_context@:
+	            if @VAR_receipt@["separate_output"]:
+	                @VAR_stdout@ = @VAR_output_context@.enter_context(@VAR_stdout_file@.open("w", encoding="utf-8"))
+	                @VAR_stderr@ = @VAR_output_context@.enter_context(@VAR_stderr_file@.open("w", encoding="utf-8"))
+	                @VAR_output_context@.enter_context(@VAR_contextlib@.redirect_stdout(@VAR_stdout@))
+	                @VAR_output_context@.enter_context(@VAR_contextlib@.redirect_stderr(@VAR_stderr@))
+	            try:
+	                @VAR_execute@(@VAR_source@, globals())
+	            except SystemExit as @VAR_system_exit@:
+	                @VAR_system_exit_code@ = @VAR_system_exit@.code
+	                if @VAR_system_exit_code@ is None:
+	                    @VAR_exit_code@ = 0
+	                elif isinstance(@VAR_system_exit_code@, int):
+	                    @VAR_exit_code@ = @VAR_system_exit_code@
+	                else:
+	                    @VAR_exit_code@ = 1
+	                raise
+	            except BaseException:
+	                @VAR_exit_code@ = 1
+	                import traceback as @VAR_traceback@
+	                @VAR_traceback@.print_exc()
+	        if @VAR_receipt@["separate_output"]:
+	            print(@VAR_stdout_file@.read_text(encoding="utf-8"), end="")
+	            print(@VAR_stderr_file@.read_text(encoding="utf-8"), end="", file=__import__("sys").stderr)
 	    finally:
 	        @VAR_environment_was_cleared@ = not @VAR_os@.environ
 	        for @VAR_name@, @VAR_value@ in @VAR_protected_environment@.items():

@@ -9,7 +9,12 @@ impl ManagedCommand {
         let result = if let Some(view) = state.cached_view.as_ref() {
             Ok(view.clone())
         } else {
-            read_command_result(&self.record, self.time_consumption(), self.title.current()?)
+            read_command_result(
+                &self.record,
+                self.time_consumption(),
+                self.capture.current()?,
+                self.capture.output(),
+            )
         };
         drop(state);
         result
@@ -25,7 +30,12 @@ impl ManagedCommand {
         }
         let done =
             read_done(&self.record.done)?.context("completed command is missing done file")?;
-        let mut view = read_command_result(&self.record, self.time_consumption(), title)?;
+        let mut view = read_command_result(
+            &self.record,
+            self.time_consumption(),
+            title,
+            self.capture.output(),
+        )?;
         state.input.normalize(&mut view);
         update_cwd(PathBuf::from(done.cwd));
         state.cached_view = Some(view);
@@ -43,11 +53,16 @@ impl ManagedCommand {
         if !matches!(state.wait, CommandWait::Running) {
             return Ok(());
         }
-        let title = self.title.cancel();
-        let mut view = read_command_result(&self.record, self.time_consumption(), title)?;
+        let title = self.capture.cancel();
+        let mut view = read_command_result(
+            &self.record,
+            self.time_consumption(),
+            title,
+            self.capture.output(),
+        )?;
         view.command.finished = true;
         view.command.exit_code = Some(1_i32);
-        view.note = command_note(&view.command.stdout, &view.command.stderr, &failure_message);
+        view.note = command_note(&view.command.output, &failure_message);
         state.cached_view = Some(view);
         state.wait = CommandWait::Failed;
         drop(state);

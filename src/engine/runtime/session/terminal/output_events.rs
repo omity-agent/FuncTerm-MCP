@@ -15,10 +15,14 @@ impl OutputParser {
     }
     pub(super) fn advance(&mut self, bytes: &[u8]) -> (usize, Option<OutputEvent>) {
         self.detector.event = None;
+        self.detector.text.clear();
         let consumed = self
             .parser
             .advance_until_terminated(&mut self.detector, bytes);
         (consumed, self.detector.event.take())
+    }
+    pub(super) fn text(&self) -> &str {
+        &self.detector.text
     }
 }
 pub(super) enum OutputEvent {
@@ -34,8 +38,17 @@ pub(super) enum ProtocolEvent {
 #[derive(Default)]
 struct Detector {
     event: Option<OutputEvent>,
+    text: String,
 }
 impl Perform for Detector {
+    fn print(&mut self, character: char) {
+        self.text.push(character);
+    }
+    fn execute(&mut self, byte: u8) {
+        if matches!(byte, b'\n' | b'\r' | b'\t' | 8) {
+            self.text.push(char::from(byte));
+        }
+    }
     fn csi_dispatch(&mut self, params: &Params, intermediates: &[u8], ignore: bool, action: char) {
         if !ignore
             && intermediates == b"?"

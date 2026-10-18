@@ -16,12 +16,13 @@ impl Tab {
         self: &Arc<Self>,
         command_id: String,
         command_text: String,
+        separate_output: bool,
     ) -> Result<StartedCommand> {
         let _operation = self.operation.lock().await;
         let tab = Arc::clone(self);
         let started = self
             .blocking
-            .run(move || tab.dispatch_command(command_id, &command_text))
+            .run(move || tab.dispatch_command(command_id, &command_text, separate_output))
             .await?;
         if let Err(error) = started
             .session
@@ -42,27 +43,36 @@ impl Tab {
         self: &Arc<Self>,
         command_id: String,
         command_text: &str,
+        separate_output: bool,
     ) -> Result<StartedCommand> {
         let session = self.live_session()?;
         if !session.is_alive()? {
             self.close_session(&session)?;
-            anyhow::bail!("\"{}\" exists in the records, but the tab has been closed. Did you run an exit command within it?", self.id());
+            anyhow::bail!(
+                "\"{}\" exists in the records, but the tab has been closed. Did you run an exit command within it?",
+                self.id()
+            );
         }
         session.refresh_choice()?;
         self.remember(&session)?;
         let initial_cwd = session.cwd();
-        let record = create_record(session.command_root(), &command_id, &initial_cwd)?;
-        let title = session.capture_title(&command_id)?;
+        let record = create_record(
+            session.command_root(),
+            &command_id,
+            &initial_cwd,
+            separate_output,
+        )?;
+        let capture = session.capture_command(&command_id, separate_output)?;
         let managed = Arc::new(ManagedCommand::new(
             command_id,
             record,
-            Arc::clone(&title),
+            Arc::clone(&capture),
             session.command_watch(),
         ));
         let reservation = match ShellReservation::new(&session, self.id(), Arc::clone(&managed)) {
             Ok(reservation) => reservation,
             Err(error) => {
-                drop(title.cancel());
+                drop(capture.cancel());
                 if let Err(remove_error) = remove_record_directory(managed.record()) {
                     eprintln!("{remove_error:#}");
                 }

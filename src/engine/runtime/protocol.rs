@@ -3,11 +3,13 @@ use anyhow::{Context as _, Result};
 use core::time::Duration;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+mod emission;
 mod environment;
 pub(crate) mod format;
 mod kind;
 mod presentation;
 mod time_consumption;
+pub(crate) use emission::{CommandOutput, OutputMode, OutputPresentation};
 pub(crate) use environment::{EnvironmentSnapshot, environment_name_equals};
 pub(crate) use presentation::{CommandPresentation, ShellPresentation};
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, strum :: EnumDiscriminants)]
@@ -34,6 +36,7 @@ pub(crate) enum Request {
     SendCommand {
         tab_id: String,
         command: String,
+        separate_output: bool,
         wait_timeout: Duration,
     },
     View {
@@ -89,8 +92,7 @@ pub(crate) struct ShellView {
 }
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) struct CommandView {
-    pub(crate) stdout: String,
-    pub(crate) stderr: String,
+    pub(crate) output: CommandOutput,
     pub(crate) exit_code: Option<i32>,
     pub(crate) time_consumption: Duration,
     pub(crate) finished: bool,

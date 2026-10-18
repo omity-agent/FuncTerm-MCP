@@ -52,12 +52,13 @@ impl TabDirectory {
         &self,
         tab_id: &str,
         command: &str,
+        separate_output: bool,
         wait_timeout: core::time::Duration,
     ) -> Result<(String, crate::runtime::protocol::EndReason, ViewResult)> {
         let command_id = self.next_command_id();
         let tab = self.require_tab(tab_id)?;
         let started = tab
-            .start_command(command_id.clone(), command.to_owned())
+            .start_command(command_id.clone(), command.to_owned(), separate_output)
             .await?;
         self.commands.insert(command_id, Arc::clone(&tab));
         started.wait(wait_timeout).await

@@ -12,6 +12,7 @@ pub(crate) async fn run() -> Result<()> {
     match args.command.unwrap_or(CliCommand::Mcp {
         no_profile: false,
         privilege_mode: None,
+        output_mode: None,
     }) {
         CliCommand::InternalEnsureShims { directory } => {
             crate::shell::shims::ensure_directory(&directory)
@@ -57,10 +58,11 @@ pub(crate) async fn run() -> Result<()> {
         CliCommand::Mcp {
             no_profile,
             privilege_mode,
+            output_mode,
         } => {
             let mut settings = config::load()?;
             settings.shell_load_profile &= !no_profile;
-            crate::mcp::run(settings, privilege_mode).await
+            crate::mcp::run(settings, privilege_mode, output_mode).await
         }
         CliCommand::Daemon { command } => {
             let settings = config::load()?;
@@ -135,12 +137,14 @@ pub(crate) async fn run() -> Result<()> {
         CliCommand::SendCommand {
             tab_id,
             command: shell_command,
+            separate_output,
             wait_timeout: wait_timeout_seconds,
         } => {
             let settings = config::load()?;
             let request = Request::SendCommand {
                 tab_id,
                 command: shell_command,
+                separate_output: separate_output.unwrap_or(settings.command_separate_output),
                 wait_timeout: wait_timeout_from_seconds(wait_timeout_seconds)?,
             };
             print_result(interface::execute(&settings, request).await)

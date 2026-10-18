@@ -53,7 +53,7 @@ pub(super) fn powershell_dispatcher() -> String {
         $@VAR_receipt@ = Invoke-FuncTermHelper -@VAR_Arguments@ @(
             'internal-claim-command', '--session-root', $env:{session_root_env}, '--shell', 'powershell'
         ) | ConvertFrom-Json
-        . {runner} -@VAR_CommandId@ $@VAR_receipt@.command_id -@VAR_Directory@ $@VAR_receipt@.directory -@VAR_WorkingDirectory@ $@VAR_receipt@.working_directory
+        . {runner} -@VAR_CommandId@ $@VAR_receipt@.command_id -@VAR_Directory@ $@VAR_receipt@.directory -@VAR_WorkingDirectory@ $@VAR_receipt@.working_directory -@VAR_SeparateOutput@ $@VAR_receipt@.separate_output
     }}
     finally {{
         @POWERSHELL_STATE_CLEANUP@
@@ -76,12 +76,14 @@ pub(super) fn posix_dispatcher() -> String {
     local @VAR_command_id@
     local @VAR_native_directory@
     local @VAR_working_directory@
+    local @VAR_separate_output@
     {{
         IFS= read -r -d '' @VAR_command_id@ &&
         IFS= read -r -d '' @VAR_native_directory@ &&
-        IFS= read -r -d '' @VAR_working_directory@
+        IFS= read -r -d '' @VAR_working_directory@ &&
+        IFS= read -r -d '' @VAR_separate_output@
     }} < "$@VAR_receipt_file@" || return 1
-    {runner} "$@VAR_command_id@" "$@VAR_native_directory@" "$@VAR_working_directory@"
+    {runner} "$@VAR_command_id@" "$@VAR_native_directory@" "$@VAR_working_directory@" "$@VAR_separate_output@"
 }}"#,
     )
 }
@@ -90,7 +92,7 @@ pub(super) fn nushell_dispatcher() -> String {
     let helper_env = HELPER_EXECUTABLE_ENV;
     let runner = POSIX_COMMAND_FUNCTION;
     format!(
-        "def --env f [] {{\n    let @VAR_helper@ = $env.{helper_env}\n    let @VAR_result@ = (^$@VAR_helper@ internal-claim-command --session-root $env.{session_root_env} --shell nu | complete)\n    if $@VAR_result@.exit_code != 0 {{\n        print --stderr $@VAR_result@.stderr\n        return\n    }}\n    let @VAR_receipt@ = ($@VAR_result@.stdout | from json)\n    {runner} $@VAR_receipt@.command_id $@VAR_receipt@.directory $@VAR_receipt@.working_directory\n}}",
+        "def --env f [] {{\n    let @VAR_helper@ = $env.{helper_env}\n    let @VAR_result@ = (^$@VAR_helper@ internal-claim-command --session-root $env.{session_root_env} --shell nu | complete)\n    if $@VAR_result@.exit_code != 0 {{\n        print --stderr $@VAR_result@.stderr\n        return\n    }}\n    let @VAR_receipt@ = ($@VAR_result@.stdout | from json)\n    {runner} $@VAR_receipt@.command_id $@VAR_receipt@.directory $@VAR_receipt@.working_directory $@VAR_receipt@.separate_output\n}}",
     )
 }
 fn render(template: &str, extra: &[(&str, &str)]) -> String {
@@ -106,16 +108,19 @@ set "@VAR_receipt_file@=%FUNCTERM_SESSION_ROOT%\@SESSION_STATE@\@CLAIM@"
 set "@VAR_command_id@="
 set "@VAR_directory@="
 set "@VAR_working_directory@="
+set "@VAR_separate_output@="
 for /f "usebackq delims=" %%r in ("%@VAR_receipt_file@%") do (
     if not defined @VAR_command_id@ (
         set "@VAR_command_id@=%%r"
     ) else if not defined @VAR_directory@ (
         set "@VAR_directory@=%%r"
-    ) else (
+    ) else if not defined @VAR_working_directory@ (
         set "@VAR_working_directory@=%%r"
+    ) else (
+        set "@VAR_separate_output@=%%r"
     )
 )
-call "%~dp0cmd_run.bat" "%@VAR_command_id@%" "%@VAR_directory@%" "%@VAR_working_directory@%"
+call "%~dp0cmd_run.bat" "%@VAR_command_id@%" "%@VAR_directory@%" "%@VAR_working_directory@%" "%@VAR_separate_output@%"
 exit /b %ERRORLEVEL%
 "#;
 pub(super) const POWERSHELL_COMMAND_ERROR_TRAP: &str = concat!(

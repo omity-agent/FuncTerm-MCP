@@ -14,13 +14,16 @@ terminal_cols = 120
 terminal_model_title = ""
 
 # Shell 启动注入脚本写入 ready 文件前最多等待的秒数。
-shell_startup_timeout_seconds = 30.0
+shell_startup_timeout_seconds = 60.0
 
 # 默认加载 Shell Profile
 shell_load_profile = true
 
 # 忽略 Shell Profile 中的提示符、颜色和 Shell 集成样式
 shell_ignore_style = true
+
+# 命令默认分别捕获 stdout 和 stderr；false 时保留终端句柄并捕获合并的终端输出。
+command_separate_output = true
 
 # Root Daemon 创建普通权限 Tab 时使用的 Unix 用户；留空时使用 Daemon 的真实 UID 或 SUDO_UID。
 # 可通过 FUNCTERM_UNIX_NORMAL_USER 指定
@@ -94,12 +97,13 @@ bytes = "要写入的原始字节"
 description = "执行命令。工具会在等待时长结束或命令结束时输出。"
 
 [mcp.send_command.parameters]
-exec = ""
+exec = "向一个或多个不同的 Tab 发送命令"
 wait_timeout = "等待时长，单位为秒。时间结束后命令不会被终止，仍可通过 view 查看其状态。对于一般命令，**等待时长设置过小会造成不必要的轮询和重复输出**；等待时长设置过大会导致出现异常高耗时时无法及时处理。通常建议设置略大于预期耗时，建议根据上一次执行类似命令结束时的 Time Consumption 动态更正预期。若非计划在命令结束前同时做其他事，不建议设为 0 或个位数。"
 
 [mcp.send_command.exec_parameters]
 tab_id = "每个 Tab 在同一时刻仅能有一份命令正在运行，Tab 繁忙时收到的命令会被丢弃。"
-command = "该参数中允许存在换行"
+command = "此中允许存在换行"
+separate_output = "是否分别捕获 stdout 和 stderr。false 时保留终端句柄。"
 
 [mcp.view]
 description = "查看状态。该工具会在等待时长结束或命令结束时输出。"

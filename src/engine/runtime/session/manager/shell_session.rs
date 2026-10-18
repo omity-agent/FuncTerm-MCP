@@ -4,7 +4,7 @@ pub(super) mod process;
 use super::command::ManagedCommand;
 use crate::runtime::session::observation::PathWatch;
 use crate::runtime::session::records::CommandRecord;
-use crate::runtime::session::terminal::{CommandTitle, Terminal};
+use crate::runtime::session::terminal::{CommandCapture, Terminal};
 use crate::shell::{ShellChoice, shims};
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
@@ -84,8 +84,12 @@ impl ShellSession {
     pub(super) fn model_title(&self) -> String {
         self.screen.model_title()
     }
-    pub(super) fn capture_title(&self, command_id: &str) -> Result<Arc<CommandTitle>> {
-        self.screen.capture_title(command_id)
+    pub(super) fn capture_command(
+        &self,
+        command_id: &str,
+        separate_output: bool,
+    ) -> Result<Arc<CommandCapture>> {
+        self.screen.capture_command(command_id, separate_output)
     }
     pub(super) fn current_choice(&self) -> ShellChoice {
         *self.choice.lock()

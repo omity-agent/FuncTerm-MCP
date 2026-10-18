@@ -39,7 +39,7 @@ impl Tab {
             None
         };
         if let Some(active) = command.as_ref() {
-            active.cancel_title_capture();
+            active.cancel_capture();
         }
         let target = Arc::clone(&session);
         self.blocking.run(move || target.terminate()).await?;

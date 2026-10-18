@@ -1,8 +1,8 @@
 use super::{DoneOutput, receipt::CommandReceipt, write_done};
 use crate::contract::{
-    COMMAND_INPUT_DIRECTORY, COMMAND_OUTPUT_DIRECTORY, COMMAND_STATE_DIRECTORY,
-    COMMAND_WORKING_DIRECTORY_FILE, DISPATCH_FILE, SESSION_COMMANDS_DIRECTORY,
-    SESSION_STATE_DIRECTORY, STDERR_FILE,
+    COMMAND_INPUT_DIRECTORY, COMMAND_OUTPUT_DIRECTORY, COMMAND_SEPARATION_FILE,
+    COMMAND_STATE_DIRECTORY, COMMAND_WORKING_DIRECTORY_FILE, DISPATCH_FILE,
+    SESSION_COMMANDS_DIRECTORY, SESSION_STATE_DIRECTORY, STDERR_FILE,
 };
 use crate::shell::{ShellChoice, shims};
 use anyhow::{Context as _, Result, ensure};
@@ -53,6 +53,10 @@ fn prepare(
     let input = directory.join(COMMAND_INPUT_DIRECTORY);
     let working_directory = fs_err::read_to_string(input.join(COMMAND_WORKING_DIRECTORY_FILE))
         .context("failed to read command working directory")?;
+    let separate_output = fs_err::read_to_string(input.join(COMMAND_SEPARATION_FILE))
+        .context("failed to read command output mode")?
+        .parse::<bool>()
+        .context("invalid command output separation value")?;
     ensure!(
         !working_directory.is_empty(),
         "command working directory is empty"
@@ -69,6 +73,7 @@ fn prepare(
         command_id: command_id.to_owned(),
         directory: crate::text::path_text(directory, "claimed command directory")?,
         working_directory,
+        separate_output,
     })
 }
 fn publish_preparation_failure(
@@ -78,6 +83,13 @@ fn publish_preparation_failure(
 ) -> Result<()> {
     let stderr = directory.join(COMMAND_OUTPUT_DIRECTORY).join(STDERR_FILE);
     crate::publication::write_replace(&stderr, format!("failed to prepare command: {error:#}\n"))?;
+    let mut terminal = crate::shim::terminal_output()?;
+    super::write_start_to(command_id, directory, &mut terminal)?;
+    std::io::Write::write_all(
+        &mut terminal,
+        format!("failed to prepare command: {error:#}\n").as_bytes(),
+    )
+    .context("failed to report command preparation failure to terminal")?;
     let cwd = crate::text::path_text(
         &std::env::current_dir().context("failed to read preparation working directory")?,
         "preparation working directory",

@@ -39,10 +39,11 @@ pub(super) async fn execute(manager: &Arc<Manager>, request: Request) -> Result<
         Request::SendCommand {
             tab_id,
             command,
+            separate_output,
             wait_timeout,
         } => {
             let (command_id, end_reason, view) = manager
-                .send_command(&tab_id, &command, wait_timeout)
+                .send_command(&tab_id, &command, separate_output, wait_timeout)
                 .await?;
             Ok(Payload::CommandAccepted {
                 command_id,

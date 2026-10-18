@@ -1,4 +1,4 @@
-use super::{CommandView, ShellView};
+use super::{CommandView, OutputPresentation, ShellView};
 use serde::Serialize;
 use std::path::Path;
 use sugar_path::SugarPath as _;
@@ -16,8 +16,8 @@ pub(crate) struct ShellPresentation<'view> {
 pub(crate) struct CommandPresentation<'view> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) command_id: Option<&'view str>,
-    pub(crate) stdout: &'view str,
-    pub(crate) stderr: &'view str,
+    #[serde(flatten)]
+    pub(crate) output: OutputPresentation<'view>,
     pub(crate) exit_code: Option<i32>,
     pub(crate) time_consumption: String,
     pub(crate) finished: bool,
@@ -40,8 +40,7 @@ impl CommandView {
     ) -> CommandPresentation<'view> {
         CommandPresentation {
             command_id,
-            stdout: &self.stdout,
-            stderr: &self.stderr,
+            output: self.output.presentation(),
             exit_code: self.exit_code,
             time_consumption: super::time_consumption::milliseconds(self.time_consumption),
             finished: self.finished,

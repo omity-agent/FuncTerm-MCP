@@ -52,10 +52,13 @@ impl Operation for SendCommandExec {
     fn tab_id(&self) -> Option<&str> {
         Some(&self.tab_id)
     }
-    fn request(self, _settings: &Settings, wait_timeout: Duration) -> Result<Request, String> {
+    fn request(self, settings: &Settings, wait_timeout: Duration) -> Result<Request, String> {
         Ok(Request::SendCommand {
             tab_id: self.tab_id,
             command: self.command,
+            separate_output: self
+                .separate_output
+                .unwrap_or(settings.command_separate_output),
             wait_timeout,
         })
     }

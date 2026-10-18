@@ -65,6 +65,23 @@ impl ManualWriteExec {
 pub(super) struct SendCommandExec {
     pub(super) tab_id: String,
     pub(super) command: String,
+    pub(super) separate_output: Option<bool>,
+}
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[schemars(inline)]
+pub(super) struct FixedCommandExec {
+    pub(super) tab_id: String,
+    pub(super) command: String,
+}
+impl FixedCommandExec {
+    pub(super) fn with_output(self, separate_output: bool) -> SendCommandExec {
+        SendCommandExec {
+            tab_id: self.tab_id,
+            command: self.command,
+            separate_output: Some(separate_output),
+        }
+    }
 }
 #[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
 #[serde(deny_unknown_fields)]
