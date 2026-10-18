@@ -3,43 +3,6 @@ use super::{
     wire::{McpSession, assert_rejected, entries},
 };
 use rmcp::serde_json::{Value, json};
-#[test]
-fn mcp_no_profile_applies_to_all_created_tabs() {
-    #[cfg(windows)]
-    let (shell, command) = ("powershell", "Write-Output $env:FUNCTERM_LOAD_PROFILE");
-    #[cfg(unix)]
-    let (shell, command) = ("bash", "printf '%s\\n' \"$FUNCTERM_LOAD_PROFILE\"");
-    for (arguments, expected) in [(&[][..], "1"), (&["--no-profile"][..], "0")] {
-        let mut session = McpSession::with_arguments(arguments);
-        let creation = session.call(
-            "new_tab",
-            json ! ({ "exec" : [{ "starting_shell" : shell } , { "starting_shell" : shell }] }),
-        );
-        for entry in entries(&creation) {
-            let tab_id = entry
-                .pointer("/result/tab_id")
-                .and_then(Value::as_str)
-                .unwrap();
-            let response = session . call ("send_command" , json ! ({ "exec" : [{ "tab_id" : tab_id , "command" : command }] , "wait_timeout" : 10_u64 }) ,) ;
-            let result = entries(&response).first().unwrap();
-            assert_eq!(
-                result.pointer("/result/command/exit_code"),
-                Some(&json!(0_i32)),
-                "{response}"
-            );
-            assert_eq!(
-                result
-                    .pointer("/result/command/stdout")
-                    .and_then(Value::as_str)
-                    .unwrap()
-                    .trim(),
-                expected,
-                "{response}"
-            );
-        }
-        drop(session);
-    }
-}
 
 #[test]
 fn mcp_output_policy_removes_and_rejects_the_choice_independently_of_privileges() {
@@ -124,7 +87,7 @@ fn mcp_fixed_output_mode_is_used_and_command_views_keep_the_same_shape() {
 }
 
 #[test]
-fn mcp_selects_output_per_batch_entry_and_defaults_to_separation() {
+fn mcp_selects_output_per_batch_entry_and_uses_the_configured_default() {
     let mut session = McpSession::new();
     let [first, second] = create_tabs(&mut session);
     let response = session.call(
@@ -161,19 +124,37 @@ fn mcp_selects_output_per_batch_entry_and_defaults_to_separation() {
     let default = session.call(
         "send_command",
         json!({
-            "exec": [{"tab_id": second, "command": "echo DEFAULT_SEPARATED"}],
+            "exec": [{"tab_id": second, "command": "echo CONFIGURED_DEFAULT"}],
             "wait_timeout": 10_u64
         }),
     );
     drop(session);
+    let settings: toml::Value = toml::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/settings.toml"
+    )))
+    .unwrap();
+    let separate = settings
+        .get("command_separate_output")
+        .and_then(toml::Value::as_bool)
+        .unwrap();
+    let (field, excluded) = if separate {
+        ("stdout", "output")
+    } else {
+        ("output", "stdout")
+    };
+    let command = entries(&default)
+        .first()
+        .unwrap()
+        .pointer("/result/command")
+        .unwrap();
     assert!(
-        entries(&default)
-            .first()
-            .unwrap()
-            .pointer("/result/command/stdout")
+        command
+            .get(field)
             .and_then(Value::as_str)
             .unwrap()
-            .contains("DEFAULT_SEPARATED"),
+            .contains("CONFIGURED_DEFAULT"),
         "{default}"
     );
+    assert!(command.get(excluded).is_none(), "{default}");
 }

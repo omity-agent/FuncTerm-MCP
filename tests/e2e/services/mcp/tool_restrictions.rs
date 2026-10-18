@@ -99,7 +99,10 @@ fn assert_created_permission(session: &mut McpSession, creation: &Value, elevate
 fn assert_permission(session: &mut McpSession, tab_id: &str, elevated: bool) {
     let response = session.call(
         "send_command",
-        json ! ({ "exec" : [{ "tab_id" : tab_id , "command" : QUERY }] , "wait_timeout" : 10_u64 }),
+        json!({
+            "exec": [{"tab_id": tab_id, "command": QUERY, "separate_output": true}],
+            "wait_timeout": 10_u64
+        }),
     );
     let result = entries(&response).first().unwrap();
     assert_eq!(

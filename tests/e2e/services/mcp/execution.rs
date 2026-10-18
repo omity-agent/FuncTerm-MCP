@@ -25,7 +25,17 @@ fn mcp_batch_preserves_order_and_isolates_errors() {
     let mut session = McpSession::new();
     let [first, second] = create_tabs(&mut session);
     assert_ne!(first, second);
-    let response = session . call ("send_command" , json ! ({ "exec" : [{ "tab_id" : first , "command" : "echo FIRST_BATCH_RESULT" } , { "tab_id" : "missing" , "command" : "echo UNUSED" } , { "tab_id" : second , "command" : "echo LAST_BATCH_RESULT" }] , "wait_timeout" : 5_u64 })) ;
+    let response = session.call(
+        "send_command",
+        json!({
+            "exec": [
+                {"tab_id": first, "command": "echo FIRST_BATCH_RESULT", "separate_output": true},
+                {"tab_id": "missing", "command": "echo UNUSED", "separate_output": true},
+                {"tab_id": second, "command": "echo LAST_BATCH_RESULT", "separate_output": true}
+            ],
+            "wait_timeout": 5_u64
+        }),
+    );
     let results = entries(&response);
     assert_eq!(results.len(), 3);
     let content = response
@@ -105,7 +115,16 @@ fn mcp_wait_budget_is_shared_and_timeout_does_not_cancel_commands() {
     #[cfg(not(windows))]
     let command = "sleep 4\necho BATCH_FINISHED";
     let started = Instant::now();
-    let response = session . call ("send_command" , json ! ({ "exec" : [{ "tab_id" : first , "command" : command } , { "tab_id" : second , "command" : command }] , "wait_timeout" : 1.5_f64 })) ;
+    let response = session.call(
+        "send_command",
+        json!({
+            "exec": [
+                {"tab_id": first, "command": command, "separate_output": true},
+                {"tab_id": second, "command": command, "separate_output": true}
+            ],
+            "wait_timeout": 1.5_f64
+        }),
+    );
     assert!(
         started.elapsed() < Duration::from_millis(2800),
         "{response}"

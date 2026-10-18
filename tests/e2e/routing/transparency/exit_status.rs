@@ -17,7 +17,10 @@ fn terminal_mode_preserves_external_exit_codes() {
             "10",
         );
         let text = checked_text(&result);
-        assert!(terminal_output(&text).contains("NONZERO_TERMINAL"), "{shell}: {text}");
+        assert!(
+            terminal_output(&text).contains("NONZERO_TERMINAL"),
+            "{shell}: {text}"
+        );
         assert!(text.contains("<EXIT_CODE>\n7\n"), "{shell}: {text}");
         assert!(text.contains("<FINISHED>\ntrue\n"), "{shell}: {text}");
     }

@@ -8,7 +8,13 @@ use sugar_path::SugarPath as _;
 fn mcp_view_accepts_mixed_ids_and_preserves_order_and_errors() {
     let mut session = McpSession::new();
     let [first, second] = create_tabs(&mut session);
-    let command = session . call ("send_command" , json ! ({ "exec" : [{ "tab_id" : first , "command" : "echo VIEW_ID_LIST_RESULT" }] , "wait_timeout" : 5_u64 }) ,) ;
+    let command = session.call(
+        "send_command",
+        json!({
+            "exec": [{"tab_id": first, "command": "echo VIEW_ID_LIST_RESULT", "separate_output": true}],
+            "wait_timeout": 5_u64
+        }),
+    );
     let command_id = entries(&command)
         .first()
         .unwrap()
@@ -78,7 +84,13 @@ fn mcp_many_waiters_share_completion_without_exhausting_blocking_operations() {
     let command = "Start-Sleep -Seconds 2\nWrite-Output MANY_WAITERS_FINISHED";
     #[cfg(not(windows))]
     let command = "sleep 2\necho MANY_WAITERS_FINISHED";
-    let accepted = session . call ("send_command" , json ! ({ "exec" : [{ "tab_id" : target , "command" : command }] , "wait_timeout" : 0_u64 }) ,) ;
+    let accepted = session.call(
+        "send_command",
+        json!({
+            "exec": [{"tab_id": target, "command": command, "separate_output": true}],
+            "wait_timeout": 0_u64
+        }),
+    );
     let command_id = entries(&accepted)
         .first()
         .unwrap()

@@ -92,7 +92,6 @@ impl ShellLauncher {
                 rows: self.settings.terminal_rows,
                 cols: self.settings.terminal_cols,
             },
-            0,
             &self.settings.terminal_model_title,
         )?);
         let executable =

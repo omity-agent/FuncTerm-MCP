@@ -71,7 +71,7 @@ fn client_session(daemon: &Rc<TestGuard>, value: Option<&str>) -> McpSession {
 fn assert_environment(client: &mut McpSession, tabs: &[String], expected: &str) {
     let operations = tabs
         .iter()
-        .map(|tab| json ! ({ "tab_id" : tab , "command" : probe_command () }))
+        .map(|tab| json!({"tab_id": tab, "command": probe_command(), "separate_output": true}))
         .collect::<Vec<_>>();
     let response = client.call(
         "send_command",

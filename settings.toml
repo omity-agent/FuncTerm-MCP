@@ -22,8 +22,8 @@ shell_load_profile = true
 # 忽略 Shell Profile 中的提示符、颜色和 Shell 集成样式
 shell_ignore_style = true
 
-# 命令默认分别捕获 stdout 和 stderr；false 时保留终端句柄并捕获合并的终端输出。
-command_separate_output = true
+# 是否默认分别捕获 stdout 和 stderr；false 时保留终端句柄并捕获合并的终端输出。
+command_separate_output = false
 
 # Root Daemon 创建普通权限 Tab 时使用的 Unix 用户；留空时使用 Daemon 的真实 UID 或 SUDO_UID。
 # 可通过 FUNCTERM_UNIX_NORMAL_USER 指定

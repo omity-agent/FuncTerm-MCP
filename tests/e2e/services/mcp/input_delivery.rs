@@ -22,7 +22,16 @@ fn mcp_manual_write_delivers_text_and_bytes_to_distinct_tabs() {
     let command = "$line = [Console]::In.ReadLine()\nWrite-Output \"RECEIVED_$line\"";
     #[cfg(not(windows))]
     let command = "read -r line\nprintf 'RECEIVED_%s\\n' \"$line\"";
-    let pending = session . call ("send_command" , json ! ({ "exec" : [{ "tab_id" : first , "command" : command } , { "tab_id" : second , "command" : command }] , "wait_timeout" : 0_u64 })) ;
+    let pending = session.call(
+        "send_command",
+        json!({
+            "exec": [
+                {"tab_id": first, "command": command, "separate_output": true},
+                {"tab_id": second, "command": command, "separate_output": true}
+            ],
+            "wait_timeout": 0_u64
+        }),
+    );
     let busy = session . call ("send_command" , json ! ({ "exec" : [{ "tab_id" : first , "command" : "echo UNEXPECTED" }] , "wait_timeout" : 0_u64 }) ,) ;
     assert!(
         entries(&busy).first().unwrap().get("error").is_some(),

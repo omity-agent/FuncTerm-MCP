@@ -10,6 +10,8 @@ mod exit_status;
 #[cfg(windows)]
 #[path = "transparency/object_format.rs"]
 mod object_format;
+#[path = "transparency/redraw.rs"]
+mod redraw;
 
 #[test]
 fn terminal_mode_preserves_tty_and_switches_back_to_separated_output() {
@@ -63,9 +65,9 @@ fn terminal_mode_preserves_tty_and_switches_back_to_separated_output() {
 }
 
 #[test]
-fn terminal_transcript_keeps_scrolled_unicode_output_and_command_boundaries() {
+fn terminal_state_keeps_scrolled_unicode_output_and_command_boundaries() {
     let _guard = locked_with_env(&[]);
-    let directory = temp_dir("terminal-transcript");
+    let directory = temp_dir("rendered-unicode");
     let tab = create_tab(&directory, parent_shell());
     let prior = send_command(&tab.tab_id, "echo BEFORE_CAPTURE", 10.0);
     assert!(prior.status.success());

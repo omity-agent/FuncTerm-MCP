@@ -1,2 +1,6 @@
 [unstable]
 build-std = []
+
+# snmalloc 的 MSVC 构建使用静态 CRT，Rust 侧保持一致。
+[target.'cfg(all(target_os = "windows", target_env = "msvc"))']
+rustflags = ["--codegen", "target-feature=+crt-static"]

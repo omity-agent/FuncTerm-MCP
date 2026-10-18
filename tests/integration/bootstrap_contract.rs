@@ -153,6 +153,7 @@ fn prepare_command(root: &Path, script_name: &str, script: &str) -> PathBuf {
     }
     fs::write(directory.join("input").join(script_name), script).unwrap();
     fs::write(directory.join("input/cwd.txt"), root.to_str().unwrap()).unwrap();
+    fs::write(directory.join("input/separate-output.txt"), "true").unwrap();
     fs::write(root.join("state/dispatch"), "profile-probe-command").unwrap();
     directory
 }

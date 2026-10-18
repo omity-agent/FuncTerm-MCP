@@ -1,4 +1,6 @@
+use super::rendering::{CommandScreen, RenderedOutput};
 use crate::runtime::session::observation::wait_until;
+use alloc::sync::Arc;
 use anyhow::{Result, bail};
 use core::time::Duration;
 use event_listener::Event;
@@ -12,7 +14,7 @@ pub(in crate::engine::runtime::session) struct CommandCapture {
 struct CaptureState {
     phase: CapturePhase,
     title: String,
-    output: Option<String>,
+    output: Option<RenderedOutput>,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -24,12 +26,16 @@ enum CapturePhase {
 }
 
 impl CommandCapture {
-    pub(super) fn new(initial: String, separate_output: bool) -> Self {
+    pub(super) fn new(
+        initial: String,
+        separate_output: bool,
+        screen: Arc<Mutex<CommandScreen>>,
+    ) -> Self {
         Self {
             state: Mutex::new(CaptureState {
                 phase: CapturePhase::Pending,
                 title: initial,
-                output: (!separate_output).then(String::new),
+                output: (!separate_output).then(|| RenderedOutput::new(screen)),
             }),
             changed: Event::new(),
         }
@@ -43,8 +49,13 @@ impl CommandCapture {
         Ok(state.title.clone())
     }
 
-    pub(in crate::engine::runtime::session) fn output(&self) -> Option<String> {
-        self.state.lock().output.clone()
+    pub(in crate::engine::runtime::session) fn output(&self) -> Result<Option<String>> {
+        self.state
+            .lock()
+            .output
+            .as_ref()
+            .map(RenderedOutput::contents)
+            .transpose()
     }
 
     pub(in crate::engine::runtime::session) async fn wait_finished(&self) -> Result<String> {
@@ -58,18 +69,26 @@ impl CommandCapture {
         self.current()
     }
 
-    pub(in crate::engine::runtime::session) fn cancel(&self) -> String {
+    pub(in crate::engine::runtime::session) fn cancel(&self) -> Result<String> {
         let mut state = self.state.lock();
+        if let Some(output) = state.output.as_mut() {
+            output.finish()?;
+        }
         state.phase = CapturePhase::Finished;
         self.changed.notify(usize::MAX);
-        state.title.clone()
+        Ok(state.title.clone())
     }
 
-    pub(super) fn start(&self) {
+    pub(super) fn start(&self) -> Result<()> {
         let mut state = self.state.lock();
         if state.phase == CapturePhase::Pending {
+            if let Some(output) = state.output.as_mut() {
+                output.start()?;
+            }
             state.phase = CapturePhase::Active;
         }
+        drop(state);
+        Ok(())
     }
 
     pub(super) fn update(&self, title: &str) {
@@ -79,19 +98,17 @@ impl CommandCapture {
         }
     }
 
-    pub(super) fn record(&self, text: &str) {
-        let mut state = self.state.lock();
-        if state.phase == CapturePhase::Active
-            && let Some(output) = state.output.as_mut()
-        {
-            output.push_str(text);
-        }
-    }
-
     pub(super) fn fail(&self, message: &str) {
         let mut state = self.state.lock();
         if state.phase != CapturePhase::Finished {
-            state.phase = CapturePhase::Failed(message.to_owned());
+            let failure = if let Some(output) = state.output.as_mut()
+                && let Err(error) = output.finish()
+            {
+                format!("{message}; failed to freeze terminal output: {error:#}")
+            } else {
+                message.to_owned()
+            };
+            state.phase = CapturePhase::Failed(failure);
             self.changed.notify(usize::MAX);
         }
         drop(state);

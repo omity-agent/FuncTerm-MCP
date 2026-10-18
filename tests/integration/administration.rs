@@ -70,6 +70,8 @@ fn restart_discards_old_tabs_without_stopping_another_service() {
             &fresh.tab_id,
             "--command",
             "echo AFTER_RESTART",
+            "--separate-output",
+            "true",
             "--wait-timeout",
             "5",
         ],

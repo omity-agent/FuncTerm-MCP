@@ -72,7 +72,9 @@ impl Tab {
         let reservation = match ShellReservation::new(&session, self.id(), Arc::clone(&managed)) {
             Ok(reservation) => reservation,
             Err(error) => {
-                drop(capture.cancel());
+                if let Err(capture_error) = capture.cancel() {
+                    eprintln!("failed to cancel command capture: {capture_error:#}");
+                }
                 if let Err(remove_error) = remove_record_directory(managed.record()) {
                     eprintln!("{remove_error:#}");
                 }

@@ -1,5 +1,5 @@
 #[cfg(test)]
-#[path = "mcp/boundaries.rs"]
+#[path = "mcp/presentation/boundaries.rs"]
 mod boundaries;
 #[cfg(test)]
 #[path = "mcp/execution.rs"]
@@ -14,8 +14,11 @@ mod input_delivery;
 #[path = "mcp/inspection.rs"]
 mod inspection;
 #[cfg(test)]
-#[path = "mcp/policy.rs"]
-mod policy;
+#[path = "mcp/profiles.rs"]
+mod profiles;
+#[cfg(test)]
+#[path = "mcp/presentation/selection.rs"]
+mod selection;
 #[cfg(test)]
 #[path = "mcp/tool_restrictions.rs"]
 mod tool_restrictions;
@@ -121,7 +124,13 @@ fn mcp_rejects_invalid_batches_before_dispatch() {
             "{response}"
         );
     }
-    let recovered = session . call ("send_command" , json ! ({ "exec" : [{ "tab_id" : tab , "command" : "echo DISPATCH_RECOVERED" }] , "wait_timeout" : 5_u64 })) ;
+    let recovered = session.call(
+        "send_command",
+        json!({
+            "exec": [{"tab_id": tab, "command": "echo DISPATCH_RECOVERED", "separate_output": true}],
+            "wait_timeout": 5_u64
+        }),
+    );
     assert!(
         entries(&recovered)
             .first()

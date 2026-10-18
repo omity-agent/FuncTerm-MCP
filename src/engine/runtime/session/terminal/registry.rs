@@ -1,6 +1,7 @@
-use super::{output_events::ProtocolEvent, transcript::CommandCapture};
+use super::{capture::CommandCapture, output_events::ProtocolEvent, rendering::CommandScreen};
 use alloc::{collections::BTreeMap, sync::Arc};
 use anyhow::{Result, bail};
+use parking_lot::Mutex;
 
 pub(super) struct CaptureRegistry {
     model_title: String,
@@ -21,6 +22,7 @@ impl CaptureRegistry {
         &mut self,
         id: &str,
         separate_output: bool,
+        screen: Arc<Mutex<CommandScreen>>,
     ) -> Result<Arc<CommandCapture>> {
         if self.captures.contains_key(id) {
             bail!("command capture already exists for {id}");
@@ -28,18 +30,10 @@ impl CaptureRegistry {
         let capture = Arc::new(CommandCapture::new(
             self.model_title.clone(),
             separate_output,
+            screen,
         ));
         self.captures.insert(id.to_owned(), Arc::clone(&capture));
         Ok(capture)
-    }
-
-    pub(super) fn record(&self, text: &str) -> Result<()> {
-        if !text.is_empty()
-            && let Some(id) = self.active.as_deref()
-        {
-            self.require(id)?.record(text);
-        }
-        Ok(())
     }
 
     pub(super) fn handle(&mut self, event: ProtocolEvent, screen_title: &str) -> Result<()> {
@@ -69,7 +63,7 @@ impl CaptureRegistry {
         if let Some(active) = self.active.as_deref() {
             bail!("command capture {id} started while {active} is active");
         }
-        self.require(id)?.start();
+        self.require(id)?.start()?;
         self.active = Some(id.to_owned());
         Ok(())
     }
@@ -80,7 +74,7 @@ impl CaptureRegistry {
         {
             bail!("command capture {id} ended while {active} is active");
         }
-        drop(self.require(id)?.cancel());
+        drop(self.require(id)?.cancel()?);
         self.captures.remove(id);
         if self.active.as_deref() == Some(id) {
             self.active = None;

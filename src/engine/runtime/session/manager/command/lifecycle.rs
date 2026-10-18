@@ -101,8 +101,9 @@ impl ManagedCommand {
             Err(error) => Err(error),
         }
     }
-    pub(in crate::engine::runtime::session::manager) fn cancel_capture(&self) {
-        drop(self.capture.cancel());
+    pub(in crate::engine::runtime::session::manager) fn cancel_capture(&self) -> Result<()> {
+        drop(self.capture.cancel()?);
+        Ok(())
     }
     pub(in crate::engine::runtime::session::manager) async fn wait_started(
         &self,

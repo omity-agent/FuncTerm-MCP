@@ -1452,7 +1452,7 @@ dependencies = [
 [[package]]
 name = "rmcp"
 version = "3.5.1"
-source = "git+https://github.com/modelcontextprotocol/rust-sdk#017e1c371d246feeb3da2ed67d3ad4734a9dbaf7"
+source = "git+https://github.com/modelcontextprotocol/rust-sdk#50fba5c2848d3ef9d0df0efacb8a7d001914f40e"
 dependencies = [
  "chrono",
  "futures",
@@ -1474,7 +1474,7 @@ dependencies = [
 [[package]]
 name = "rmcp-macros"
 version = "3.5.1"
-source = "git+https://github.com/modelcontextprotocol/rust-sdk#017e1c371d246feeb3da2ed67d3ad4734a9dbaf7"
+source = "git+https://github.com/modelcontextprotocol/rust-sdk#50fba5c2848d3ef9d0df0efacb8a7d001914f40e"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -2335,7 +2335,7 @@ dependencies = [
 [[package]]
 name = "windows"
 version = "0.100.0"
-source = "git+https://github.com/microsoft/windows-rs#74788b21435af5002a3a218e2e6dc5c48586ca9c"
+source = "git+https://github.com/microsoft/windows-rs#6614d6eb4c42de4897a78b29135162b372878bc4"
 dependencies = [
  "windows-collections",
  "windows-core 0.100.0",
@@ -2348,7 +2348,7 @@ dependencies = [
 [[package]]
 name = "windows-collections"
 version = "0.100.0"
-source = "git+https://github.com/microsoft/windows-rs#74788b21435af5002a3a218e2e6dc5c48586ca9c"
+source = "git+https://github.com/microsoft/windows-rs#6614d6eb4c42de4897a78b29135162b372878bc4"
 dependencies = [
  "windows-core 0.100.0",
 ]
@@ -2388,7 +2388,7 @@ dependencies = [
 [[package]]
 name = "windows-core"
 version = "0.100.0"
-source = "git+https://github.com/microsoft/windows-rs#74788b21435af5002a3a218e2e6dc5c48586ca9c"
+source = "git+https://github.com/microsoft/windows-rs#6614d6eb4c42de4897a78b29135162b372878bc4"
 dependencies = [
  "windows-implement 0.100.0",
  "windows-interface 0.100.0",
@@ -2400,7 +2400,7 @@ dependencies = [
 [[package]]
 name = "windows-future"
 version = "0.100.0"
-source = "git+https://github.com/microsoft/windows-rs#74788b21435af5002a3a218e2e6dc5c48586ca9c"
+source = "git+https://github.com/microsoft/windows-rs#6614d6eb4c42de4897a78b29135162b372878bc4"
 dependencies = [
  "windows-core 0.100.0",
  "windows-link 0.100.0",
@@ -2421,7 +2421,7 @@ dependencies = [
 [[package]]
 name = "windows-implement"
 version = "0.100.0"
-source = "git+https://github.com/microsoft/windows-rs#74788b21435af5002a3a218e2e6dc5c48586ca9c"
+source = "git+https://github.com/microsoft/windows-rs#6614d6eb4c42de4897a78b29135162b372878bc4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2442,7 +2442,7 @@ dependencies = [
 [[package]]
 name = "windows-interface"
 version = "0.100.0"
-source = "git+https://github.com/microsoft/windows-rs#74788b21435af5002a3a218e2e6dc5c48586ca9c"
+source = "git+https://github.com/microsoft/windows-rs#6614d6eb4c42de4897a78b29135162b372878bc4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2458,12 +2458,12 @@ checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
 [[package]]
 name = "windows-link"
 version = "0.100.0"
-source = "git+https://github.com/microsoft/windows-rs#74788b21435af5002a3a218e2e6dc5c48586ca9c"
+source = "git+https://github.com/microsoft/windows-rs#6614d6eb4c42de4897a78b29135162b372878bc4"
 
 [[package]]
 name = "windows-numerics"
 version = "0.100.0"
-source = "git+https://github.com/microsoft/windows-rs#74788b21435af5002a3a218e2e6dc5c48586ca9c"
+source = "git+https://github.com/microsoft/windows-rs#6614d6eb4c42de4897a78b29135162b372878bc4"
 dependencies = [
  "windows-core 0.100.0",
 ]
@@ -2471,7 +2471,7 @@ dependencies = [
 [[package]]
 name = "windows-reference"
 version = "0.100.0"
-source = "git+https://github.com/microsoft/windows-rs#74788b21435af5002a3a218e2e6dc5c48586ca9c"
+source = "git+https://github.com/microsoft/windows-rs#6614d6eb4c42de4897a78b29135162b372878bc4"
 dependencies = [
  "windows-core 0.100.0",
  "windows-time",
@@ -2498,7 +2498,7 @@ dependencies = [
 [[package]]
 name = "windows-result"
 version = "0.100.0"
-source = "git+https://github.com/microsoft/windows-rs#74788b21435af5002a3a218e2e6dc5c48586ca9c"
+source = "git+https://github.com/microsoft/windows-rs#6614d6eb4c42de4897a78b29135162b372878bc4"
 dependencies = [
  "windows-link 0.100.0",
 ]
@@ -2524,7 +2524,7 @@ dependencies = [
 [[package]]
 name = "windows-strings"
 version = "0.100.0"
-source = "git+https://github.com/microsoft/windows-rs#74788b21435af5002a3a218e2e6dc5c48586ca9c"
+source = "git+https://github.com/microsoft/windows-rs#6614d6eb4c42de4897a78b29135162b372878bc4"
 dependencies = [
  "windows-link 0.100.0",
 ]
@@ -2592,7 +2592,7 @@ dependencies = [
 [[package]]
 name = "windows-threading"
 version = "0.100.0"
-source = "git+https://github.com/microsoft/windows-rs#74788b21435af5002a3a218e2e6dc5c48586ca9c"
+source = "git+https://github.com/microsoft/windows-rs#6614d6eb4c42de4897a78b29135162b372878bc4"
 dependencies = [
  "windows-link 0.100.0",
 ]
@@ -2600,7 +2600,7 @@ dependencies = [
 [[package]]
 name = "windows-time"
 version = "0.100.0"
-source = "git+https://github.com/microsoft/windows-rs#74788b21435af5002a3a218e2e6dc5c48586ca9c"
+source = "git+https://github.com/microsoft/windows-rs#6614d6eb4c42de4897a78b29135162b372878bc4"
 dependencies = [
  "windows-core 0.100.0",
 ]

@@ -13,7 +13,7 @@ impl ManagedCommand {
                 &self.record,
                 self.time_consumption(),
                 self.capture.current()?,
-                self.capture.output(),
+                self.capture.output()?,
             )
         };
         drop(state);
@@ -34,7 +34,7 @@ impl ManagedCommand {
             &self.record,
             self.time_consumption(),
             title,
-            self.capture.output(),
+            self.capture.output()?,
         )?;
         state.input.normalize(&mut view);
         update_cwd(PathBuf::from(done.cwd));
@@ -53,12 +53,12 @@ impl ManagedCommand {
         if !matches!(state.wait, CommandWait::Running) {
             return Ok(());
         }
-        let title = self.capture.cancel();
+        let title = self.capture.cancel()?;
         let mut view = read_command_result(
             &self.record,
             self.time_consumption(),
             title,
-            self.capture.output(),
+            self.capture.output()?,
         )?;
         view.command.finished = true;
         view.command.exit_code = Some(1_i32);

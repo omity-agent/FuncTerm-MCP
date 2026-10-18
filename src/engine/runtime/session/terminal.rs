@@ -1,24 +1,26 @@
 mod activity;
+mod capture;
 mod io;
 mod output_events;
 mod registry;
-mod transcript;
+mod rendering;
+pub(super) use self::capture::CommandCapture;
 pub(super) use self::io::start_reader;
 use self::output_events::{OutputEvent, OutputParser};
 use self::registry::CaptureRegistry;
-pub(super) use self::transcript::CommandCapture;
+use self::rendering::CommandScreen;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result, bail};
 use event_listener::Event;
 use parking_lot::Mutex;
-use tastty_core::{HostProfile, Parser, host_reply::auto_reply_bytes};
+use tastty_core::{HostProfile, host_reply::auto_reply_bytes};
 pub(super) struct Terminal {
     model_title: String,
     state: Mutex<TerminalState>,
     changed: Event,
 }
 struct TerminalState {
-    parser: Parser,
+    screen: Arc<Mutex<CommandScreen>>,
     protocol: OutputParser,
     win32_input: bool,
     captures: CaptureRegistry,
@@ -29,20 +31,18 @@ struct TerminalState {
     process_exited: bool,
 }
 impl Terminal {
-    pub(super) fn new(
-        size: tastty_core::TerminalSize,
-        scrollback_len: usize,
-        model_title: &str,
-    ) -> Result<Self> {
-        let mut parser = Parser::new(size, scrollback_len);
-        parser.process(crate::contract::window_title_sequence(model_title)?.as_bytes());
-        drop(parser.screen_mut().drain_events());
-        let visible_contents = parser.screen().contents();
-        parser.screen_mut().clear_dirty();
+    pub(super) fn new(size: tastty_core::TerminalSize, model_title: &str) -> Result<Self> {
+        let mut screen = CommandScreen::new(size);
+        screen
+            .parser
+            .process(crate::contract::window_title_sequence(model_title)?.as_bytes());
+        drop(screen.parser.screen_mut().drain_events());
+        let visible_contents = screen.parser.screen().contents();
+        screen.parser.screen_mut().clear_dirty();
         Ok(Self {
             model_title: model_title.to_owned(),
             state: Mutex::new(TerminalState {
-                parser,
+                screen: Arc::new(Mutex::new(screen)),
                 protocol: OutputParser::new(),
                 win32_input: false,
                 captures: CaptureRegistry::new(model_title.to_owned()),
@@ -67,7 +67,8 @@ impl Terminal {
         if state.reader_closed {
             bail!("cannot start command after terminal reader closed");
         }
-        state.captures.register(command_id, separate_output)
+        let screen = Arc::clone(&state.screen);
+        state.captures.register(command_id, separate_output, screen)
     }
     pub(super) fn contents(&self) -> String {
         self.state.lock().visible_contents.clone()
@@ -79,8 +80,10 @@ impl Terminal {
         let mut state = self.state.lock();
         let processed = (|| {
             let replies = state.process(chunk, host)?;
-            if state.parser.screen().dirty_rows().next().is_some() {
-                let contents = state.parser.screen().contents();
+            let shared_screen = Arc::clone(&state.screen);
+            let mut screen = shared_screen.lock();
+            if screen.parser.screen().dirty_rows().next().is_some() {
+                let contents = screen.parser.screen().contents();
                 if contents != state.visible_contents {
                     state.visible_revision = state
                         .visible_revision
@@ -88,8 +91,9 @@ impl Terminal {
                         .context("terminal visible content revision overflow")?;
                     state.visible_contents = contents;
                 }
-                state.parser.screen_mut().clear_dirty();
+                screen.parser.screen_mut().clear_dirty();
             }
+            drop(screen);
             Ok(replies)
         })();
         match processed {
@@ -123,35 +127,40 @@ impl TerminalState {
             if consumed == 0 {
                 bail!("terminal protocol parser made no progress");
             }
-            self.captures.record(self.protocol.text())?;
             let (segment, tail) = remaining
                 .split_at_checked(consumed)
                 .context("terminal event offset exceeds PTY output")?;
-            self.process_screen(segment, host, &mut replies);
+            self.process_screen(segment, host, &mut replies)?;
             match event {
                 Some(OutputEvent::InputMode(enabled)) => self.win32_input = enabled,
                 Some(OutputEvent::Capture(protocol_event)) => {
-                    self.captures
-                        .handle(protocol_event, self.parser.screen().title())?;
+                    let title = self.screen.lock().parser.screen().title().to_owned();
+                    self.captures.handle(protocol_event, &title)?;
                 }
-                None => {}
+                Some(OutputEvent::ScreenCheckpoint) | None => {}
             }
             remaining = tail;
         }
         Ok(replies)
     }
-    fn process_screen(&mut self, bytes: &[u8], host: &HostProfile, replies: &mut Vec<HostReply>) {
-        self.parser.process(bytes);
-        replies.extend(
-            self.parser
-                .screen_mut()
-                .drain_events()
-                .into_iter()
-                .filter_map(|event| auto_reply_bytes(&event, host))
-                .map(|reply_bytes| HostReply {
+    fn process_screen(
+        &self,
+        bytes: &[u8],
+        host: &HostProfile,
+        replies: &mut Vec<HostReply>,
+    ) -> Result<()> {
+        let mut screen = self.screen.lock();
+        screen.parser.process(bytes);
+        for event in screen.parser.screen_mut().drain_events() {
+            screen.observe(&event)?;
+            if let Some(reply_bytes) = auto_reply_bytes(&event, host) {
+                replies.push(HostReply {
                     bytes: reply_bytes,
                     win32_input: self.win32_input,
-                }),
-        );
+                });
+            }
+        }
+        drop(screen);
+        Ok(())
     }
 }

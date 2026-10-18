@@ -73,6 +73,8 @@ pub(crate) fn send_command(tab_id: &str, command: &str, wait_timeout: f64) -> Ou
         tab_id,
         "--command",
         command,
+        "--separate-output",
+        "true",
         "--wait-timeout",
         &wait_timeout.to_string(),
     ])
