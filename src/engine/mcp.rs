@@ -2,26 +2,36 @@ mod arguments;
 mod batch;
 mod collection;
 mod descriptions;
+mod invocation;
 mod operations;
 mod output;
+mod streamable;
 use crate::engine::privileges::PrivilegeMode;
 use crate::runtime::config::Settings;
 use crate::runtime::protocol::OutputMode;
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use arguments::{
     FixedCommandExec, FixedNewTabExec, ManualWriteExec, NewTabExec, SendCommandExec, ViewRequest,
 };
 use batch::{ExecBatch, TimedBatch};
 use collection::BatchOutput;
+use invocation::Backend;
 use rmcp::{
     ServerHandler, ServiceExt as _,
-    handler::server::{router::tool::ToolRouter, tool::schema_for_output, wrapper::Parameters},
-    model::CallToolResult,
+    handler::server::{
+        router::tool::ToolRouter,
+        tool::{ToolCallContext, schema_for_output},
+        wrapper::Parameters,
+    },
+    model::{CallToolRequestParams, CallToolResponse, CallToolResult, ProtocolVersion},
+    service::RequestContext,
     tool, tool_handler, tool_router,
 };
-#[derive(Clone, Debug)]
+pub(crate) use streamable::HttpServer;
+#[derive(Clone)]
 struct McpServer {
     settings: Settings,
+    backend: Backend,
     privilege_mode: Option<PrivilegeMode>,
     output_mode: Option<OutputMode>,
     tool_router: ToolRouter<Self>,
@@ -31,39 +41,37 @@ struct McpServer {
     reason = "rmcp's tool_handler macro generates the async ServerHandler implementation"
 )]
 # [tool_handler (router = self . tool_router)]
-impl ServerHandler for McpServer {}
+impl ServerHandler for McpServer {
+    async fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        context: RequestContext<rmcp::RoleServer>,
+    ) -> Result<CallToolResponse, rmcp::ErrorData> {
+        let june_revision = context.protocol_version() == Some(ProtocolVersion::V_2025_06_18);
+        let call = ToolCallContext::new(self, request, context);
+        if june_revision {
+            let route = self
+                .tool_router
+                .map
+                .get(call.name())
+                .ok_or_else(|| rmcp::ErrorData::invalid_params("tool not found", None))?;
+            return (route.call)(call).await;
+        }
+        self.tool_router.call(call).await
+    }
+}
 # [tool_router (router = tool_router)]
 impl McpServer {
     fn new(
         settings: Settings,
         privilege_mode: Option<PrivilegeMode>,
         output_mode: Option<OutputMode>,
+        backend: Backend,
     ) -> Result<Self> {
-        let mut tool_router = Self::tool_router();
-        let mut fixed_route = tool_router
-            .map
-            .remove("fixed_new_tab")
-            .context("fixed New Tab route is missing")?;
-        if privilege_mode.is_some() {
-            fixed_route.attr.name = "new_tab".into();
-            tool_router.map.insert("new_tab".into(), fixed_route);
-        }
-        let mut fixed_command = tool_router
-            .map
-            .remove("fixed_send_command")
-            .context("fixed Send Command route is missing")?;
-        if output_mode.is_some() {
-            fixed_command.attr.name = "send_command".into();
-            tool_router.map.insert("send_command".into(), fixed_command);
-        }
-        descriptions::apply(
-            &mut tool_router,
-            &settings.mcp,
-            privilege_mode.is_some(),
-            output_mode.is_some(),
-        )?;
+        let tool_router = descriptions::router(&settings.mcp, privilege_mode, output_mode)?;
         Ok(Self {
             settings,
+            backend,
             privilege_mode,
             output_mode,
             tool_router,
@@ -74,7 +82,7 @@ impl McpServer {
         &self,
         Parameters(request): Parameters<ExecBatch<NewTabExec>>,
     ) -> Result<CallToolResult, String> {
-        batch::run(&self.settings, request.exec, None).await
+        batch::run(&self.settings, &self.backend, request.exec, None).await
     }
     # [tool (name = "fixed_new_tab" , output_schema = schema_for_output ::< BatchOutput < output :: NewTabOutput <'static >>> ())]
     async fn fixed_new_tab(
@@ -89,21 +97,33 @@ impl McpServer {
             .into_iter()
             .map(|entry| entry.with_privilege(mode.elevated()))
             .collect();
-        batch::run(&self.settings, entries, None).await
+        batch::run(&self.settings, &self.backend, entries, None).await
     }
     # [tool (name = "manual_write" , output_schema = schema_for_output ::< BatchOutput < output :: ManualWriteOutput <'static >>> ())]
     async fn manual_write(
         &self,
         Parameters(request): Parameters<TimedBatch<ManualWriteExec>>,
     ) -> Result<CallToolResult, String> {
-        batch::run(&self.settings, request.exec, Some(request.wait_timeout)).await
+        batch::run(
+            &self.settings,
+            &self.backend,
+            request.exec,
+            Some(request.wait_timeout),
+        )
+        .await
     }
     # [tool (name = "send_command" , output_schema = schema_for_output ::< BatchOutput < output :: SendCommandOutput <'static >>> ())]
     async fn send_command(
         &self,
         Parameters(request): Parameters<TimedBatch<SendCommandExec>>,
     ) -> Result<CallToolResult, String> {
-        batch::run(&self.settings, request.exec, Some(request.wait_timeout)).await
+        batch::run(
+            &self.settings,
+            &self.backend,
+            request.exec,
+            Some(request.wait_timeout),
+        )
+        .await
     }
     #[tool(name = "fixed_send_command", output_schema = schema_for_output::<BatchOutput<output::SendCommandOutput<'static>>>())]
     async fn fixed_send_command(
@@ -116,7 +136,13 @@ impl McpServer {
             .into_iter()
             .map(|entry| entry.with_output(mode.separate_output()))
             .collect();
-        batch::run(&self.settings, entries, Some(request.wait_timeout)).await
+        batch::run(
+            &self.settings,
+            &self.backend,
+            entries,
+            Some(request.wait_timeout),
+        )
+        .await
     }
     # [tool (name = "view" , output_schema = schema_for_output ::< BatchOutput < output :: ViewOutput <'static >>> ())]
     async fn view(
@@ -125,6 +151,7 @@ impl McpServer {
     ) -> Result<CallToolResult, String> {
         batch::run(
             &self.settings,
+            &self.backend,
             request.ids.into_iter().map(operations::LookupId).collect(),
             Some(request.wait_timeout),
         )
@@ -136,7 +163,7 @@ pub(crate) async fn run(
     privilege_mode: Option<PrivilegeMode>,
     output_mode: Option<OutputMode>,
 ) -> Result<()> {
-    let service = McpServer::new(settings, privilege_mode, output_mode)?
+    let service = McpServer::new(settings, privilege_mode, output_mode, Backend::ipc())?
         .serve(rmcp::transport::stdio())
         .await?;
     service.waiting().await?;

@@ -2,8 +2,13 @@
 #[path = "mcp/presentation/boundaries.rs"]
 mod boundaries;
 #[cfg(test)]
+#[path = "mcp/wire/coexistence.rs"]
+mod coexistence;
+#[cfg(test)]
 #[path = "mcp/execution.rs"]
 mod execution;
+#[path = "mcp/wire/http_peer.rs"]
+mod http_peer;
 #[cfg(test)]
 #[path = "mcp/inheritance.rs"]
 mod inheritance;
@@ -14,6 +19,9 @@ mod input_delivery;
 #[path = "mcp/inspection.rs"]
 mod inspection;
 #[cfg(test)]
+#[path = "mcp/wire/lifetime.rs"]
+mod lifetime;
+#[cfg(test)]
 #[path = "mcp/profiles.rs"]
 mod profiles;
 #[cfg(test)]
@@ -22,7 +30,7 @@ mod selection;
 #[cfg(test)]
 #[path = "mcp/tool_restrictions.rs"]
 mod tool_restrictions;
-#[path = "mcp/wire.rs"]
+#[path = "mcp/wire/stdio_peer.rs"]
 mod wire;
 use rmcp::serde_json::{Value, json};
 use wire::{McpSession, assert_rejected, entries};

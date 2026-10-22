@@ -30,6 +30,18 @@ impl McpSession {
         arguments: &[&str],
         environment: &[(String, String)],
     ) -> Self {
+        Self::start(daemon, arguments, environment, "2025-11-25")
+    }
+    pub(super) fn with_protocol_version(daemon: Rc<TestGuard>, version: &str) -> Self {
+        let environment = daemon.env();
+        Self::start(daemon, &["--no-profile"], &environment, version)
+    }
+    fn start(
+        daemon: Rc<TestGuard>,
+        arguments: &[&str],
+        environment: &[(String, String)],
+        version: &str,
+    ) -> Self {
         let mut command = Command::new(env!("CARGO_BIN_EXE_functerm"));
         command
             .arg("mcp")
@@ -57,8 +69,19 @@ impl McpSession {
             sequence: 0,
             _daemon: daemon,
         };
-        let initialized = session . request ("initialize" , json ! ({ "protocolVersion" : "2024-11-05" , "capabilities" : { } , "clientInfo" : { "name" : "batch-contract-tests" , "version" : "1" } }) ,) ;
+        let initialized = session.request(
+            "initialize",
+            json!({
+                "protocolVersion": version,
+                "capabilities": {},
+                "clientInfo": {"name": "batch-contract-tests", "version": "1"}
+            }),
+        );
         assert!(initialized.get("result").is_some(), "{initialized}");
+        assert_eq!(
+            initialized.pointer("/result/protocolVersion"),
+            Some(&json!(version))
+        );
         session.send(&json ! ({ "jsonrpc" : "2.0" , "method" : "notifications/initialized" }));
         session
     }

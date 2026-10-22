@@ -10,7 +10,7 @@ use std::io;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 mod control_signal;
-mod dispatch;
+pub(crate) mod dispatch;
 pub(crate) mod report;
 pub(crate) async fn run(settings: Settings) -> Result<()> {
     tracing_subscriber::fmt()
@@ -35,16 +35,18 @@ async fn run_inner(settings: Settings, startup_reporter: &mut StartupReporter) -
     let service_name = settings.daemon_service_name.clone();
     let _daemon_instance = crate::runtime::daemon_lock::acquire_instance(&service_name)?;
     let ipc = settings.ipc.clone();
+    let http_settings = settings.clone();
     let manager = Arc::new(
         tokio::task::spawn_blocking(move || Manager::new(settings))
             .await
             .context("daemon initialization worker failed")??,
     );
     let listener = crate::runtime::transport::listener(&service_name, &ipc)?;
-    startup_reporter.ready()?;
+    let mut http = crate::mcp::HttpServer::bind(http_settings, Arc::clone(&manager)).await?;
+    startup_reporter.ready(http.address())?;
     let mut workers = JoinSet::new();
     let (shutdown, mut shutdown_requests) = mpsc::channel(1);
-    let mut shutdown_connection = loop {
+    let shutdown_reason = loop {
         tokio::select! {
             accepted = listener.accept() => match accepted {
                 Ok(stream) => {
@@ -58,9 +60,10 @@ async fn run_inner(settings: Settings, startup_reporter: &mut StartupReporter) -
                 Err(error) if recoverable_accept_error(&error) => {
                     eprintln!("recoverable IPC accept error: {error}");
                 }
-                Err(error) => return Err(error).context("failed to accept IPC request"),
+                Err(error) => break Err(error).context("failed to accept IPC request"),
             },
-            Some(connection) = shutdown_requests.recv() => break connection,
+            Some(connection) = shutdown_requests.recv() => break Ok(connection),
+            error = http.failure() => break Err(error),
             Some(result) = workers.join_next(), if !workers.is_empty() => {
                 report_worker(result);
             }
@@ -72,10 +75,19 @@ async fn run_inner(settings: Settings, startup_reporter: &mut StartupReporter) -
     while let Some(result) = workers.join_next().await {
         report_worker(result);
     }
-    let stopped = manager.shutdown().await;
-    let response = response_from(stopped.as_ref().map(|&()| Payload::ShutdownComplete));
+    let (http_stopped, stopped) =
+        tokio::join!(http.stop(ipc.shutdown_timeout()?), manager.shutdown(),);
+    if let Err(error) = http_stopped.as_ref() {
+        tracing::error!(%error, "MCP HTTP shutdown failed");
+    }
+    if let Err(error) = stopped.as_ref() {
+        tracing::error!(%error, "terminal session shutdown failed");
+    }
+    let mut shutdown_connection = shutdown_reason?;
+    let completion = http_stopped.and(stopped);
+    let response = response_from(completion.as_ref().map(|&()| Payload::ShutdownComplete));
     let sent = shutdown_connection.send(response).await;
-    stopped?;
+    completion?;
     sent.context("failed to acknowledge daemon shutdown")
 }
 fn report_worker(result: Result<Result<()>, tokio::task::JoinError>) {

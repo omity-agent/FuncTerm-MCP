@@ -93,7 +93,7 @@ fn read_startup_file(path: &std::path::Path) -> Result<()> {
     match sonic_rs::from_str::<StartupReply>(text.trim_end())
         .context("failed to parse daemon startup report")?
     {
-        StartupReply::Ready => Ok(()),
+        StartupReply::Ready { http_address: _ } => Ok(()),
         StartupReply::AlreadyRunning { service_name } => {
             Err(crate::runtime::daemon_lock::DaemonAlreadyRunning::new(service_name).into())
         }

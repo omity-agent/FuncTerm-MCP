@@ -85,6 +85,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = { git = "https://github.com/dtolnay/anyhow", public = true }
+axum = { version = "*", default-features = false, features = ["http1", "tokio"] }
 base64-turbo = "*"
 blake3 = "*"
 clap = { git = "https://github.com/clap-rs/clap", features = [
@@ -112,6 +113,7 @@ rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk", default-featu
     "server",
     "macros",
     "transport-io",
+    "transport-streamable-http-server",
 ] }
 schemars = "*"
 same-file = "*"
@@ -143,6 +145,7 @@ vte = { git = "https://github.com/alacritty/vte" }
 which = "*"
 
 [dev-dependencies]
+reqwest = { version = "*", default-features = false, features = ["blocking"] }
 rmp-serde = "*"
 
 [patch.crates-io]

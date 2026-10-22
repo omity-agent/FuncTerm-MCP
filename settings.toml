@@ -69,6 +69,28 @@ windows_access_control = "D:P(A;;GA;;;SY)(A;;GA;;;{user_sid})"
 # 中等完整性标签允许已获 DACL 授权的普通权限 Shell 访问管理员 Daemon
 windows_security_label = "S:(ML;;NW;;;ME)"
 
+[mcp.http]
+# Daemon 内置的无身份验证 MCP HTTP 服务；默认允许所有 IPv4 网络接口访问。
+# 可通过 FUNCTERM_MCP_HTTP_BIND 覆盖；端口 0 由系统分配。
+bind_address = "0.0.0.0:3000"
+
+# Streamable HTTP 的统一 POST、GET 和 DELETE 端点。
+path = "/mcp"
+
+# 允许的 Host 名称或 host:port；空数组允许任意 Host，适用于直接通过 IP 访问。
+allowed_hosts = []
+
+# 允许的浏览器 Origin，包含协议与明确端口；空数组拒绝所有携带 Origin 的请求。
+# 不携带 Origin 的原生 MCP 客户端不受此列表限制。
+allowed_origins = []
+
+# 单条 HTTP 请求体的最大字节数。
+max_request_body_bytes = 67108864
+
+# 可选固定策略，取消注释后隐藏对应工具参数；默认由每次工具调用指定。
+# privilege_mode = "normal" # normal 或 elevated
+# output_mode = "terminal" # terminal 或 separated
+
 # MCP 工具及其参数的描述；描述设为空字符串时不向 MCP 客户端提供该描述。
 [mcp.new_tab]
 description = "打开一个新的终端标签页。返回 tab_id"

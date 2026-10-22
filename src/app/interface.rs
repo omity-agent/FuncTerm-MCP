@@ -140,11 +140,11 @@ pub(super) enum CliCommand {
 }
 #[derive(Subcommand)]
 pub(super) enum DaemonCommand {
-    /// Start the daemon in the background and wait until it is ready.
+    /// Start the daemon in the background.
     Start,
-    /// Stop the daemon and terminate all of its Tabs and running commands.
+    /// Stop the daemon and terminate tabs and running commands.
     Stop,
-    /// Stop the daemon, then start a fresh background instance.
+    /// Stop the daemon, then start a fresh instance.
     Restart,
 }
 pub(crate) fn close_target(tab_id: Option<String>) -> Result<String> {

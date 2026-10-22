@@ -4,12 +4,10 @@ use super::{
 };
 use crate::support::{locked_with_env, parse_tab_created, run_cli, send_command};
 use rmcp::serde_json::{Value, json};
-
 #[cfg(windows)]
 const OUTPUT_COMMAND: &str = "Write-Output 'RAW<tag> & text'";
 #[cfg(not(windows))]
 const OUTPUT_COMMAND: &str = "printf '%s\\n' 'RAW<tag> & text'";
-
 #[test]
 fn mcp_xml_documents_stay_on_separate_lines_across_batches_and_calls() {
     let mut session = McpSession::new();
@@ -51,7 +49,6 @@ fn mcp_xml_documents_stay_on_separate_lines_across_batches_and_calls() {
     assert!(!view_text.ends_with('\n'));
     drop(session);
 }
-
 #[test]
 fn mcp_error_blocks_are_separated_without_changing_structured_errors() {
     let mut session = McpSession::new();
@@ -80,7 +77,6 @@ fn mcp_error_blocks_are_separated_without_changing_structured_errors() {
     }
     drop(session);
 }
-
 #[test]
 fn cli_xml_documents_end_with_one_newline() {
     let guard = locked_with_env(&[]);
@@ -98,7 +94,6 @@ fn cli_xml_documents_end_with_one_newline() {
     }
     drop(guard);
 }
-
 pub(super) fn text_documents(response: &Value) -> Vec<&str> {
     let blocks = response
         .pointer("/result/content")

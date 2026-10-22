@@ -3,7 +3,6 @@ use super::{
     wire::{McpSession, assert_rejected, entries},
 };
 use rmcp::serde_json::{Value, json};
-
 #[test]
 fn mcp_output_policy_removes_and_rejects_the_choice_independently_of_privileges() {
     for privilege in [None, Some("normal"), Some("elevated")] {
@@ -42,7 +41,6 @@ fn mcp_output_policy_removes_and_rejects_the_choice_independently_of_privileges(
         }
     }
 }
-
 #[test]
 fn mcp_fixed_output_mode_is_used_and_command_views_keep_the_same_shape() {
     for (mode, field, excluded) in [
@@ -85,7 +83,6 @@ fn mcp_fixed_output_mode_is_used_and_command_views_keep_the_same_shape() {
         assert!(saved.get(excluded).is_none(), "{viewed}");
     }
 }
-
 #[test]
 fn mcp_selects_output_per_batch_entry_and_uses_the_configured_default() {
     let mut session = McpSession::new();

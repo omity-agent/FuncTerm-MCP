@@ -1,6 +1,5 @@
 use super::{checked_text, run_terminal, terminal_output};
 use crate::support::{create_tab, locked_with_env, temp_dir};
-
 #[test]
 fn terminal_mode_preserves_external_exit_codes() {
     let _guard = locked_with_env(&[]);

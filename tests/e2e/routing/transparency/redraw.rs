@@ -5,7 +5,6 @@ use crate::support::{
 };
 use core::time::Duration;
 use std::time::Instant;
-
 #[test]
 fn terminal_state_replaces_progress_instead_of_appending_frames() {
     let _guard = locked_with_env(&[]);
@@ -56,7 +55,6 @@ fn terminal_state_replaces_progress_instead_of_appending_frames() {
     assert_eq!(separated.stdout.trim(), "SEPARATE_OUT");
     assert_eq!(separated.stderr.trim(), "SEPARATE_ERR");
 }
-
 #[test]
 fn terminal_state_queries_refresh_and_finished_results_stay_frozen() {
     let _guard = locked_with_env(&[]);
@@ -83,7 +81,6 @@ fn terminal_state_queries_refresh_and_finished_results_stay_frozen() {
     let saved = checked_text(&run_cli(&["view", &id]));
     assert_eq!(terminal_output(&saved), terminal_output(&finished));
 }
-
 #[test]
 fn terminal_state_preserves_wrapped_unicode_across_scrollback() {
     let _guard = locked_with_env(&[]);
@@ -105,7 +102,6 @@ fn terminal_state_preserves_wrapped_unicode_across_scrollback() {
     #[cfg(unix)]
     assert!(output == expected, "soft-wrapped logical lines changed");
 }
-
 #[test]
 fn terminal_state_exports_the_active_alternate_screen() {
     let _guard = locked_with_env(&[]);

@@ -6,7 +6,7 @@ pub(crate) const READY_STDOUT_ENV: &str = "FUNCTERM_DAEMON_READY_STDOUT";
 pub(crate) const READY_FILE_ENV: &str = "FUNCTERM_DAEMON_READY_FILE";
 #[derive(Deserialize, Serialize)]
 pub(crate) enum StartupReply {
-    Ready,
+    Ready { http_address: core::net::SocketAddr },
     AlreadyRunning { service_name: String },
     Failed { message: String },
 }
@@ -21,8 +21,8 @@ impl StartupReporter {
             file: std::env::var_os(READY_FILE_ENV).map(PathBuf::from),
         }
     }
-    pub(crate) fn ready(&mut self) -> Result<()> {
-        self.send(&StartupReply::Ready)
+    pub(crate) fn ready(&mut self, http_address: core::net::SocketAddr) -> Result<()> {
+        self.send(&StartupReply::Ready { http_address })
     }
     pub(crate) fn failed(&mut self, error: &anyhow::Error) {
         let reply = crate::runtime::daemon_lock::already_running_service_name(error).map_or_else(

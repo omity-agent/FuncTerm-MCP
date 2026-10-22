@@ -1,7 +1,8 @@
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, ValueEnum)]
+#[derive(Clone, Copy, Debug, ValueEnum, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum OutputMode {
     Separated,
     Terminal,

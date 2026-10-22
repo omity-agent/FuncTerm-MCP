@@ -1,3 +1,5 @@
+use crate::engine::privileges::PrivilegeMode;
+use crate::runtime::protocol::OutputMode;
 use alloc::collections::BTreeMap;
 use anyhow::{Context as _, Result, ensure};
 use core::time::Duration;
@@ -67,12 +69,40 @@ impl IpcSettings {
         Ok(())
     }
 }
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub(crate) struct McpSettings {
+    pub(crate) http: HttpSettings,
     pub(crate) new_tab: ToolDescription,
     pub(crate) manual_write: ToolDescription,
     pub(crate) send_command: ToolDescription,
     pub(crate) view: ToolDescription,
+}
+#[derive(Clone, Debug, Deserialize)]
+pub(crate) struct HttpSettings {
+    pub(crate) bind_address: core::net::SocketAddr,
+    pub(crate) path: String,
+    pub(crate) allowed_hosts: Vec<String>,
+    pub(crate) allowed_origins: Vec<String>,
+    pub(crate) max_request_body_bytes: usize,
+    pub(crate) privilege_mode: Option<PrivilegeMode>,
+    pub(crate) output_mode: Option<OutputMode>,
+}
+impl HttpSettings {
+    fn validate(&self) -> Result<()> {
+        ensure!(
+            self.path.starts_with('/')
+                && !self
+                    .path
+                    .chars()
+                    .any(|character| matches!(character, '?' | '#' | '{' | '}' | '*')),
+            "mcp.http.path must be an absolute HTTP path without query, fragment, or route patterns"
+        );
+        ensure!(
+            self.max_request_body_bytes > 0,
+            "mcp.http.max_request_body_bytes must be positive"
+        );
+        Ok(())
+    }
 }
 #[derive(Clone, Debug, Default, Deserialize)]
 pub(crate) struct ToolDescription {
@@ -88,6 +118,14 @@ pub(crate) fn load() -> Result<Settings> {
         toml::from_str::<Settings>(SETTINGS).context("failed to parse embedded settings")?;
     settings.ipc.validate()?;
     apply_string_override(DAEMON_SERVICE_NAME_ENV, &mut settings.daemon_service_name);
+    if let Some(address) = std::env::var_os("FUNCTERM_MCP_HTTP_BIND") {
+        settings.mcp.http.bind_address = address
+            .to_str()
+            .context("FUNCTERM_MCP_HTTP_BIND is not valid Unicode")?
+            .parse()
+            .context("invalid FUNCTERM_MCP_HTTP_BIND socket address")?;
+    }
+    settings.mcp.http.validate()?;
     apply_string_override("FUNCTERM_UNIX_NORMAL_USER", &mut settings.unix_normal_user);
     for (name, candidates) in [
         ("FUNCTERM_POWERSHELL", &mut settings.powershell),

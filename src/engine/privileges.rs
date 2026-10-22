@@ -31,7 +31,8 @@ use std::io::{Read, Write};
 pub(crate) use unix_account::ShellIdentity;
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 pub(crate) use workspace_acl::inherit_publication_acl;
-#[derive(Clone, Copy, Debug, ValueEnum)]
+#[derive(Clone, Copy, Debug, ValueEnum, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum PrivilegeMode {
     Normal,
     Elevated,

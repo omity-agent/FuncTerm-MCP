@@ -14,6 +14,7 @@ pub(crate) struct TestGuard {
     daemon: ChildGuard,
     env: Vec<(String, String)>,
     service_name: String,
+    http_address: String,
     previous_env: Vec<(String, String)>,
     _runtime: temp::TestRuntime,
     _permit: DaemonPermit,
@@ -22,13 +23,16 @@ impl TestGuard {
     pub(crate) fn env(&self) -> Vec<(String, String)> {
         self.env.clone()
     }
+    pub(crate) fn http_address(&self) -> &str {
+        &self.http_address
+    }
     pub(crate) fn stop_daemon(&mut self) {
         self.daemon.terminate();
     }
     pub(crate) fn restart_daemon(&mut self) {
         self.stop_daemon();
         thread::sleep(Duration::from_millis(100));
-        self.daemon = spawn_daemon(&self.env, &self.service_name);
+        (self.daemon, self.http_address) = spawn_daemon(&self.env, &self.service_name);
     }
 }
 impl Drop for TestGuard {
@@ -51,23 +55,30 @@ pub(crate) fn locked_with_env(extra_env: &[(&str, &str)]) -> TestGuard {
     let permit = DaemonPermit::acquire();
     let runtime = temp::TestRuntime::new();
     let service_name = unique_service_name();
-    let mut env = vec![(
-        "FUNCTERM_DAEMON_SERVICE_NAME".to_owned(),
-        service_name.clone(),
-    )];
+    let mut env = vec![
+        (
+            "FUNCTERM_DAEMON_SERVICE_NAME".to_owned(),
+            service_name.clone(),
+        ),
+        (
+            "FUNCTERM_MCP_HTTP_BIND".to_owned(),
+            "127.0.0.1:0".to_owned(),
+        ),
+    ];
     env.extend(extra_env.iter().map(|pair| {
         let key = pair.0.to_owned();
         let value = pair.1.to_owned();
         (key, value)
     }));
     env.extend(runtime.environment());
-    let child = spawn_daemon(&env, &service_name);
+    let (child, http_address) = spawn_daemon(&env, &service_name);
     let previous_env = active_env();
     set_active_env(&env);
     TestGuard {
         daemon: child,
         env,
         service_name,
+        http_address,
         previous_env,
         _runtime: runtime,
         _permit: permit,
@@ -86,7 +97,7 @@ fn unique_service_name() -> String {
     let unique = SERVICE_COUNTER.fetch_add(1, Ordering::Relaxed);
     format!("functerm/test/{}/{}", unique, std::process::id())
 }
-fn spawn_daemon(env: &[(String, String)], service_name: &str) -> ChildGuard {
+fn spawn_daemon(env: &[(String, String)], service_name: &str) -> (ChildGuard, String) {
     let mut command = Command::new(exe());
     command
         .arg("internal-run-daemon")
@@ -97,10 +108,10 @@ fn spawn_daemon(env: &[(String, String)], service_name: &str) -> ChildGuard {
     super::test_environment::apply(&mut command, env);
     command.env("FUNCTERM_DAEMON_READY_STDOUT", "1");
     let mut child = ChildGuard::spawn(&mut command).unwrap();
-    wait_for_daemon(child.child_mut(), service_name);
-    child
+    let http_address = wait_for_daemon(child.child_mut(), service_name);
+    (child, http_address)
 }
-fn wait_for_daemon(child: &mut std::process::Child, service_name: &str) {
+fn wait_for_daemon(child: &mut std::process::Child, service_name: &str) -> String {
     let stdout = child.stdout.take().unwrap();
     let (sender, receiver) = std::sync::mpsc::channel();
     thread::spawn(move || {
@@ -123,6 +134,12 @@ fn wait_for_daemon(child: &mut std::process::Child, service_name: &str) {
         line.contains("Ready"),
         "daemon did not report readiness for {service_name}: {line}"
     );
+    let reply: rmcp::serde_json::Value = rmcp::serde_json::from_str(&line).unwrap();
+    reply
+        .pointer("/Ready/http_address")
+        .and_then(rmcp::serde_json::Value::as_str)
+        .unwrap_or_else(|| panic!("daemon startup did not publish its HTTP address: {line}"))
+        .to_owned()
 }
 #[cfg(windows)]
 fn apply_daemon_flags(command: &mut Command) {

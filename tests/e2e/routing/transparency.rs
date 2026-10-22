@@ -12,7 +12,6 @@ mod exit_status;
 mod object_format;
 #[path = "transparency/redraw.rs"]
 mod redraw;
-
 #[test]
 fn terminal_mode_preserves_tty_and_switches_back_to_separated_output() {
     let _guard = locked_with_env(&[]);
@@ -63,7 +62,6 @@ fn terminal_mode_preserves_tty_and_switches_back_to_separated_output() {
         );
     }
 }
-
 #[test]
 fn terminal_state_keeps_scrolled_unicode_output_and_command_boundaries() {
     let _guard = locked_with_env(&[]);
@@ -88,7 +86,6 @@ fn terminal_state_keeps_scrolled_unicode_output_and_command_boundaries() {
     assert_eq!(terminal_output(&saved), output);
     assert!(!saved.contains("AFTER_CAPTURE"), "{saved}");
 }
-
 #[test]
 fn terminal_mode_accepts_input_and_honors_user_redirection() {
     let _guard = locked_with_env(&[]);
@@ -134,7 +131,6 @@ fn terminal_mode_accepts_input_and_honors_user_redirection() {
             .contains("FILE_ONLY")
     );
 }
-
 fn run_terminal(tab_id: &str, command: &str, wait_timeout: &str) -> Output {
     run_cli(&[
         "send-command",
@@ -147,12 +143,10 @@ fn run_terminal(tab_id: &str, command: &str, wait_timeout: &str) -> Output {
         wait_timeout,
     ])
 }
-
 fn checked_text(result: &Output) -> String {
     assert!(result.status.success(), "{result:?}");
     String::from_utf8(result.stdout.clone()).unwrap()
 }
-
 fn terminal_output(text: &str) -> &str {
     text.split_once("<OUTPUT>\n")
         .unwrap()
@@ -161,11 +155,9 @@ fn terminal_output(text: &str) -> &str {
         .unwrap()
         .0
 }
-
 const fn parent_shell() -> &'static str {
     if cfg!(windows) { "powershell" } else { "bash" }
 }
-
 fn tty_query(shell: &str) -> String {
     match shell {
         "bun" => "console.log('TTY_STATE', Boolean(process.stdin.isTTY), Boolean(process.stdout.isTTY), Boolean(process.stderr.isTTY)); console.error('TERMINAL_ERROR')".to_owned(),

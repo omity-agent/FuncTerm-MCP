@@ -5,12 +5,10 @@ use crate::support::{
 use core::time::Duration;
 use named_lock::NamedLock;
 use std::thread;
-
 #[cfg(windows)]
 const SHELL: &str = "powershell";
 #[cfg(unix)]
 const SHELL: &str = "bash";
-
 #[test]
 fn daemon_help_lists_lifecycle_subcommands() {
     let _guard = locked_with_env(&[]);
@@ -22,7 +20,6 @@ fn daemon_help_lists_lifecycle_subcommands() {
     }
     assert!(!help.contains("internal-run-daemon"), "{help}");
 }
-
 #[test]
 fn start_and_stop_are_idempotent_and_restart_starts_an_absent_daemon() {
     let guard = locked_with_env(&[]);
@@ -47,7 +44,6 @@ fn start_and_stop_are_idempotent_and_restart_starts_an_absent_daemon() {
     assert!(parse_tab_view(&run_cli(&["view", &restarted.tab_id])).alive);
     drop(guard);
 }
-
 #[test]
 fn restart_discards_old_tabs_without_stopping_another_service() {
     let first = locked_with_env(&[]);
@@ -83,7 +79,6 @@ fn restart_discards_old_tabs_without_stopping_another_service() {
     drop(second);
     drop(first);
 }
-
 #[test]
 fn concurrent_starts_share_a_single_background_instance() {
     let guard = locked_with_env(&[]);
@@ -109,7 +104,6 @@ fn concurrent_starts_share_a_single_background_instance() {
     let tab = create_tab(&temp_root(), SHELL);
     assert!(parse_tab_view(&run_cli(&["view", &tab.tab_id])).alive);
 }
-
 #[test]
 fn stop_terminates_running_commands_and_allows_automatic_startup() {
     let guard = locked_with_env(&[]);
@@ -135,7 +129,6 @@ fn stop_terminates_running_commands_and_allows_automatic_startup() {
     assert!(parse_tab_view(&run_cli(&["view", &fresh.tab_id])).alive);
     drop(guard);
 }
-
 fn assert_lifecycle(command: &str, expected: &str) {
     let output = run_cli(&["daemon", command]);
     assert!(output.status.success(), "{output:?}");
@@ -144,7 +137,6 @@ fn assert_lifecycle(command: &str, expected: &str) {
         "{output:?}"
     );
 }
-
 fn assert_stopped(environment: &[(String, String)]) {
     let service = &environment
         .iter()

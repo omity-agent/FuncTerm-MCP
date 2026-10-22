@@ -1,8 +1,37 @@
 use super::McpServer;
+use crate::engine::privileges::PrivilegeMode;
 use crate::runtime::config::{McpSettings, ToolDescription};
+use crate::runtime::protocol::OutputMode;
 use alloc::{borrow::Cow, collections::BTreeMap, sync::Arc};
 use anyhow::{Context as _, Result, bail};
 use rmcp::{handler::server::router::tool::ToolRouter, model::Tool, serde_json::Value};
+pub(super) fn router(
+    settings: &McpSettings,
+    privilege_mode: Option<PrivilegeMode>,
+    output_mode: Option<OutputMode>,
+) -> Result<ToolRouter<McpServer>> {
+    let mut router = McpServer::tool_router();
+    for (internal, public, fixed) in [
+        ("fixed_new_tab", "new_tab", privilege_mode.is_some()),
+        ("fixed_send_command", "send_command", output_mode.is_some()),
+    ] {
+        let mut route = router
+            .map
+            .remove(internal)
+            .with_context(|| format!("MCP route {internal} is missing"))?;
+        if fixed {
+            route.attr.name = public.to_owned().into();
+            router.map.insert(public.to_owned().into(), route);
+        }
+    }
+    apply(
+        &mut router,
+        settings,
+        privilege_mode.is_some(),
+        output_mode.is_some(),
+    )?;
+    Ok(router)
+}
 pub(super) fn apply(
     router: &mut ToolRouter<McpServer>,
     descriptions: &McpSettings,

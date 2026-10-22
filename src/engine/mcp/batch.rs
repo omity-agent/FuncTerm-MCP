@@ -1,5 +1,5 @@
-use super::{collection, operations::Operation};
-use crate::runtime::{client, config::Settings, protocol::wait_timeout_from_seconds};
+use super::{collection, invocation::Backend, operations::Operation};
+use crate::runtime::{config::Settings, protocol::wait_timeout_from_seconds};
 use core::time::Duration;
 use rmcp::model::CallToolResult;
 use serde::Deserialize;
@@ -20,6 +20,7 @@ pub(super) struct TimedBatch<T> {
 }
 pub(super) async fn run<T>(
     settings: &Settings,
+    backend: &Backend,
     entries: Vec<T>,
     wait_timeout: Option<f64>,
 ) -> Result<CallToolResult, String>
@@ -32,16 +33,14 @@ where
         .transpose()
         .map_err(super::error_text)?
         .unwrap_or(Duration::ZERO);
-    client::ensure_daemon(settings)
-        .await
-        .map_err(super::error_text)?;
+    backend.prepare(settings).await.map_err(super::error_text)?;
     let started = Instant::now();
     let operations = entries.into_iter().map(|entry| async move {
-        let mut connection = client::DaemonClient::connect(settings)
+        let request = entry.request(settings, budget.saturating_sub(started.elapsed()))?;
+        let payload = backend
+            .execute(settings, request)
             .await
             .map_err(super::error_text)?;
-        let request = entry.request(settings, budget.saturating_sub(started.elapsed()))?;
-        let payload = connection.call(request).await.map_err(super::error_text)?;
         T::output(payload)
     });
     let results = futures_util::future::join_all(operations).await;
