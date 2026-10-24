@@ -3,7 +3,7 @@ mod launcher;
 mod shell_session;
 mod tab;
 use crate::runtime::config::Settings;
-use crate::runtime::protocol::EnvironmentSnapshot;
+use crate::runtime::protocol::{EnvironmentSnapshot, OutputTokenizer};
 use crate::shell::ShellChoice;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result, bail, ensure};
@@ -15,6 +15,7 @@ pub(crate) struct Manager {
     launcher: launcher::ShellLauncher,
     tabs: tab::TabDirectory,
     blocking: BlockingExecutor,
+    tokenizer: Arc<OutputTokenizer>,
     accepting_tabs: RwLock<bool>,
 }
 impl Manager {
@@ -23,10 +24,12 @@ impl Manager {
     }
     pub(crate) fn new(settings: Settings) -> Result<Self> {
         let blocking = BlockingExecutor::new(settings.ipc.blocking_concurrency);
+        let tokenizer = Arc::new(OutputTokenizer::new(&settings.output_token_encoding)?);
         Ok(Self {
             launcher: launcher::ShellLauncher::new(settings)?,
             tabs: tab::TabDirectory::default(),
             blocking,
+            tokenizer,
             accepting_tabs: RwLock::new(true),
         })
     }
@@ -90,6 +93,7 @@ impl Manager {
             tab_id.clone(),
             session,
             self.blocking.clone(),
+            Arc::clone(&self.tokenizer),
         )?);
         drop(accepting);
         Ok(tab_id)

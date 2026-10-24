@@ -7,6 +7,7 @@ use super::Manager;
 use crate::runtime::protocol::{EndReason, KeyboardInput, ViewResult};
 use alloc::sync::Arc;
 use anyhow::Result;
+use core::num::NonZeroUsize;
 use core::time::Duration;
 pub(in crate::engine::runtime::session::manager) use lifecycle::CommandInputFailure;
 pub(super) use lifecycle::{CommandWait, ManagedCommand};
@@ -30,8 +31,20 @@ impl Manager {
             .send_command(tab_id, command, separate_output, wait_timeout)
             .await
     }
-    pub(crate) async fn view(&self, id: &str, wait_timeout: Duration) -> Result<ViewResult> {
-        self.tabs.view(id, wait_timeout).await
+    pub(crate) async fn view(
+        &self,
+        id: &str,
+        wait_timeout: Duration,
+        start_token: NonZeroUsize,
+    ) -> Result<ViewResult> {
+        let view = self.tabs.view(id, wait_timeout).await?;
+        if start_token == NonZeroUsize::MIN {
+            return Ok(view);
+        }
+        let tokenizer = Arc::clone(&self.tokenizer);
+        self.blocking
+            .run(move || tokenizer.start_at(view, start_token))
+            .await
     }
 }
 mod completion;

@@ -4,9 +4,13 @@ use super::{
 };
 use crate::runtime::config::Settings;
 use crate::runtime::protocol::{EnvironmentSnapshot, Payload, Request};
+use core::num::NonZeroUsize;
 use core::time::Duration;
 use rmcp::model::CallToolResult;
-pub(super) struct LookupId(pub(super) String);
+pub(super) struct LookupId {
+    pub(super) id: String,
+    pub(super) start_token: NonZeroUsize,
+}
 pub(super) trait Operation {
     const LIST_PARAMETER: &'static str = "exec";
     fn tab_id(&self) -> Option<&str> {
@@ -70,8 +74,9 @@ impl Operation for LookupId {
     const LIST_PARAMETER: &'static str = "ids";
     fn request(self, _settings: &Settings, wait_timeout: Duration) -> Result<Request, String> {
         Ok(Request::View {
-            id: self.0,
+            id: self.id,
             wait_timeout,
+            start_token: self.start_token,
         })
     }
     fn output(payload: Payload) -> Result<CallToolResult, String> {

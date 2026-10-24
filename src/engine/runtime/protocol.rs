@@ -1,5 +1,6 @@
 use crate::shell::ShellChoice;
 use anyhow::{Context as _, Result};
+use core::num::NonZeroUsize;
 use core::time::Duration;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -9,9 +10,11 @@ pub(crate) mod format;
 mod kind;
 mod presentation;
 mod time_consumption;
+mod tokenization;
 pub(crate) use emission::{CommandOutput, OutputMode, OutputPresentation};
 pub(crate) use environment::{EnvironmentSnapshot, environment_name_equals};
 pub(crate) use presentation::{CommandPresentation, ShellPresentation};
+pub(crate) use tokenization::OutputTokenizer;
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, strum :: EnumDiscriminants)]
 #[strum_discriminants(name(RequestKind), derive(strum::Display))]
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
@@ -42,6 +45,7 @@ pub(crate) enum Request {
     View {
         id: String,
         wait_timeout: Duration,
+        start_token: NonZeroUsize,
     },
 }
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
@@ -93,6 +97,7 @@ pub(crate) struct ShellView {
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) struct CommandView {
     pub(crate) output: CommandOutput,
+    pub(crate) tokens: usize,
     pub(crate) exit_code: Option<i32>,
     pub(crate) time_consumption: Duration,
     pub(crate) finished: bool,

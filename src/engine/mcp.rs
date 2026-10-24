@@ -152,7 +152,14 @@ impl McpServer {
         batch::run(
             &self.settings,
             &self.backend,
-            request.ids.into_iter().map(operations::LookupId).collect(),
+            request
+                .ids
+                .into_iter()
+                .map(|id| operations::LookupId {
+                    id,
+                    start_token: request.start_token,
+                })
+                .collect(),
             Some(request.wait_timeout),
         )
         .await

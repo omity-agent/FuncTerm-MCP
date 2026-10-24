@@ -1,6 +1,7 @@
 use crate::runtime::protocol::KeyboardInput;
 use crate::shell::ShellChoice;
 use anyhow::{Result, bail};
+use core::num::NonZeroUsize;
 use serde::Deserialize;
 use std::path::Path;
 #[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
@@ -90,4 +91,9 @@ pub(super) struct ViewRequest {
     pub(super) ids: Vec<String>,
     #[schemars(range(min = 0))]
     pub(super) wait_timeout: f64,
+    #[serde(default = "first_token")]
+    pub(super) start_token: NonZeroUsize,
+}
+const fn first_token() -> NonZeroUsize {
+    NonZeroUsize::MIN
 }

@@ -7,6 +7,7 @@ use crate::runtime::{
 use crate::shell::ShellChoice;
 use anyhow::{Context as _, Result, ensure};
 use clap::{Parser, Subcommand};
+use core::num::NonZeroUsize;
 use std::path::PathBuf;
 #[derive(Parser)]
 #[command(version, about)]
@@ -80,6 +81,8 @@ pub(super) enum CliCommand {
         id: String,
         #[arg(long, default_value_t = 0.0)]
         wait_timeout: f64,
+        #[arg(long, default_value_t = NonZeroUsize::MIN)]
+        start_token: NonZeroUsize,
     },
     #[command(hide = true)]
     InternalLaunchDaemon,

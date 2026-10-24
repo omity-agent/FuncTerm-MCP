@@ -5,7 +5,7 @@ use self::snapshot::TabSnapshot;
 use super::BlockingExecutor;
 use super::command::ManagedCommand;
 use super::shell_session::ShellSession;
-use crate::runtime::protocol::{KeyboardInput, ShellView, ViewResult};
+use crate::runtime::protocol::{KeyboardInput, OutputTokenizer, ShellView, ViewResult};
 use alloc::sync::Arc;
 use anyhow::{Result, bail};
 use dashmap::DashMap;
@@ -19,6 +19,7 @@ pub(super) struct Tab {
     id: String,
     pub(super) operation: tokio::sync::Mutex<()>,
     pub(super) blocking: BlockingExecutor,
+    pub(super) tokenizer: Arc<OutputTokenizer>,
     state: Mutex<TabState>,
     commands: DashMap<String, Arc<ManagedCommand>>,
 }
@@ -108,12 +109,14 @@ impl Tab {
         id: String,
         session: Arc<ShellSession>,
         blocking: BlockingExecutor,
+        tokenizer: Arc<OutputTokenizer>,
     ) -> Result<Self> {
         let snapshot = TabSnapshot::from_session(&session)?;
         Ok(Self {
             id,
             operation: tokio::sync::Mutex::new(()),
             blocking,
+            tokenizer,
             state: Mutex::new(TabState {
                 session: Some(session),
                 snapshot,

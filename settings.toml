@@ -25,6 +25,9 @@ shell_ignore_style = true
 # 是否默认分别捕获 stdout 和 stderr；false 时保留终端句柄并捕获合并的终端输出。
 command_separate_output = false
 
+# 命令输出计数与 View Token 起始位置使用的内置分词编码。
+output_token_encoding = "o200k_base"
+
 # Root Daemon 创建普通权限 Tab 时使用的 Unix 用户；留空时使用 Daemon 的真实 UID 或 SUDO_UID。
 # 可通过 FUNCTERM_UNIX_NORMAL_USER 指定
 unix_normal_user = ""
@@ -133,3 +136,4 @@ description = "查看状态。该工具会在等待时长结束或命令结束�
 [mcp.view.parameters]
 ids = "如果输入命令 ID，将返回该命令目前的状态；如果输入标签页 ID，将返回终端屏幕范围内显示的内容。一般输入命令 ID。"
 wait_timeout = "等待时长，单位为秒。"
+start_token = "输出起始 Token 的索引。用于跳过输出中已经读过的部分；默认值为 1；不适用于 Separate Output。"

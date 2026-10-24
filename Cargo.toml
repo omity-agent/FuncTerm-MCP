@@ -85,7 +85,10 @@ edition = "2024"
 
 [dependencies]
 anyhow = { git = "https://github.com/dtolnay/anyhow", public = true }
-axum = { version = "*", default-features = false, features = ["http1", "tokio"] }
+axum = { version = "*", default-features = false, features = [
+    "http1",
+    "tokio",
+] }
 base64-turbo = "*"
 blake3 = "*"
 clap = { git = "https://github.com/clap-rs/clap", features = [
@@ -138,6 +141,7 @@ tokio = { version = "*", features = [
 ] }
 tokio-serde = { version = "*", features = ["messagepack"] }
 tokio-util = { version = "*", features = ["codec"] }
+toktok-rs = { git = "https://github.com/vectorize-io/toktok" }
 toml = "*"
 tracing = "*"
 tracing-subscriber = { version = "*", features = ["env-filter"] }

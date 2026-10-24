@@ -68,6 +68,7 @@ impl Tab {
             record,
             Arc::clone(&capture),
             session.command_watch(),
+            Arc::clone(&self.tokenizer),
         ));
         let reservation = match ShellReservation::new(&session, self.id(), Arc::clone(&managed)) {
             Ok(reservation) => reservation,

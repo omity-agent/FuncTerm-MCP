@@ -18,6 +18,7 @@ pub(crate) struct CommandPresentation<'view> {
     pub(crate) command_id: Option<&'view str>,
     #[serde(flatten)]
     pub(crate) output: OutputPresentation<'view>,
+    pub(crate) tokens: usize,
     pub(crate) exit_code: Option<i32>,
     pub(crate) time_consumption: String,
     pub(crate) finished: bool,
@@ -41,6 +42,7 @@ impl CommandView {
         CommandPresentation {
             command_id,
             output: self.output.presentation(),
+            tokens: self.tokens,
             exit_code: self.exit_code,
             time_consumption: super::time_consumption::milliseconds(self.time_consumption),
             finished: self.finished,

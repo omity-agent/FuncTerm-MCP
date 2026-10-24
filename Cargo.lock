@@ -678,6 +678,7 @@ dependencies = [
  "tokio",
  "tokio-serde",
  "tokio-util",
+ "toktok-rs",
  "toml",
  "tracing",
  "tracing-subscriber",
@@ -2500,6 +2501,11 @@ dependencies = [
  "pin-project-lite",
  "tokio",
 ]
+
+[[package]]
+name = "toktok-rs"
+version = "0.3.0"
+source = "git+https://github.com/vectorize-io/toktok#187cd536b78b116e17d8fa47a1ac029709fa37e3"
 
 [[package]]
 name = "toml"

@@ -14,6 +14,7 @@ impl ManagedCommand {
                 self.time_consumption(),
                 self.capture.current()?,
                 self.capture.output()?,
+                &self.tokenizer,
             )
         };
         drop(state);
@@ -35,6 +36,7 @@ impl ManagedCommand {
             self.time_consumption(),
             title,
             self.capture.output()?,
+            &self.tokenizer,
         )?;
         state.input.normalize(&mut view);
         update_cwd(PathBuf::from(done.cwd));
@@ -59,6 +61,7 @@ impl ManagedCommand {
             self.time_consumption(),
             title,
             self.capture.output()?,
+            &self.tokenizer,
         )?;
         view.command.finished = true;
         view.command.exit_code = Some(1_i32);

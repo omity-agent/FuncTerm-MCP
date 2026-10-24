@@ -4,7 +4,7 @@ use crate::contract::{
     COMMAND_STATE_DIRECTORY, COMMAND_WORKING_DIRECTORY_FILE, DONE_FILE, RELEASED_FILE,
     STARTED_FILE, STDERR_FILE, STDOUT_FILE,
 };
-use crate::runtime::protocol::{CommandOutput, CommandSnapshot, CommandView};
+use crate::runtime::protocol::{CommandOutput, CommandSnapshot, CommandView, OutputTokenizer};
 use crate::shell::ShellChoice;
 use anyhow::{Context as _, Result, bail};
 use core::time::Duration;
@@ -81,6 +81,7 @@ pub(super) fn read_command_result(
     observed_time_consumption: Duration,
     title: String,
     terminal_output: Option<String>,
+    tokenizer: &OutputTokenizer,
 ) -> Result<CommandSnapshot> {
     let output = match terminal_output {
         Some(output) => CommandOutput::Terminal { output },
@@ -100,6 +101,7 @@ pub(super) fn read_command_result(
     Ok(CommandSnapshot {
         title,
         command: CommandView {
+            tokens: tokenizer.count(&output)?,
             output,
             exit_code,
             time_consumption: measured_time_consumption,

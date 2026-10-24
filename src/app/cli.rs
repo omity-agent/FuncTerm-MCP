@@ -152,11 +152,13 @@ pub(crate) async fn run() -> Result<()> {
         CliCommand::View {
             id,
             wait_timeout: wait_timeout_seconds,
+            start_token,
         } => {
             let settings = config::load()?;
             let request = Request::View {
                 id,
                 wait_timeout: wait_timeout_from_seconds(wait_timeout_seconds)?,
+                start_token,
             };
             print_result(interface::execute(&settings, request).await)
         }

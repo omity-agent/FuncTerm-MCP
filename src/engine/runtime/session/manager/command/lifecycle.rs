@@ -1,5 +1,5 @@
 use super::outcome::CommandInputHistory;
-use crate::runtime::protocol::CommandSnapshot;
+use crate::runtime::protocol::{CommandSnapshot, OutputTokenizer};
 use crate::runtime::session::keyboard::InputDelivery;
 use crate::runtime::session::observation::PathWatch;
 use crate::runtime::session::records::CommandRecord;
@@ -16,6 +16,7 @@ pub(in crate::engine::runtime::session::manager) struct ManagedCommand {
     pub(super) state: Mutex<ManagedCommandState>,
     pub(super) capture: Arc<CommandCapture>,
     watch: Arc<PathWatch>,
+    pub(super) tokenizer: Arc<OutputTokenizer>,
 }
 pub(super) struct ManagedCommandState {
     pub(super) wait: CommandWait,
@@ -41,6 +42,7 @@ impl ManagedCommand {
         record: CommandRecord,
         capture: Arc<CommandCapture>,
         watch: Arc<PathWatch>,
+        tokenizer: Arc<OutputTokenizer>,
     ) -> Self {
         tracing :: debug ! (command_id = % id , directory = % record . directory . display () , "command registered");
         Self {
@@ -54,6 +56,7 @@ impl ManagedCommand {
             }),
             capture,
             watch,
+            tokenizer,
         }
     }
     pub(in crate::engine::runtime::session::manager) fn id(&self) -> &str {

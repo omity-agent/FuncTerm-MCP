@@ -51,8 +51,12 @@ pub(crate) async fn execute(manager: &Arc<Manager>, request: Request) -> Result<
                 view,
             })
         }
-        Request::View { id, wait_timeout } => {
-            Ok(Payload::View(manager.view(&id, wait_timeout).await?))
-        }
+        Request::View {
+            id,
+            wait_timeout,
+            start_token,
+        } => Ok(Payload::View(
+            manager.view(&id, wait_timeout, start_token).await?,
+        )),
     }
 }
