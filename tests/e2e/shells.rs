@@ -22,6 +22,9 @@ mod python;
 #[path = "shells/interpreters/repl_commands.rs"]
 mod repl_commands;
 #[cfg(test)]
+#[path = "shells/interpreters/source_visibility.rs"]
+mod source_visibility;
+#[cfg(test)]
 #[path = "shells/state.rs"]
 mod state;
 #[cfg(test)]

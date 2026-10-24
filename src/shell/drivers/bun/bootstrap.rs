@@ -1,3 +1,4 @@
+mod echo_control;
 mod output_capture;
 use crate::contract::{
     COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, COMMAND_INPUT_DIRECTORY,
@@ -19,8 +20,9 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
 	let @VAR_dispatching@ = false;
 	let @VAR_inputDepth@ = 0;
 	let @VAR_pendingEvaluations@ = 0;
-	let @VAR_deferredPrompt@;
-	let @VAR_evaluationReturned@ = false;
+		let @VAR_deferredPrompt@;
+		let @VAR_evaluationReturned@ = false;
+			{echo_control}
 		const @VAR_runHelper@ = (@VAR_args@, @VAR_capture@ = false) => {{
 	    const @VAR_helper@ = process.env.{helper_env};
 	    if (!@VAR_helper@) throw new Error("{helper_env} is not set");
@@ -84,9 +86,10 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
 	    if (@VAR_activeCommand@) @VAR_activeCommand@.readingInput = false;
 	    @VAR_pendingEvaluations@ += 1;
 	    let @VAR_callbackCalled@ = false;
-	    const @VAR_finishEvaluation@ = (@VAR_error@, @VAR_value@) => {{
-	        if (@VAR_callbackCalled@) return;
-	        @VAR_callbackCalled@ = true;
+		    const @VAR_finishEvaluation@ = (@VAR_error@, @VAR_value@) => {{
+		        if (@VAR_callbackCalled@) return;
+		        @VAR_callbackCalled@ = true;
+		        if (@VAR_activeCommand@) @VAR_activeCommand@.readingInput = false;
 	        if (@VAR_activeCommand@ && @VAR_error@ instanceof @VAR_Recoverable@ && @VAR_inputDepth@ > 0) {{
 	            @VAR_activeCommand@.readingInput = true;
 	        }} else if (@VAR_activeCommand@ && @VAR_error@) {{
@@ -141,15 +144,10 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
 	            protectedEnvironment: @VAR_protectedEnvironment@,
 	            previousError: @VAR_previousError@, previousWriter: @VAR_previousWriter@,
 	            started: performance.now(), failed: false, readingInput: true,
-	            nativeInput: @VAR_source@.trimStart().startsWith("."), capture: @VAR_receipt@.separate_output ? @VAR_captureOutput@() : undefined
-	        }};
-	        @VAR_evaluationReturned@ = true;
-	        @VAR_inputDepth@ += 1;
-	        try {{
-	            @VAR_server@.write(@VAR_source@.endsWith("\n") ? @VAR_source@ : `${{@VAR_source@}}\n`);
-	        }} finally {{
-	            @VAR_inputDepth@ -= 1;
-	        }}
+		            capture: @VAR_receipt@.separate_output ? @VAR_captureOutput@() : undefined
+		        }};
+		        @VAR_evaluationReturned@ = true;
+		        @VAR_server@.write(@VAR_source@.endsWith("\n") ? @VAR_source@ : `${{@VAR_source@}}\n`);
 	        @VAR_finishDeferredPrompt@();
 	        @VAR_server@.resume();
 	    }} catch (@VAR_error@) {{
@@ -182,6 +180,7 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
         stdout_file = STDOUT_FILE,
         stderr_file = STDERR_FILE,
         output_capture = output_capture::SCRIPT,
+        echo_control = echo_control::SCRIPT,
     );
     let protected = bootstrap.replace(
         "@BUN_PROTECTED_ENVIRONMENT@",
