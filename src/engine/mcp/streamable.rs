@@ -9,13 +9,11 @@ use rmcp::transport::streamable_http_server::{
 };
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
-
 pub(crate) struct HttpServer {
     address: SocketAddr,
     cancellation: CancellationToken,
     task: Option<JoinHandle<Result<()>>>,
 }
-
 impl HttpServer {
     pub(crate) async fn bind(settings: Settings, manager: Arc<Manager>) -> Result<Self> {
         let http = &settings.mcp.http;
@@ -64,11 +62,9 @@ impl HttpServer {
             task: Some(task),
         })
     }
-
     pub(crate) const fn address(&self) -> SocketAddr {
         self.address
     }
-
     pub(crate) async fn failure(&mut self) -> anyhow::Error {
         let Some(task) = self.task.as_mut() else {
             return anyhow::anyhow!("MCP HTTP task has already completed");
@@ -81,7 +77,6 @@ impl HttpServer {
             Err(error) => anyhow::Error::new(error).context("MCP HTTP task failed"),
         }
     }
-
     pub(crate) async fn stop(mut self, timeout: core::time::Duration) -> Result<()> {
         self.cancellation.cancel();
         if let Some(task) = self.task.as_mut() {
@@ -94,7 +89,6 @@ impl HttpServer {
         Ok(())
     }
 }
-
 impl Drop for HttpServer {
     fn drop(&mut self) {
         self.cancellation.cancel();

@@ -1,25 +1,21 @@
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
-
 #[derive(Clone, Copy, Debug, ValueEnum, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum OutputMode {
     Separated,
     Terminal,
 }
-
 impl OutputMode {
     pub(crate) const fn separate_output(self) -> bool {
         matches!(self, Self::Separated)
     }
 }
-
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) enum CommandOutput {
     Separated { stdout: String, stderr: String },
     Terminal { output: String },
 }
-
 #[derive(Debug, Serialize, rmcp::schemars::JsonSchema)]
 #[serde(untagged)]
 pub(crate) enum OutputPresentation<'view> {
@@ -31,7 +27,6 @@ pub(crate) enum OutputPresentation<'view> {
         output: &'view str,
     },
 }
-
 impl CommandOutput {
     #[expect(
         clippy::pattern_type_mismatch,
@@ -43,7 +38,6 @@ impl CommandOutput {
             Self::Terminal { output } => output.is_empty(),
         }
     }
-
     #[expect(
         clippy::pattern_type_mismatch,
         reason = "borrow output buffers without cloning or ref bindings"

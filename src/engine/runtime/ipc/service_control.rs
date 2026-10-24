@@ -2,27 +2,22 @@ use super::{client, daemon_spawn, lock};
 use crate::runtime::config::Settings;
 use crate::runtime::protocol::Request;
 use anyhow::{Context as _, Result, bail};
-
 #[derive(Clone, Copy)]
 enum Operation {
     Start,
     Stop,
     Restart,
 }
-
 pub(crate) async fn start(settings: &Settings) -> Result<bool> {
     serialized(settings, Operation::Start).await
 }
-
 pub(crate) async fn stop(settings: &Settings) -> Result<bool> {
     serialized(settings, Operation::Stop).await
 }
-
 pub(crate) async fn restart(settings: &Settings) -> Result<()> {
     serialized(settings, Operation::Restart).await?;
     Ok(())
 }
-
 async fn serialized(settings: &Settings, operation: Operation) -> Result<bool> {
     let configuration = settings.clone();
     tokio::task::spawn_blocking(move || {
@@ -42,7 +37,6 @@ async fn serialized(settings: &Settings, operation: Operation) -> Result<bool> {
     .await
     .context("daemon lifecycle worker failed")?
 }
-
 async fn start_locked(settings: &Settings) -> Result<bool> {
     if client::probe(settings).await? {
         return Ok(false);
@@ -63,7 +57,6 @@ async fn start_locked(settings: &Settings) -> Result<bool> {
     }
     bail!("daemon startup completed without accepting IPC connections")
 }
-
 async fn stop_locked(settings: &Settings) -> Result<bool> {
     let Some(mut connection) = client::DaemonClient::connect_if_running(settings).await? else {
         return Ok(false);

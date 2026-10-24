@@ -5,18 +5,15 @@ use tastty_core::{
     AbsolutePosition, Parser, PlainOptions, Position, ScreenEvent, TerminalMode, TerminalSize,
     screen::SelectionMode,
 };
-
 pub(super) struct CommandScreen {
     pub(super) parser: Parser,
     start: Option<AbsolutePosition>,
 }
-
 pub(super) enum RenderedOutput {
     Pending(Arc<Mutex<CommandScreen>>),
     Active(Arc<Mutex<CommandScreen>>),
     Frozen(String),
 }
-
 impl CommandScreen {
     pub(super) fn new(size: TerminalSize) -> Self {
         Self {
@@ -24,7 +21,6 @@ impl CommandScreen {
             start: None,
         }
     }
-
     fn begin(&mut self) -> Result<()> {
         ensure!(
             self.start.is_none(),
@@ -39,7 +35,6 @@ impl CommandScreen {
         self.start = Some(start);
         Ok(())
     }
-
     pub(super) fn observe(&mut self, event: &ScreenEvent) -> Result<()> {
         if matches!(event, ScreenEvent::ScreenCleared)
             && !self.parser.screen().mode(TerminalMode::AlternateScreen)
@@ -54,7 +49,6 @@ impl CommandScreen {
         }
         Ok(())
     }
-
     fn contents(&mut self) -> Result<String> {
         let initial = self.start.context("terminal output region is not active")?;
         let screen = self.parser.screen_mut();
@@ -78,19 +72,16 @@ impl CommandScreen {
         output.truncate(output.trim_end_matches('\n').len());
         Ok(output)
     }
-
     fn finish(&mut self) -> Result<String> {
         let output = self.contents()?;
         self.start = None;
         Ok(output)
     }
 }
-
 impl RenderedOutput {
     pub(super) const fn new(screen: Arc<Mutex<CommandScreen>>) -> Self {
         Self::Pending(screen)
     }
-
     #[expect(
         clippy::pattern_type_mismatch,
         reason = "borrow the pending screen while advancing the capture state"
@@ -103,7 +94,6 @@ impl RenderedOutput {
         *self = Self::Active(Arc::clone(screen));
         Ok(())
     }
-
     pub(super) fn contents(&self) -> Result<String> {
         #[expect(
             clippy::pattern_type_mismatch,
@@ -115,7 +105,6 @@ impl RenderedOutput {
             Self::Frozen(output) => Ok(output.clone()),
         }
     }
-
     #[expect(
         clippy::pattern_type_mismatch,
         reason = "borrow the active screen before replacing it with its frozen output"

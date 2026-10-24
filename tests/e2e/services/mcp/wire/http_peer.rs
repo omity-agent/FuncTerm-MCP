@@ -5,7 +5,6 @@ use reqwest::{
     blocking::{Client, RequestBuilder, Response},
 };
 use rmcp::serde_json::{Value, json};
-
 pub(super) struct HttpSession {
     client: Client,
     endpoint: String,
@@ -13,7 +12,6 @@ pub(super) struct HttpSession {
     session_id: String,
     sequence: u64,
 }
-
 impl HttpSession {
     pub(super) fn new(daemon: &TestGuard, version: &str) -> Self {
         let client = Client::builder()
@@ -69,7 +67,6 @@ impl HttpSession {
         assert!(notification.bytes().unwrap().is_empty());
         session
     }
-
     pub(super) fn builder(&self, method: Method) -> RequestBuilder {
         self.client
             .request(method, &self.endpoint)
@@ -78,7 +75,6 @@ impl HttpSession {
             .header("Mcp-Session-Id", &self.session_id)
             .header("Mcp-Protocol-Version", &self.version)
     }
-
     pub(super) fn request(&mut self, method: &str, params: Value) -> Value {
         self.sequence += 1;
         let mut message = json!({
@@ -96,7 +92,6 @@ impl HttpSession {
         assert_eq!(response.status(), StatusCode::OK);
         decode(response, self.sequence)
     }
-
     pub(super) fn call(&mut self, name: &str, arguments: Value) -> Value {
         let mut params = json!({"name": name});
         params
@@ -106,7 +101,6 @@ impl HttpSession {
         self.request("tools/call", params)
     }
 }
-
 fn decode(response: Response, id: u64) -> Value {
     let event_stream = response
         .headers()

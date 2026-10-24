@@ -3,7 +3,6 @@ use crate::support::{locked_with_env, run_cli_with_env};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest::{Method, StatusCode};
 use rmcp::serde_json::json;
-
 #[test]
 fn http_sessions_support_get_delete_and_reinitialization_for_both_versions() {
     let daemon = locked_with_env(&[]);
@@ -41,7 +40,6 @@ fn http_sessions_support_get_delete_and_reinitialization_for_both_versions() {
     }
     drop(daemon);
 }
-
 #[test]
 fn invalid_origin_and_protocol_headers_are_rejected_without_breaking_the_session() {
     let daemon = locked_with_env(&[]);
@@ -67,7 +65,6 @@ fn invalid_origin_and_protocol_headers_are_rejected_without_breaking_the_session
     );
     drop(daemon);
 }
-
 #[test]
 fn daemon_shutdown_closes_http_streams_and_releases_its_listener() {
     let daemon = locked_with_env(&[]);

@@ -1,5 +1,4 @@
-use super::{HostReply, Terminal};
-use crate::runtime::session::keyboard;
+use super::Terminal;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use parking_lot::Mutex;
@@ -60,15 +59,15 @@ fn read_pty(
         }
     }
 }
-fn write_replies(writer: &Arc<Mutex<Box<dyn Write + Send>>>, replies: &[HostReply]) -> Result<()> {
+fn write_replies(writer: &Arc<Mutex<Box<dyn Write + Send>>>, replies: &[Vec<u8>]) -> Result<()> {
     if replies.is_empty() {
         return Ok(());
     }
     let mut locked_writer = writer.lock();
     for reply in replies {
-        let physical_reply = keyboard::host_reply_bytes(&reply.bytes, reply.win32_input)?;
+        tracing::debug!(bytes = ?reply, "writing terminal host query reply");
         locked_writer
-            .write_all(physical_reply.as_ref())
+            .write_all(reply)
             .context("failed to write terminal host query reply")?;
     }
     locked_writer

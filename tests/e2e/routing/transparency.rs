@@ -10,6 +10,9 @@ mod exit_status;
 #[cfg(windows)]
 #[path = "transparency/object_format.rs"]
 mod object_format;
+#[cfg(windows)]
+#[path = "transparency/prompt_integrity.rs"]
+mod prompt_integrity;
 #[path = "transparency/redraw.rs"]
 mod redraw;
 #[test]

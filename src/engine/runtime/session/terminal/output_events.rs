@@ -23,7 +23,6 @@ impl OutputParser {
 }
 pub(super) enum OutputEvent {
     Capture(ProtocolEvent),
-    InputMode(bool),
     ScreenCheckpoint,
 }
 pub(super) enum ProtocolEvent {
@@ -37,16 +36,14 @@ struct Detector {
     event: Option<OutputEvent>,
 }
 impl Perform for Detector {
-    fn csi_dispatch(&mut self, params: &Params, intermediates: &[u8], ignore: bool, action: char) {
-        if !ignore
-            && intermediates == b"?"
-            && matches!(action, 'h' | 'l')
-            && params.iter().any(|param| param == [9001])
-        {
-            self.event = Some(OutputEvent::InputMode(action == 'h'));
-        } else {
-            self.event = Some(OutputEvent::ScreenCheckpoint);
-        }
+    fn csi_dispatch(
+        &mut self,
+        _params: &Params,
+        _intermediates: &[u8],
+        _ignore: bool,
+        _action: char,
+    ) {
+        self.event = Some(OutputEvent::ScreenCheckpoint);
     }
     fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, _byte: u8) {
         self.event = Some(OutputEvent::ScreenCheckpoint);

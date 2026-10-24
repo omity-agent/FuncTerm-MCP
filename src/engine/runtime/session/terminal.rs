@@ -22,7 +22,6 @@ pub(super) struct Terminal {
 struct TerminalState {
     screen: Arc<Mutex<CommandScreen>>,
     protocol: OutputParser,
-    win32_input: bool,
     captures: CaptureRegistry,
     visible_revision: u64,
     visible_contents: String,
@@ -44,7 +43,6 @@ impl Terminal {
             state: Mutex::new(TerminalState {
                 screen: Arc::new(Mutex::new(screen)),
                 protocol: OutputParser::new(),
-                win32_input: false,
                 captures: CaptureRegistry::new(model_title.to_owned()),
                 visible_revision: 0,
                 visible_contents,
@@ -76,7 +74,7 @@ impl Terminal {
     pub(super) fn model_title(&self) -> String {
         self.model_title.clone()
     }
-    pub(super) fn process(&self, chunk: &[u8], host: &HostProfile) -> Result<Vec<HostReply>> {
+    pub(super) fn process(&self, chunk: &[u8], host: &HostProfile) -> Result<Vec<Vec<u8>>> {
         let mut state = self.state.lock();
         let processed = (|| {
             let replies = state.process(chunk, host)?;
@@ -114,12 +112,8 @@ impl Terminal {
         }
     }
 }
-pub(super) struct HostReply {
-    bytes: Vec<u8>,
-    win32_input: bool,
-}
 impl TerminalState {
-    fn process(&mut self, chunk: &[u8], host: &HostProfile) -> Result<Vec<HostReply>> {
+    fn process(&mut self, chunk: &[u8], host: &HostProfile) -> Result<Vec<Vec<u8>>> {
         let mut replies = Vec::new();
         let mut remaining = chunk;
         while !remaining.is_empty() {
@@ -132,7 +126,6 @@ impl TerminalState {
                 .context("terminal event offset exceeds PTY output")?;
             self.process_screen(segment, host, &mut replies)?;
             match event {
-                Some(OutputEvent::InputMode(enabled)) => self.win32_input = enabled,
                 Some(OutputEvent::Capture(protocol_event)) => {
                     let title = self.screen.lock().parser.screen().title().to_owned();
                     self.captures.handle(protocol_event, &title)?;
@@ -147,17 +140,15 @@ impl TerminalState {
         &self,
         bytes: &[u8],
         host: &HostProfile,
-        replies: &mut Vec<HostReply>,
+        replies: &mut Vec<Vec<u8>>,
     ) -> Result<()> {
         let mut screen = self.screen.lock();
         screen.parser.process(bytes);
         for event in screen.parser.screen_mut().drain_events() {
             screen.observe(&event)?;
             if let Some(reply_bytes) = auto_reply_bytes(&event, host) {
-                replies.push(HostReply {
-                    bytes: reply_bytes,
-                    win32_input: self.win32_input,
-                });
+                tracing::debug!(?event, "terminal host query reply");
+                replies.push(reply_bytes);
             }
         }
         drop(screen);

@@ -5,18 +5,15 @@ use anyhow::{Result, bail};
 use core::time::Duration;
 use event_listener::Event;
 use parking_lot::Mutex;
-
 pub(in crate::engine::runtime::session) struct CommandCapture {
     state: Mutex<CaptureState>,
     changed: Event,
 }
-
 struct CaptureState {
     phase: CapturePhase,
     title: String,
     output: Option<RenderedOutput>,
 }
-
 #[derive(Clone, PartialEq, Eq)]
 enum CapturePhase {
     Pending,
@@ -24,7 +21,6 @@ enum CapturePhase {
     Finished,
     Failed(String),
 }
-
 impl CommandCapture {
     pub(super) fn new(
         initial: String,
@@ -40,7 +36,6 @@ impl CommandCapture {
             changed: Event::new(),
         }
     }
-
     pub(in crate::engine::runtime::session) fn current(&self) -> Result<String> {
         let state = self.state.lock();
         if let CapturePhase::Failed(message) = state.phase.clone() {
@@ -48,7 +43,6 @@ impl CommandCapture {
         }
         Ok(state.title.clone())
     }
-
     pub(in crate::engine::runtime::session) fn output(&self) -> Result<Option<String>> {
         self.state
             .lock()
@@ -57,7 +51,6 @@ impl CommandCapture {
             .map(RenderedOutput::contents)
             .transpose()
     }
-
     pub(in crate::engine::runtime::session) async fn wait_finished(&self) -> Result<String> {
         wait_until(&self.changed, Duration::MAX, || {
             Ok(!matches!(
@@ -68,7 +61,6 @@ impl CommandCapture {
         .await?;
         self.current()
     }
-
     pub(in crate::engine::runtime::session) fn cancel(&self) -> Result<String> {
         let mut state = self.state.lock();
         if let Some(output) = state.output.as_mut() {
@@ -78,7 +70,6 @@ impl CommandCapture {
         self.changed.notify(usize::MAX);
         Ok(state.title.clone())
     }
-
     pub(super) fn start(&self) -> Result<()> {
         let mut state = self.state.lock();
         if state.phase == CapturePhase::Pending {
@@ -90,14 +81,12 @@ impl CommandCapture {
         drop(state);
         Ok(())
     }
-
     pub(super) fn update(&self, title: &str) {
         let mut state = self.state.lock();
         if state.phase == CapturePhase::Active {
             title.clone_into(&mut state.title);
         }
     }
-
     pub(super) fn fail(&self, message: &str) {
         let mut state = self.state.lock();
         if state.phase != CapturePhase::Finished {

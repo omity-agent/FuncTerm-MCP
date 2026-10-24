@@ -6,12 +6,10 @@ use super::{
 use crate::support::{locked_with_env, temp_root};
 use alloc::rc::Rc;
 use rmcp::serde_json::{Value, json};
-
 #[cfg(windows)]
 const SHELL: &str = "powershell";
 #[cfg(unix)]
 const SHELL: &str = "bash";
-
 #[test]
 fn both_versions_share_tools_and_terminal_state_across_transports() {
     let daemon = Rc::new(locked_with_env(&[]));
@@ -89,7 +87,6 @@ fn both_versions_share_tools_and_terminal_state_across_transports() {
     }
     drop(daemon);
 }
-
 #[test]
 fn input_errors_follow_the_negotiated_protocol_on_both_transports() {
     let daemon = Rc::new(locked_with_env(&[]));

@@ -124,7 +124,7 @@ wait_timeout = "等待时长，单位为秒。时间结束后命令不会被终�
 
 [mcp.send_command.exec_parameters]
 tab_id = "每个 Tab 在同一时刻仅能有一份命令正在运行，Tab 繁忙时收到的命令会被丢弃。"
-command = "此中允许存在换行"
+command = "Single-line or multi-line commands"
 separate_output = "是否分别捕获 stdout 和 stderr。false 时保留终端句柄。"
 
 [mcp.view]

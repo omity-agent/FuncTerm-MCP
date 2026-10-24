@@ -2,13 +2,11 @@ use super::{capture::CommandCapture, output_events::ProtocolEvent, rendering::Co
 use alloc::{collections::BTreeMap, sync::Arc};
 use anyhow::{Result, bail};
 use parking_lot::Mutex;
-
 pub(super) struct CaptureRegistry {
     model_title: String,
     captures: BTreeMap<String, Arc<CommandCapture>>,
     active: Option<String>,
 }
-
 impl CaptureRegistry {
     pub(super) const fn new(model_title: String) -> Self {
         Self {
@@ -17,7 +15,6 @@ impl CaptureRegistry {
             active: None,
         }
     }
-
     pub(super) fn register(
         &mut self,
         id: &str,
@@ -35,7 +32,6 @@ impl CaptureRegistry {
         self.captures.insert(id.to_owned(), Arc::clone(&capture));
         Ok(capture)
     }
-
     pub(super) fn handle(&mut self, event: ProtocolEvent, screen_title: &str) -> Result<()> {
         match event {
             ProtocolEvent::Start(id) => {
@@ -50,7 +46,6 @@ impl CaptureRegistry {
             ProtocolEvent::Invalid(message) => bail!(message),
         }
     }
-
     pub(super) fn fail_all(&mut self, message: &str) {
         for capture in self.captures.values() {
             capture.fail(message);
@@ -58,7 +53,6 @@ impl CaptureRegistry {
         self.captures.clear();
         self.active = None;
     }
-
     fn start(&mut self, id: &str) -> Result<()> {
         if let Some(active) = self.active.as_deref() {
             bail!("command capture {id} started while {active} is active");
@@ -67,7 +61,6 @@ impl CaptureRegistry {
         self.active = Some(id.to_owned());
         Ok(())
     }
-
     fn finish(&mut self, id: &str) -> Result<()> {
         if let Some(active) = self.active.as_deref()
             && active != id
@@ -81,14 +74,12 @@ impl CaptureRegistry {
         }
         Ok(())
     }
-
     fn update(&self, title: &str) -> Result<()> {
         if let Some(id) = self.active.as_deref() {
             self.require(id)?.update(title);
         }
         Ok(())
     }
-
     fn require(&self, id: &str) -> Result<Arc<CommandCapture>> {
         self.captures
             .get(id)

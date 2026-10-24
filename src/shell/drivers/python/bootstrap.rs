@@ -36,24 +36,20 @@ if @VAR_startup_file@:
 	{profile}{protected_environment}{style}
 	@VAR_os@.chdir({cwd})
 	@VAR_os@.environ["FUNCTERM_CURRENT_SHELL"] = "python"
-
 	def @VAR_helper@(*@VAR_arguments@, capture=False):
 	    @VAR_helper_executable@ = @VAR_os@.environ["{HELPER_EXECUTABLE_ENV}"]
 	    return @VAR_subprocess@.run(
 	        [@VAR_helper_executable@, *@VAR_arguments@], check=True,
 	        capture_output=capture, text=capture, encoding="utf-8" if capture else None,
 	    ).stdout
-
 	def @VAR_prepend_shim@():
 	    @VAR_shim@ = @VAR_os@.environ["FUNCTERM_SHIM_DIR"]
 	    @VAR_path@ = @VAR_os@.environ.get("PATH", "")
 	    @VAR_entries@ = [@VAR_entry@ for @VAR_entry@ in @VAR_path@.split(@VAR_os@.pathsep) if @VAR_entry@ and @VAR_entry@ != @VAR_shim@]
 	    @VAR_os@.environ["PATH"] = @VAR_os@.pathsep.join([@VAR_shim@, *@VAR_entries@])
-
 	def @VAR_execute@(@VAR_source@, @VAR_namespace@):
 	    @VAR_tree@ = @VAR_ast@.parse(@VAR_source@, "<functerm>", "exec")
 	    exec(compile(@VAR_ast@.Interactive(@VAR_tree@.body), "<functerm>", "single"), @VAR_namespace@, @VAR_namespace@)
-
 	def _functerm_dispatch():
 	    @VAR_receipt@ = @VAR_json@.loads(@VAR_helper@(
 	        "internal-claim-command", "--session-root",
