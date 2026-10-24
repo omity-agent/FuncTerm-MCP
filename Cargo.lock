@@ -197,7 +197,7 @@ dependencies = [
  "lazy_static",
  "lazycell",
  "log",
- "prettyplease",
+ "prettyplease 0.2.37",
  "proc-macro2",
  "quote",
  "regex",
@@ -233,6 +233,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "bon"
+version = "3.10.3"
+source = "git+https://github.com/elastio/bon#ddf1b7b881a5a5a5651b7a3ca8ce07cf88e25ef5"
+dependencies = [
+ "bon-macros",
+]
+
+[[package]]
+name = "bon-macros"
+version = "3.10.3"
+source = "git+https://github.com/elastio/bon#ddf1b7b881a5a5a5651b7a3ca8ce07cf88e25ef5"
+dependencies = [
+ "darling",
+ "ident_case",
+ "prettyplease 0.3.0",
+ "proc-macro2",
+ "quote",
+ "syn 3.0.9",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -243,6 +264,15 @@ name = "bytes"
 version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
+
+[[package]]
+name = "bytestring"
+version = "1.5.1"
+source = "git+https://github.com/actix/actix-net#aaa2f0dcae04e484ddf91cac0eb35f530a532b22"
+dependencies = [
+ "bytes",
+ "serde_core",
+]
 
 [[package]]
 name = "cc"
@@ -639,6 +669,8 @@ dependencies = [
  "axum",
  "base64-turbo",
  "blake3",
+ "bon",
+ "bytestring",
  "clap",
  "dashmap",
  "encoding_rs",
@@ -683,6 +715,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "vte 0.15.0 (git+https://github.com/alacritty/vte)",
+ "wait-timeout",
  "which 8.0.6",
  "widestring",
  "windows 0.100.0",
@@ -1620,6 +1653,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "prettyplease"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2bfe0f4c752e450fc2faf62654f1c134747922825d5b04ca717b8874f41a40c0"
+dependencies = [
+ "proc-macro2",
+ "syn 3.0.9",
+]
+
+[[package]]
 name = "privdrop"
 version = "0.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2497,6 +2540,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
+ "futures-util",
  "libc",
  "pin-project-lite",
  "tokio",
@@ -2749,6 +2793,15 @@ source = "git+https://github.com/alacritty/vte#abeae765dd546dfff60b278f0757dcc71
 dependencies = [
  "arrayvec",
  "memchr",
+]
+
+[[package]]
+name = "wait-timeout"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09ac3b126d3914f9849036f826e054cbabdc8519970b8998ddaf3b5bd3c65f11"
+dependencies = [
+ "libc",
 ]
 
 [[package]]

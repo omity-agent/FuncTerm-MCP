@@ -2,15 +2,13 @@ use anyhow::{Context as _, Result};
 use core::time::Duration;
 #[cfg(not(windows))]
 use kill_tree::{Config, blocking::kill_tree_with_config};
-#[cfg(windows)]
 use std::io::Read;
 #[cfg(windows)]
 use std::os::windows::io::{AsRawHandle as _, FromRawHandle as _, OwnedHandle};
-use std::process::{Child, Command, ExitStatus, Output};
-#[cfg(windows)]
+use std::process::{Child, Command, ExitStatus};
 use std::sync::mpsc;
 use std::thread;
-use std::time::Instant;
+use wait_timeout::ChildExt as _;
 pub(crate) struct ChildGuard {
     child: Child,
     #[cfg(windows)]
@@ -102,20 +100,12 @@ pub(crate) fn wait_for_status(
     timeout: Duration,
     description: &str,
 ) -> ExitStatus {
-    let start = Instant::now();
-    loop {
-        if let Some(status) = child.try_wait().unwrap() {
-            return status;
-        }
-        if start.elapsed() >= timeout {
-            child.kill().unwrap();
-            let status = child.wait().unwrap();
-            panic!("CLI command {description} timed out after {timeout:?} with status {status}");
-        }
-        thread::sleep(Duration::from_millis(50));
-    }
+    child.wait_timeout(timeout).unwrap().unwrap_or_else(|| {
+        child.kill().unwrap();
+        let status = child.wait().unwrap();
+        panic!("CLI command {description} timed out after {timeout:?} with status {status}");
+    })
 }
-#[cfg(windows)]
 pub(crate) fn read_pipe(mut pipe: impl Read + Send + 'static) -> mpsc::Receiver<Vec<u8>> {
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
@@ -124,15 +114,4 @@ pub(crate) fn read_pipe(mut pipe: impl Read + Send + 'static) -> mpsc::Receiver<
         sender.send(bytes).unwrap();
     });
     receiver
-}
-pub(crate) const fn output_from_parts(
-    status: ExitStatus,
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
-) -> Output {
-    Output {
-        status,
-        stdout,
-        stderr,
-    }
 }

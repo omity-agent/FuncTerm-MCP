@@ -131,13 +131,7 @@ function prompt {{
 fn assert_success(tab_id: &str, command: &str) -> CommandResult {
     let result = parse_command_result(&send_command(tab_id, command, 10.0));
     assert!(result.finished, "{}", result.stderr);
-    assert_eq!(
-        result.exit_code,
-        Some(0_i32),
-        "stdout: {}\nstderr: {}",
-        result.stdout,
-        result.stderr
-    );
+    assert_eq!(result.exit_code, Some(0_i32), "{result:?}");
     assert!(result.stderr.is_empty(), "{}", result.stderr);
     result
 }

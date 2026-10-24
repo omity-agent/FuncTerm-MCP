@@ -1,3 +1,4 @@
+use bytestring::ByteString;
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, ValueEnum, Deserialize)]
@@ -13,8 +14,13 @@ impl OutputMode {
 }
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) enum CommandOutput {
-    Separated { stdout: String, stderr: String },
-    Terminal { output: String },
+    Separated {
+        stdout: ByteString,
+        stderr: ByteString,
+    },
+    Terminal {
+        output: ByteString,
+    },
 }
 #[derive(Debug, Serialize, rmcp::schemars::JsonSchema)]
 #[serde(untagged)]
@@ -32,7 +38,7 @@ impl CommandOutput {
         clippy::pattern_type_mismatch,
         reason = "borrow output buffers without cloning or ref bindings"
     )]
-    pub(crate) const fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         match self {
             Self::Separated { stdout, stderr } => stdout.is_empty() && stderr.is_empty(),
             Self::Terminal { output } => output.is_empty(),

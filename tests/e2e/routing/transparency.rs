@@ -27,12 +27,7 @@ fn terminal_mode_preserves_tty_and_switches_back_to_separated_output() {
         let tab = create_tab(&directory, shell);
         let query = tty_query(shell);
         let separated = parse_command_result(&send_command(&tab.tab_id, &query, 10.0));
-        assert_eq!(
-            separated.exit_code,
-            Some(0_i32),
-            "{shell}: {}",
-            separated.stderr
-        );
+        assert_eq!(separated.exit_code, Some(0_i32), "{shell}: {separated:?}");
         let direct = run_terminal(&tab.tab_id, &query, "10");
         let text = checked_text(&direct);
         let output = terminal_output(&text);
@@ -45,17 +40,9 @@ fn terminal_mode_preserves_tty_and_switches_back_to_separated_output() {
         assert!(!text.contains("<STDERR>"), "{shell}: {text}");
         assert!(text.contains("<EXIT_CODE>\n0\n"), "{shell}: {text}");
         let next = parse_command_result(&send_command(&tab.tab_id, &query, 10.0));
-        assert_eq!(next.exit_code, Some(0_i32), "{shell}: {}", next.stderr);
-        assert!(
-            next.stdout.contains("TTY_STATE"),
-            "{shell}: {}",
-            next.stdout
-        );
-        assert!(
-            next.stderr.contains("TERMINAL_ERROR"),
-            "{shell}: {}",
-            next.stderr
-        );
+        assert_eq!(next.exit_code, Some(0_i32), "{shell}: {next:?}");
+        assert!(next.stdout.contains("TTY_STATE"), "{shell}: {next:?}");
+        assert!(next.stderr.contains("TERMINAL_ERROR"), "{shell}: {next:?}");
         let saved = run_cli(&["view", &parse_command_id(&direct)]);
         assert_eq!(terminal_output(&checked_text(&saved)), output, "{shell}");
         assert!(

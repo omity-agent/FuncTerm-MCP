@@ -1,81 +1,65 @@
 use super::{
     execution::create_tabs,
-    wire::{McpSession, entries},
+    wire::{McpSession, assert_field, entries, text},
 };
-use rmcp::serde_json::{Value, json};
+use rmcp::serde_json::json;
 #[test]
 fn mcp_manual_write_delivers_text_and_bytes_to_distinct_tabs() {
     let mut session = McpSession::new();
     let [first, second] = create_tabs(&mut session);
-    let idle = session . call ("manual_write" , json ! ({ "exec" : [{ "tab_id" : first , "text" : "UNEXPECTED" }] , "wait_timeout" : 0_u64 }) ,) ;
+    let idle = session.call(
+        "manual_write",
+        json!({
+            "exec": [{"tab_id": first, "text": "UNEXPECTED"}], "wait_timeout": 0_u64
+        }),
+    );
     assert!(
-        entries(&idle)
-            .first()
-            .unwrap()
-            .get("error")
-            .and_then(Value::as_str)
-            .unwrap()
-            .contains("prompt is idle"),
+        text(entries(&idle).first().unwrap(), "/error").contains("prompt is idle"),
         "{idle}"
     );
     #[cfg(windows)]
-    let command = "$line = [Console]::In.ReadLine()\nWrite-Output \"RECEIVED_$line\"";
+    let source = "$line = [Console]::In.ReadLine()\nWrite-Output \"RECEIVED_$line\"";
     #[cfg(not(windows))]
-    let command = "read -r line\nprintf 'RECEIVED_%s\\n' \"$line\"";
+    let source = "read -r line\nprintf 'RECEIVED_%s\\n' \"$line\"";
     let pending = session.call(
         "send_command",
         json!({
             "exec": [
-                {"tab_id": first, "command": command, "separate_output": true},
-                {"tab_id": second, "command": command, "separate_output": true}
-            ],
-            "wait_timeout": 0_u64
+                {"tab_id": first, "command": source, "separate_output": true},
+                {"tab_id": second, "command": source, "separate_output": true}
+            ], "wait_timeout": 0_u64
         }),
     );
-    let busy = session . call ("send_command" , json ! ({ "exec" : [{ "tab_id" : first , "command" : "echo UNEXPECTED" }] , "wait_timeout" : 0_u64 }) ,) ;
+    let busy = session.execute(&first, "echo UNEXPECTED", true, 0.0);
     assert!(
         entries(&busy).first().unwrap().get("error").is_some(),
         "{busy}"
     );
-    let ids: Vec<_> = entries(&pending)
+    let ids = entries(&pending)
         .iter()
-        .map(|entry| {
-            entry
-                .pointer("/result/command/command_id")
-                .and_then(Value::as_str)
-                .unwrap()
-        })
-        .collect();
-    let written = session . call ("manual_write" , json ! ({ "exec" : [{ "tab_id" : first , "text" : "FIRST\r\n" } , { "tab_id" : second , "bytes" : b"SECOND\r\n" . to_vec () }] , "wait_timeout" : 2_u64 })) ;
+        .map(|entry| text(entry, "/result/command/command_id"))
+        .collect::<Vec<_>>();
+    let written = session.call("manual_write", json!({
+        "exec": [{"tab_id": first, "text": "FIRST\r\n"}, {"tab_id": second, "bytes": b"SECOND\r\n".to_vec()}], "wait_timeout": 2_u64
+    }));
     assert_eq!(entries(&written).len(), 2);
-    assert_eq!(super::boundaries::text_documents(&written).len(), 2);
+    super::boundaries::text_documents(&written);
     assert!(
         entries(&written)
             .iter()
             .all(|entry| entry.pointer("/result/screen").is_some()),
         "{written}"
     );
-    let completed = session.call("view", json ! ({ "ids" : ids , "wait_timeout" : 5_u64 }));
+    let completed = session.view(&ids, 1, 5.0);
     for (entry, expected) in entries(&completed)
         .iter()
         .zip(["RECEIVED_FIRST", "RECEIVED_SECOND"])
     {
-        assert_eq!(
-            entry.pointer("/result/command/finished"),
-            Some(&json!(true))
-        );
-        assert_eq!(
-            entry.pointer("/result/command/exit_code"),
-            Some(&json!(0_i32))
-        );
+        assert_field(entry, "/result/command/finished", true);
+        assert_field(entry, "/result/command/exit_code", 0_i32);
         assert!(
-            entry
-                .pointer("/result/command/stdout")
-                .and_then(Value::as_str)
-                .unwrap()
-                .contains(expected),
+            text(entry, "/result/command/stdout").contains(expected),
             "{completed}"
         );
     }
-    drop(session);
 }

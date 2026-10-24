@@ -1,7 +1,12 @@
 extern crate alloc;
+#[path = "replies.rs"]
+mod replies;
 use crate::support::{TestGuard, locked_with_env};
 use alloc::rc::Rc;
 use core::time::Duration;
+pub(super) use replies::{
+    assert_field, assert_rejected, assert_saved, command_result, entries, field, result, text,
+};
 use rmcp::serde_json::{Value, json};
 use std::{
     io::{BufRead as _, BufReader, Write as _},
@@ -18,12 +23,12 @@ pub(super) struct McpSession {
 }
 impl McpSession {
     pub(super) fn new() -> Self {
-        Self::with_arguments(&["--no-profile"])
-    }
-    pub(super) fn with_arguments(arguments: &[&str]) -> Self {
         let daemon = Rc::new(locked_with_env(&[]));
+        Self::on(&daemon, &["--no-profile"])
+    }
+    pub(super) fn on(daemon: &Rc<TestGuard>, arguments: &[&str]) -> Self {
         let environment = daemon.env();
-        Self::with_context(daemon, arguments, &environment)
+        Self::with_context(Rc::clone(daemon), arguments, &environment)
     }
     pub(super) fn with_context(
         daemon: Rc<TestGuard>,
@@ -87,12 +92,7 @@ impl McpSession {
     }
     pub(super) fn request(&mut self, method: &str, params: Value) -> Value {
         self.sequence += 1;
-        let mut message =
-            json ! ({ "jsonrpc" : "2.0" , "id" : self . sequence , "method" : method });
-        message
-            .as_object_mut()
-            .unwrap()
-            .insert("params".to_owned(), params);
+        let message = request_message(method, params, self.sequence);
         self.send(&message);
         loop {
             let response = self
@@ -105,17 +105,41 @@ impl McpSession {
         }
     }
     pub(super) fn call(&mut self, name: &str, arguments: Value) -> Value {
-        let mut params = json ! ({ "name" : name });
-        params
-            .as_object_mut()
-            .unwrap()
-            .insert("arguments".to_owned(), arguments);
-        self.request("tools/call", params)
+        self.request("tools/call", tool_arguments(name, arguments))
+    }
+    pub(super) fn execute(&mut self, tab: &str, source: &str, separate: bool, wait: f64) -> Value {
+        self.call(
+            "send_command",
+            json!({
+                "exec": [{"tab_id": tab, "command": source, "separate_output": separate}],
+                "wait_timeout": wait
+            }),
+        )
+    }
+    pub(super) fn view(&mut self, ids: &[&str], start: usize, wait: f64) -> Value {
+        self.call(
+            "view",
+            json!({"ids": ids, "start_token": start, "wait_timeout": wait}),
+        )
     }
     fn send(&mut self, message: &Value) {
         writeln!(self.input, "{message}").unwrap();
         self.input.flush().unwrap();
     }
+}
+pub(super) fn request_message(method: &str, params: Value, sequence: u64) -> Value {
+    Value::Object(rmcp::serde_json::Map::from_iter([
+        ("jsonrpc".to_owned(), "2.0".into()),
+        ("id".to_owned(), sequence.into()),
+        ("method".to_owned(), method.into()),
+        ("params".to_owned(), params),
+    ]))
+}
+pub(super) fn tool_arguments(name: &str, arguments: Value) -> Value {
+    Value::Object(rmcp::serde_json::Map::from_iter([
+        ("name".to_owned(), name.into()),
+        ("arguments".to_owned(), arguments),
+    ]))
 }
 impl Drop for McpSession {
     fn drop(&mut self) {
@@ -124,17 +148,4 @@ impl Drop for McpSession {
         }
         self.child.wait().unwrap();
     }
-}
-pub(super) fn entries(response: &Value) -> &Vec<Value> {
-    response
-        .pointer("/result/structuredContent/results")
-        .and_then(Value::as_array)
-        .unwrap_or_else(|| panic!("missing batch results: {response}"))
-}
-pub(super) fn assert_rejected(response: &Value) {
-    assert!(
-        response.get("error").is_some()
-            || response.pointer("/result/isError") == Some(&Value::Bool(true)),
-        "{response}"
-    );
 }

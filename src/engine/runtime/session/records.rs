@@ -7,9 +7,9 @@ use crate::contract::{
 use crate::runtime::protocol::{CommandOutput, CommandSnapshot, CommandView, OutputTokenizer};
 use crate::shell::ShellChoice;
 use anyhow::{Context as _, Result, bail};
+use bytestring::ByteString;
 use core::time::Duration;
 use fs_err as fs;
-use serde::Deserialize;
 use std::path::{Path, PathBuf};
 #[derive(Clone)]
 pub(super) struct CommandRecord {
@@ -23,11 +23,15 @@ pub(super) struct CommandRecord {
     pub(super) done: PathBuf,
     pub(super) released: PathBuf,
 }
-#[derive(Deserialize)]
-pub(super) struct DoneFile {
-    pub(super) exit_code: i32,
-    pub(super) time_consumption: String,
-    pub(super) cwd: String,
+pub(super) type DoneFile = crate::contract::CommandCompletion<String>;
+pub(super) fn lifecycle_event(event: &notify::Event) -> bool {
+    event.paths.iter().any(|path| {
+        path.parent().and_then(Path::file_name)
+            == Some(std::ffi::OsStr::new(COMMAND_STATE_DIRECTORY))
+            && [STARTED_FILE, DONE_FILE, RELEASED_FILE]
+                .iter()
+                .any(|name| path.file_name() == Some(std::ffi::OsStr::new(name)))
+    })
 }
 pub(super) fn create_record(
     command_root: &Path,
@@ -80,8 +84,9 @@ pub(super) fn read_command_result(
     record: &CommandRecord,
     observed_time_consumption: Duration,
     title: String,
-    terminal_output: Option<String>,
+    terminal_output: Option<ByteString>,
     tokenizer: &OutputTokenizer,
+    done: Option<&DoneFile>,
 ) -> Result<CommandSnapshot> {
     let output = match terminal_output {
         Some(output) => CommandOutput::Terminal { output },
@@ -90,8 +95,7 @@ pub(super) fn read_command_result(
             stderr: read_plain_output(&record.stderr)?,
         },
     };
-    let done = read_done(&record.done)?;
-    let exit_code = done.as_ref().map(|file| file.exit_code);
+    let exit_code = done.map(|file| file.exit_code);
     let finished = done.is_some();
     let measured_time_consumption = done.map_or(Ok(observed_time_consumption), |file| {
         humantime::parse_duration(&file.time_consumption)
@@ -136,13 +140,15 @@ pub(super) fn command_note(output: &CommandOutput, extra: &str) -> String {
     }
     lines.join("\n")
 }
-fn read_plain_output(path: &Path) -> Result<String> {
+fn read_plain_output(path: &Path) -> Result<ByteString> {
     let Some(bytes) = read_if_present(path, "file")? else {
-        return Ok(String::new());
+        return Ok(ByteString::new());
     };
     let text =
         decode_text(&bytes).with_context(|| format!("failed to decode {}", path.display()))?;
-    Ok(fast_strip_ansi::strip_ansi_string(&text).into_owned())
+    Ok(fast_strip_ansi::strip_ansi_string(&text)
+        .into_owned()
+        .into())
 }
 fn decode_text(bytes: &[u8]) -> Result<String> {
     let encoding = encoding_rs::Encoding::for_bom(bytes)

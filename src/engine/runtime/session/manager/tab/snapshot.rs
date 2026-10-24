@@ -1,9 +1,10 @@
 use super::super::shell_session::ShellSession;
 use crate::runtime::protocol::{ShellView, ViewResult};
 use anyhow::Result;
+use bytestring::ByteString;
 #[derive(Clone)]
 pub(in crate::engine::runtime::session::manager) struct TabSnapshot {
-    pub(super) screen: String,
+    pub(super) screen: ByteString,
     cwd: String,
     title: String,
     shell_type: crate::shell::ShellChoice,
@@ -14,7 +15,7 @@ impl TabSnapshot {
         let cwd = crate::text::path_text(&session.cwd(), "cwd")?;
         let current_screen = session.screen_contents();
         let screen = if current_screen.is_empty() {
-            cwd.clone()
+            cwd.clone().into()
         } else {
             current_screen
         };

@@ -1,5 +1,3 @@
-#[path = "harness/capacity.rs"]
-mod capacity;
 #[path = "harness/command_runner.rs"]
 mod command;
 #[path = "harness/daemon_process.rs"]
@@ -15,8 +13,6 @@ mod temp;
 #[path = "harness/isolation.rs"]
 mod test_environment;
 pub(crate) use command::run_cli_with_env;
-#[cfg(windows)]
-pub(crate) use command::run_cli_with_pipes;
 pub(crate) use command::{create_tab, create_tab_with_env, manual_write, run_cli, send_command};
 #[cfg(windows)]
 pub(crate) use daemon::locked;

@@ -1,57 +1,40 @@
-use super::matrix::{ShellCase, case_dir, required_executable, shell_cases};
-use crate::support::{create_tab, locked_with_env, parse_command_result, send_command};
-const REPL_CASES: [ShellCase; 2] = [
-    ShellCase {
-        name: "python",
-        env_var: "FUNCTERM_PYTHON",
-        executables: &["python3", "python", "python3.exe", "python.exe"],
-        expected_exit_code: 0,
-    },
-    ShellCase {
-        name: "bun",
-        env_var: "FUNCTERM_BUN",
-        executables: &["bun", "bun.exe"],
-        expected_exit_code: 0,
-    },
-];
+use super::matrix::{case_dir, shell_cases};
+use crate::support::{create_tab, parse_command_result, send_command};
 #[test]
 fn cli_recovers_after_shell_environment_is_cleared() {
-    for case in shell_cases().iter().chain(&REPL_CASES) {
-        assert_recovers(case);
+    let _guard = super::matrix::daemon();
+    for shell in shell_cases()
+        .iter()
+        .map(|case| case.name)
+        .chain(["python", "bun"])
+    {
+        assert_recovers(shell);
     }
 }
-fn assert_recovers(case: &ShellCase) {
-    let executable = required_executable(case);
-    let _guard = locked_with_env(&[(case.env_var, &executable)]);
-    let directory = case_dir(case.name, "cleared environment");
-    let created = create_tab(&directory, case.name);
+fn assert_recovers(shell: &str) {
+    let directory = case_dir(shell, "cleared environment");
+    let created = create_tab(&directory, shell);
     let cleared = parse_command_result(&send_command(
         &created.tab_id,
-        clear_environment_command(case.name),
+        clear_environment_command(shell),
         10.0,
     ));
+    assert!(cleared.finished, "{shell}: {cleared:?}");
+    assert_eq!(cleared.exit_code, Some(0_i32), "{shell}: {cleared:?}");
     assert!(
-        cleared.finished
-            && cleared.exit_code == Some(0_i32)
-            && cleared.stdout.contains("MCP_PTY_ENVIRONMENT_CLEARED"),
-        "{} did not finish after clearing its environment: stdout: {}\nstderr: {}",
-        case.name,
-        cleared.stdout,
-        cleared.stderr
+        cleared.stdout.contains("MCP_PTY_ENVIRONMENT_CLEARED"),
+        "{cleared:?}"
     );
     let next = parse_command_result(&send_command(
         &created.tab_id,
-        plain_marker_command(case.name),
+        plain_marker_command(shell),
         10.0,
     ));
+    assert!(next.finished, "{shell}: {next:?}");
+    assert_eq!(next.exit_code, Some(0_i32), "{shell}: {next:?}");
     assert!(
-        next.finished
-            && next.exit_code == Some(0_i32)
-            && next.stdout.contains("MCP_PTY_ENVIRONMENT_RECOVERED"),
-        "{} did not recover after clearing its environment: stdout: {}\nstderr: {}",
-        case.name,
-        next.stdout,
-        next.stderr
+        next.stdout.contains("MCP_PTY_ENVIRONMENT_RECOVERED"),
+        "{next:?}"
     );
     assert!(!directory.join("state").join("done.json").exists());
 }

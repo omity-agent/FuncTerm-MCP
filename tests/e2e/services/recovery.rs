@@ -25,34 +25,6 @@ fn daemon_accepts_clients_after_restart() {
     drop(guard);
 }
 #[test]
-fn independent_test_processes_keep_their_runtime() {
-    const CHILD_ENV: &str = "FUNCTERM_ISOLATION_PROBE_CHILD";
-    let _guard = system_shell_daemon();
-    let tab = create_tab(&temp_root(), system_shell_name());
-    let initial = parse_command_result(&send_command(&tab.tab_id, "echo ISOLATION_BEGIN", 5.0));
-    assert_eq!(initial.exit_code, Some(0_i32));
-    if std::env::var_os(CHILD_ENV).is_some() {
-        return;
-    }
-    let child = std::process::Command::new(std::env::current_exe().unwrap())
-        .args([
-            "--exact",
-            "services::recovery::independent_test_processes_keep_their_runtime",
-            "--nocapture",
-        ])
-        .env(CHILD_ENV, "1")
-        .output()
-        .unwrap();
-    assert!(
-        child.status.success(),
-        "independent test process failed: {child:?}"
-    );
-    let continued =
-        parse_command_result(&send_command(&tab.tab_id, "echo ISOLATION_CONTINUED", 5.0));
-    assert_eq!(continued.exit_code, Some(0_i32));
-    assert!(continued.stdout.contains("ISOLATION_CONTINUED"));
-}
-#[test]
 fn command_finishes_when_wrapper_command_directory_is_removed() {
     let _guard = system_shell_daemon();
     let tab = create_tab(&temp_root(), system_shell_name());

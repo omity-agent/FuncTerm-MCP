@@ -11,7 +11,7 @@ pub(crate) const QUERY: &str = "[Security.Principal.WindowsPrincipal]::new([Secu
 #[cfg(unix)]
 pub(crate) const QUERY: &str = "printf '%s\\n' \"$EUID\"";
 #[test]
-fn cli_tab_defaults_to_normal_permissions() {
+fn cli_tabs_default_to_normal_and_require_daemon_permission_for_elevation() {
     let _guard = locked_with_env(&[]);
     let directory = temp_dir("normal-permissions");
     let tab = create_tab(&directory, SHELL);
@@ -21,11 +21,6 @@ fn cli_tab_defaults_to_normal_permissions() {
             .status
             .success()
     );
-}
-#[test]
-fn cli_elevated_tab_requires_daemon_permissions() {
-    let _guard = locked_with_env(&[]);
-    let directory = temp_dir("administrator-permissions");
     let output = run_cli(&[
         "new-tab",
         "--no-profile",
@@ -37,10 +32,10 @@ fn cli_elevated_tab_requires_daemon_permissions() {
     ]);
     if daemon_privileged() {
         assert!(output.status.success(), "{output:?}");
-        let tab = parse_tab_created(&output);
-        assert_tab_permission(&tab.tab_id, true);
+        let elevated = parse_tab_created(&output);
+        assert_tab_permission(&elevated.tab_id, true);
         assert!(
-            run_cli(&["close", "--tab-id", &tab.tab_id])
+            run_cli(&["close", "--tab-id", &elevated.tab_id])
                 .status
                 .success()
         );

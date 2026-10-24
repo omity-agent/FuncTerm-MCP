@@ -16,13 +16,8 @@ pub(super) fn start_runtime(label: &str) -> (TestGuard, PathBuf, &'static str) {
     let guard = locked_with_env(&environment);
     (guard, temp_dir(label), parent_shell())
 }
-#[cfg(windows)]
 const fn parent_shell() -> &'static str {
-    "powershell"
-}
-#[cfg(not(windows))]
-const fn parent_shell() -> &'static str {
-    "bash"
+    if cfg!(windows) { "powershell" } else { "bash" }
 }
 pub(super) fn pipe_command(parent: &str, source: &str, target: &str) -> String {
     match parent {
@@ -54,11 +49,7 @@ pub(super) fn assert_parent(tab_id: &str, parent: &str) {
         "parent shell changed: {text}"
     );
     let result = parse_command_result(&send_command(tab_id, parent_marker(parent), 10.0));
-    assert!(result.finished, "parent marker should finish");
-    assert_eq!(result.exit_code, Some(0_i32), "stderr: {}", result.stderr);
-    assert!(
-        result.stdout.contains("PARENT_CONTINUED"),
-        "stdout: {}",
-        result.stdout
-    );
+    assert!(result.finished, "{result:?}");
+    assert_eq!(result.exit_code, Some(0_i32), "{result:?}");
+    assert!(result.stdout.contains("PARENT_CONTINUED"), "{result:?}");
 }

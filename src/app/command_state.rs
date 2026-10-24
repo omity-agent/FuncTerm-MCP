@@ -1,6 +1,5 @@
 use anyhow::{Context as _, Result, bail};
 use core::time::Duration;
-use serde::Serialize;
 use std::io::Write;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -17,13 +16,7 @@ pub(crate) fn time_millis() -> Result<String> {
         .as_millis();
     Ok(rounded.to_string())
 }
-#[derive(Serialize)]
-pub(crate) struct DoneOutput<'value> {
-    pub(crate) command_id: &'value str,
-    pub(crate) exit_code: i32,
-    pub(crate) time_consumption: &'value str,
-    pub(crate) cwd: &'value str,
-}
+pub(crate) type DoneOutput<'value> = crate::contract::CommandCompletion<&'value str>;
 pub(crate) fn write_start(command_id: &str, directory: &Path, model_title: &str) -> Result<()> {
     let mut terminal = crate::shim::terminal_output()?;
     restore_model_title(&mut terminal, model_title)?;

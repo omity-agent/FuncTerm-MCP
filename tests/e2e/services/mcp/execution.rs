@@ -1,23 +1,33 @@
-use super::wire::{McpSession, entries};
+use super::wire::{McpSession, assert_field, entries, text};
 use core::time::Duration;
-use rmcp::serde_json::{Value, json};
+use rmcp::serde_json::json;
 use std::time::Instant;
 #[cfg(windows)]
 pub(super) const SHELL: &str = "powershell";
 #[cfg(not(windows))]
 pub(super) const SHELL: &str = "bash";
-pub(super) fn create_tabs(session: &mut McpSession) -> [String; 2] {
-    let response = session . call ("new_tab" , json ! ({ "exec" : [{ "starting_shell" : SHELL } , { "starting_shell" : SHELL , "starting_directory" : crate :: support :: temp_root () }] })) ;
+pub(super) fn create_tabs<const N: usize>(session: &mut McpSession) -> [String; N] {
+    let exec = (0..N)
+        .map(|index| {
+            if index == 0 {
+                json!({"starting_shell": SHELL})
+            } else {
+                json!({"starting_shell": SHELL, "starting_directory": crate::support::temp_root()})
+            }
+        })
+        .collect::<Vec<_>>();
+    let response = session.call("new_tab", json!({"exec": exec}));
     let created = entries(&response);
-    assert_eq!(created.len(), 2);
+    assert_eq!(created.len(), N);
+    super::boundaries::text_documents(&response);
     core::array::from_fn(|index| {
-        created
-            .get(index)
-            .unwrap_or_else(|| panic!("tab index should exist"))
-            .pointer("/result/tab_id")
-            .and_then(Value::as_str)
-            .unwrap_or_else(|| panic!("tab creation failed: {response}"))
-            .to_owned()
+        text(
+            created
+                .get(index)
+                .unwrap_or_else(|| panic!("missing tab {index}: {response}")),
+            "/result/tab_id",
+        )
+        .to_owned()
     })
 }
 #[test]
@@ -32,128 +42,67 @@ fn mcp_batch_preserves_order_and_isolates_errors() {
                 {"tab_id": first, "command": "echo FIRST_BATCH_RESULT", "separate_output": true},
                 {"tab_id": "missing", "command": "echo UNUSED", "separate_output": true},
                 {"tab_id": second, "command": "echo LAST_BATCH_RESULT", "separate_output": true}
-            ],
-            "wait_timeout": 5_u64
+            ], "wait_timeout": 5_u64
         }),
     );
     let results = entries(&response);
     assert_eq!(results.len(), 3);
-    let content = response
-        .pointer("/result/content")
-        .and_then(Value::as_array)
-        .unwrap();
-    assert_eq!(content.len(), 3);
-    assert!(content.iter().all(|block| {
-        !block
-            .get("text")
-            .and_then(Value::as_str)
-            .unwrap()
-            .starts_with("exec[")
-    }));
+    let documents = super::boundaries::text_documents(&response);
+    assert!(documents.iter().all(|block| !block.starts_with("exec[")));
     assert!(
-        results
-            .first()
-            .unwrap()
-            .pointer("/result/command/stdout")
-            .and_then(Value::as_str)
-            .unwrap()
-            .contains("FIRST_BATCH_RESULT")
+        text(results.first().unwrap(), "/result/command/stdout").contains("FIRST_BATCH_RESULT")
     );
     assert!(
         results
             .get(1)
-            .unwrap_or_else(|| panic!("middle result should exist"))
-            .get("error")
-            .is_some()
+            .is_some_and(|entry| entry.get("error").is_some())
     );
-    assert!(
-        results
-            .last()
-            .unwrap()
-            .pointer("/result/command/stdout")
-            .and_then(Value::as_str)
-            .unwrap()
-            .contains("LAST_BATCH_RESULT")
-    );
-    let viewed = session.call(
-        "view",
-        json ! ({ "ids" : [first , second] , "wait_timeout" : 0_u64 }),
-    );
+    assert!(text(results.last().unwrap(), "/result/command/stdout").contains("LAST_BATCH_RESULT"));
+    let viewed = session.view(&[&first, &second], 1, 0.0);
     assert!(
         entries(&viewed)
             .iter()
             .all(|entry| entry.pointer("/result/screen").is_some())
     );
-    let written = session . call ("manual_write" , json ! ({ "exec" : [{ "tab_id" : first , "text" : "x" , "bytes" : [120_u8] } , { "tab_id" : second }] , "wait_timeout" : 0_u64 })) ;
+    let written = session.call("manual_write", json!({
+        "exec": [{"tab_id": first, "text": "x", "bytes": [120_u8]}, {"tab_id": second}], "wait_timeout": 0_u64
+    }));
     let errors = entries(&written);
-    assert!(
-        errors
-            .first()
-            .unwrap()
-            .get("error")
-            .and_then(Value::as_str)
-            .unwrap()
-            .contains("cannot be provided together")
-    );
-    assert!(
-        errors
-            .last()
-            .unwrap()
-            .get("error")
-            .and_then(Value::as_str)
-            .unwrap()
-            .contains("either text or bytes")
-    );
-    drop(session);
+    assert!(text(errors.first().unwrap(), "/error").contains("cannot be provided together"));
+    assert!(text(errors.last().unwrap(), "/error").contains("either text or bytes"));
 }
 #[test]
 fn mcp_wait_budget_is_shared_and_timeout_does_not_cancel_commands() {
     let mut session = McpSession::new();
     let [first, second] = create_tabs(&mut session);
     #[cfg(windows)]
-    let command = "Start-Sleep -Seconds 4\nWrite-Output BATCH_FINISHED";
+    let source = "Start-Sleep -Seconds 4\nWrite-Output BATCH_FINISHED";
     #[cfg(not(windows))]
-    let command = "sleep 4\necho BATCH_FINISHED";
+    let source = "sleep 4\necho BATCH_FINISHED";
     let started = Instant::now();
     let response = session.call(
         "send_command",
         json!({
             "exec": [
-                {"tab_id": first, "command": command, "separate_output": true},
-                {"tab_id": second, "command": command, "separate_output": true}
-            ],
-            "wait_timeout": 1.5_f64
+                {"tab_id": first, "command": source, "separate_output": true},
+                {"tab_id": second, "command": source, "separate_output": true}
+            ], "wait_timeout": 1.5_f64
         }),
     );
     assert!(
         started.elapsed() < Duration::from_millis(2800),
         "{response}"
     );
-    let mut ids = Vec::new();
-    for entry in entries(&response) {
-        assert_eq!(
-            entry.pointer("/result/command/finished"),
-            Some(&json!(false))
-        );
-        let id = entry
-            .pointer("/result/command/command_id")
-            .and_then(Value::as_str)
-            .unwrap();
-        ids.push(id);
-    }
-    let completed = session.call("view", json ! ({ "ids" : ids , "wait_timeout" : 8_u64 }));
+    let ids = entries(&response)
+        .iter()
+        .map(|entry| {
+            assert_field(entry, "/result/command/finished", false);
+            text(entry, "/result/command/command_id")
+        })
+        .collect::<Vec<_>>();
+    let completed = session.view(&ids, 1, 8.0);
     for entry in entries(&completed) {
-        assert_eq!(
-            entry.pointer("/result/command/finished"),
-            Some(&json!(true))
-        );
-        assert!(
-            entry
-                .pointer("/result/command/stdout")
-                .and_then(Value::as_str)
-                .unwrap()
-                .contains("BATCH_FINISHED")
-        );
+        assert_field(entry, "/result/command/finished", true);
+        assert!(text(entry, "/result/command/stdout").contains("BATCH_FINISHED"));
     }
-    drop(session);
 }

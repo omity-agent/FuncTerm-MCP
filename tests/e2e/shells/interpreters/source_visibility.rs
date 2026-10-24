@@ -113,6 +113,11 @@ fn bun_native_commands_keep_working_without_terminal_source_echo() {
             .unwrap()
             .contains(definition)
     );
+    assert!(
+        !fs::read_to_string(cwd.join("saved.js"))
+            .unwrap()
+            .contains("await f()")
+    );
     let loaded = submit(&tab.tab_id, ".load loaded.js", false, "10");
     let loaded_text = result_text(&loaded, false);
     assert!(loaded_text.contains("42"), "{loaded_text}");
@@ -122,6 +127,21 @@ fn bun_native_commands_keep_working_without_terminal_source_echo() {
         result_text(&multiline, false).contains("{ value: 42 }"),
         "{multiline:?}"
     );
+    let cleared = submit(&tab.tab_id, ".clear", true, "5");
+    assert!(result_text(&cleared, true).contains("Clearing context"));
+    let missing = submit(&tab.tab_id, "typeof savedSource", true, "5");
+    assert!(result_text(&missing, true).contains("'undefined'"));
+    let failed = parse_command_result(&submit(
+        &tab.tab_id,
+        "throw new Error('REPL_ERROR')",
+        true,
+        "5",
+    ));
+    assert_eq!(failed.exit_code, Some(1_i32), "{failed:?}");
+    assert!(failed.stdout.contains("REPL_ERROR"), "{failed:?}");
+    let broken = parse_command_result(&submit(&tab.tab_id, ".break", true, "5"));
+    assert!(broken.finished, "{broken:?}");
+    assert_eq!(broken.exit_code, Some(0_i32), "{broken:?}");
 }
 fn submit(tab_id: &str, source: &str, separated: bool, timeout: &str) -> Output {
     run_cli(&[

@@ -34,7 +34,7 @@ impl Tab {
         reservation: ShellReservation,
     ) {
         let tab = Arc::clone(self);
-        tokio::spawn(async move {
+        self.supervisors.spawn(async move {
             let session = Arc::clone(&reservation.session);
             let result = async { let observed = tokio :: select ! { completion = command . wait (Duration :: MAX) => completion ?, exited = reservation . session . wait_for_exit () => { exited ?; command . wait (Duration :: ZERO) . await ? } } ; match observed { CommandWait :: Finished => tab . finish_done_command (& command) . await , CommandWait :: Running => { tab . fail_command (& command , "shell exited before command wrote done.json" . to_owned ()) . await ? ; let closed_tab = Arc :: clone (& tab) ; let stopped_session = Arc :: clone (& reservation . session) ; tab . blocking . run (move | | closed_tab . close_session (& stopped_session)) . await } CommandWait :: Failed => Ok (()) , } } . await ;
             if let Err(error) = result {

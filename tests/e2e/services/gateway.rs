@@ -33,6 +33,8 @@ mod live_output;
 #[cfg(test)]
 #[path = "mcp/presentation/pagination.rs"]
 mod pagination;
+#[path = "mcp/presentation/policy_matrix.rs"]
+mod policy_matrix;
 #[cfg(test)]
 #[path = "mcp/profiles.rs"]
 mod profiles;

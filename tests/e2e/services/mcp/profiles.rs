@@ -1,45 +1,24 @@
-use super::wire::{McpSession, entries};
-use rmcp::serde_json::{Value, json};
+extern crate alloc;
+use super::{
+    execution::create_tabs,
+    wire::{McpSession, assert_field, command_result, text},
+};
+use crate::support::locked_with_env;
+use alloc::rc::Rc;
 #[test]
 fn mcp_no_profile_applies_to_all_created_tabs() {
+    let daemon = Rc::new(locked_with_env(&[]));
     #[cfg(windows)]
-    let (shell, command) = ("powershell", "Write-Output $env:FUNCTERM_LOAD_PROFILE");
+    let command = "Write-Output $env:FUNCTERM_LOAD_PROFILE";
     #[cfg(unix)]
-    let (shell, command) = ("bash", "printf '%s\\n' \"$FUNCTERM_LOAD_PROFILE\"");
+    let command = "printf '%s\\n' \"$FUNCTERM_LOAD_PROFILE\"";
     for (arguments, expected) in [(&[][..], "1"), (&["--no-profile"][..], "0")] {
-        let mut session = McpSession::with_arguments(arguments);
-        let creation = session.call(
-            "new_tab",
-            json ! ({ "exec" : [{ "starting_shell" : shell } , { "starting_shell" : shell }] }),
-        );
-        for entry in entries(&creation) {
-            let tab_id = entry
-                .pointer("/result/tab_id")
-                .and_then(Value::as_str)
-                .unwrap();
-            let response = session.call(
-                "send_command",
-                json!({
-                    "exec": [{"tab_id": tab_id, "command": command, "separate_output": true}],
-                    "wait_timeout": 10_u64
-                }),
-            );
-            let result = entries(&response).first().unwrap();
-            assert_eq!(
-                result.pointer("/result/command/exit_code"),
-                Some(&json!(0_i32)),
-                "{response}"
-            );
-            assert_eq!(
-                result
-                    .pointer("/result/command/stdout")
-                    .and_then(Value::as_str)
-                    .unwrap()
-                    .trim(),
-                expected,
-                "{response}"
-            );
+        let mut session = McpSession::on(&daemon, arguments);
+        for tab in create_tabs::<2>(&mut session) {
+            let response = session.execute(&tab, command, true, 10.0);
+            let result = command_result(&response);
+            assert_field(result, "/exit_code", 0_i32);
+            assert_eq!(text(result, "/stdout").trim(), expected, "{response}");
         }
-        drop(session);
     }
 }

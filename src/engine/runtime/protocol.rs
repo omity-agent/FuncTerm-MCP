@@ -1,5 +1,6 @@
 use crate::shell::ShellChoice;
 use anyhow::{Context as _, Result};
+use bytestring::ByteString;
 use core::num::NonZeroUsize;
 use core::time::Duration;
 use serde::{Deserialize, Serialize};
@@ -112,7 +113,7 @@ pub(crate) struct CommandSnapshot {
 pub(crate) enum ViewResult {
     Tab {
         shell: ShellView,
-        screen: String,
+        screen: ByteString,
         note: String,
     },
     Command {

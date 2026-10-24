@@ -3,7 +3,7 @@ mod host_wait;
 mod spawn_builder;
 mod startup;
 use super::process;
-use super::shell_session::{ShellSession, ShellSessionParts};
+use super::shell_session::ShellSession;
 use crate::contract::DISPATCH_FILE;
 use crate::engine::privileges::ShellIdentity;
 use crate::runtime::config::Settings;
@@ -70,7 +70,11 @@ impl ShellLauncher {
         let command_root = temp::tab_commands_directory(&tab_root);
         fs_err::create_dir_all(&tab_state)?;
         fs_err::create_dir_all(&command_root)?;
-        let command_watch = Arc::new(PathWatch::new(&command_root, RecursiveMode::Recursive)?);
+        let command_watch = Arc::new(PathWatch::new(
+            &command_root,
+            RecursiveMode::Recursive,
+            crate::runtime::session::records::lifecycle_event,
+        )?);
         let mut managed_environment = shims::environment(
             &self.settings,
             &tab_root,
@@ -153,22 +157,23 @@ impl ShellLauncher {
             return Err(error);
         }
         let active_shell_file = tab_state.join("active-shell.txt");
-        Ok(Arc::new(ShellSession::new(ShellSessionParts {
-            choice: starting_shell,
-            cwd: starting_directory.to_path_buf(),
-            writer,
-            screen,
-            busy: None,
-            command_root,
-            command_watch,
-            dispatch_file: tab_state.join(DISPATCH_FILE),
-            active_shell_file,
-            command_start_timeout: startup_timeout,
-            process_tree,
-            child,
-            slave: retained_slave,
-            reader: Some(reader_worker),
-        })))
+        Ok(Arc::new(
+            ShellSession::builder()
+                .choice(starting_shell)
+                .cwd(starting_directory.to_path_buf())
+                .writer(writer)
+                .screen(screen)
+                .command_root(command_root)
+                .command_watch(command_watch)
+                .dispatch_file(tab_state.join(DISPATCH_FILE))
+                .active_shell_file(active_shell_file)
+                .command_start_timeout(startup_timeout)
+                .process_tree(process_tree)
+                .child(child)
+                .slave(retained_slave)
+                .reader(Some(reader_worker))
+                .build(),
+        ))
     }
 }
 fn runtime_generation() -> String {

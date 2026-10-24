@@ -10,6 +10,7 @@ use alloc::sync::Arc;
 use anyhow::{Result, bail};
 use dashmap::DashMap;
 use parking_lot::Mutex;
+use tokio_util::task::TaskTracker;
 #[derive(Default)]
 pub(super) struct TabDirectory {
     tabs: DashMap<String, Arc<Tab>>,
@@ -20,6 +21,7 @@ pub(super) struct Tab {
     pub(super) operation: tokio::sync::Mutex<()>,
     pub(super) blocking: BlockingExecutor,
     pub(super) tokenizer: Arc<OutputTokenizer>,
+    pub(super) supervisors: TaskTracker,
     state: Mutex<TabState>,
     commands: DashMap<String, Arc<ManagedCommand>>,
 }
@@ -110,6 +112,7 @@ impl Tab {
         session: Arc<ShellSession>,
         blocking: BlockingExecutor,
         tokenizer: Arc<OutputTokenizer>,
+        supervisors: TaskTracker,
     ) -> Result<Self> {
         let snapshot = TabSnapshot::from_session(&session)?;
         Ok(Self {
@@ -117,6 +120,7 @@ impl Tab {
             operation: tokio::sync::Mutex::new(()),
             blocking,
             tokenizer,
+            supervisors,
             state: Mutex::new(TabState {
                 session: Some(session),
                 snapshot,

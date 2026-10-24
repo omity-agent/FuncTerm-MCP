@@ -123,15 +123,3 @@ for /f "usebackq delims=" %%r in ("%@VAR_receipt_file@%") do (
 call "%~dp0cmd_run.bat" "%@VAR_command_id@%" "%@VAR_directory@%" "%@VAR_working_directory@%" "%@VAR_separate_output@%"
 exit /b %ERRORLEVEL%
 "#;
-pub(super) const POWERSHELL_COMMAND_ERROR_TRAP: &str = concat!(
-    "'trap {\n",
-    "    if (\n",
-    "        $_.Exception -is [System.Management.Automation.CommandNotFoundException] -and\n",
-    "        $ErrorActionPreference -ne [System.Management.Automation.ActionPreference]::Stop\n",
-    "    ) {\n",
-    "        $null = $@VAR_commandErrors@.Add($_)\n",
-    "        continue\n",
-    "    }\n",
-    "    break\n",
-    "}'",
-);

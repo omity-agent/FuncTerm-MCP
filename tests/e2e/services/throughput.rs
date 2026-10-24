@@ -1,12 +1,12 @@
 use crate::support::{
-    locked, parse_command_result, parse_tab_created, parse_tab_view, run_cli, run_cli_with_pipes,
-    send_command, temp_root,
+    locked, parse_command_result, parse_tab_created, parse_tab_view, run_cli, send_command,
+    temp_root,
 };
 #[test]
 fn cli_streams_large_command_output_without_closing_the_tab() {
     const OUTPUT_SIZE: usize = 2 * 1024 * 1024;
     let _guard = locked();
-    let created = parse_tab_created(&run_cli_with_pipes(&[
+    let created = parse_tab_created(&run_cli(&[
         "new-tab",
         "--starting-directory",
         temp_root().to_str().unwrap(),

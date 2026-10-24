@@ -11,6 +11,7 @@ use self::registry::CaptureRegistry;
 use self::rendering::CommandScreen;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result, bail};
+use bytestring::ByteString;
 use event_listener::Event;
 use parking_lot::Mutex;
 use tastty_core::{HostProfile, host_reply::auto_reply_bytes};
@@ -24,7 +25,7 @@ struct TerminalState {
     protocol: OutputParser,
     captures: CaptureRegistry,
     visible_revision: u64,
-    visible_contents: String,
+    visible_contents: ByteString,
     reader_closed: bool,
     reader_failure: Option<String>,
     process_exited: bool,
@@ -45,7 +46,7 @@ impl Terminal {
                 protocol: OutputParser::new(),
                 captures: CaptureRegistry::new(model_title.to_owned()),
                 visible_revision: 0,
-                visible_contents,
+                visible_contents: visible_contents.into(),
                 reader_closed: false,
                 reader_failure: None,
                 process_exited: false,
@@ -68,7 +69,7 @@ impl Terminal {
         let screen = Arc::clone(&state.screen);
         state.captures.register(command_id, separate_output, screen)
     }
-    pub(super) fn contents(&self) -> String {
+    pub(super) fn contents(&self) -> ByteString {
         self.state.lock().visible_contents.clone()
     }
     pub(super) fn model_title(&self) -> String {
@@ -82,12 +83,12 @@ impl Terminal {
             let mut screen = shared_screen.lock();
             if screen.parser.screen().dirty_rows().next().is_some() {
                 let contents = screen.parser.screen().contents();
-                if contents != state.visible_contents {
+                if state.visible_contents != contents {
                     state.visible_revision = state
                         .visible_revision
                         .checked_add(1)
                         .context("terminal visible content revision overflow")?;
-                    state.visible_contents = contents;
+                    state.visible_contents = contents.into();
                 }
                 screen.parser.screen_mut().clear_dirty();
             }
@@ -130,7 +131,8 @@ impl TerminalState {
                     let title = self.screen.lock().parser.screen().title().to_owned();
                     self.captures.handle(protocol_event, &title)?;
                 }
-                Some(OutputEvent::ScreenCheckpoint) | None => {}
+                Some(OutputEvent::ScreenCheckpoint) => self.screen.lock().checkpoint(),
+                None => {}
             }
             remaining = tail;
         }

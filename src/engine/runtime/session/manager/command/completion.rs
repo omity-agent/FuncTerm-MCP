@@ -15,6 +15,7 @@ impl ManagedCommand {
                 self.capture.current()?,
                 self.capture.output()?,
                 &self.tokenizer,
+                read_done(&self.record.done)?.as_ref(),
             )
         };
         drop(state);
@@ -37,6 +38,7 @@ impl ManagedCommand {
             title,
             self.capture.output()?,
             &self.tokenizer,
+            Some(&done),
         )?;
         state.input.normalize(&mut view);
         update_cwd(PathBuf::from(done.cwd));
@@ -62,6 +64,7 @@ impl ManagedCommand {
             title,
             self.capture.output()?,
             &self.tokenizer,
+            read_done(&self.record.done)?.as_ref(),
         )?;
         view.command.finished = true;
         view.command.exit_code = Some(1_i32);

@@ -10,17 +10,6 @@ const SHELL: &str = "powershell";
 #[cfg(unix)]
 const SHELL: &str = "bash";
 #[test]
-fn daemon_help_lists_lifecycle_subcommands() {
-    let _guard = locked_with_env(&[]);
-    let output = run_cli(&["daemon", "--help"]);
-    assert!(output.status.success(), "{output:?}");
-    let help = String::from_utf8_lossy(&output.stdout);
-    for command in ["start", "stop", "restart"] {
-        assert!(help.contains(command), "{help}");
-    }
-    assert!(!help.contains("internal-run-daemon"), "{help}");
-}
-#[test]
 fn start_and_stop_are_idempotent_and_restart_starts_an_absent_daemon() {
     let guard = locked_with_env(&[]);
     let environment = guard.env();

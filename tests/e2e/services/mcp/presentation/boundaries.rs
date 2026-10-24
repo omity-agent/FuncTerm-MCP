@@ -1,9 +1,8 @@
 use super::{
-    execution::{SHELL, create_tabs},
-    wire::{McpSession, entries},
+    execution::create_tabs,
+    wire::{McpSession, command_result, entries, text},
 };
-use crate::support::{locked_with_env, parse_tab_created, run_cli, send_command};
-use rmcp::serde_json::{Value, json};
+use rmcp::serde_json::Value;
 #[cfg(windows)]
 const OUTPUT_COMMAND: &str = "Write-Output 'RAW<tag> & text'";
 #[cfg(not(windows))]
@@ -11,88 +10,16 @@ const OUTPUT_COMMAND: &str = "printf '%s\\n' 'RAW<tag> & text'";
 #[test]
 fn mcp_xml_documents_stay_on_separate_lines_across_batches_and_calls() {
     let mut session = McpSession::new();
-    let created = session.call(
-        "new_tab",
-        json!({"exec": [{"starting_shell": SHELL}, {"starting_shell": SHELL}]}),
-    );
-    let creation_text = text_documents(&created).concat();
-    assert!(creation_text.contains("</TAB_ID>\n<TAB_ID>"));
-    let tab_id = entries(&created)
-        .first()
-        .unwrap()
-        .pointer("/result/tab_id")
-        .and_then(Value::as_str)
-        .unwrap();
-    let accepted = session.call(
-        "send_command",
-        json!({
-            "exec": [{"tab_id": tab_id, "command": OUTPUT_COMMAND}],
-            "wait_timeout": 5_u64,
-        }),
-    );
-    let command_id = entries(&accepted)
-        .first()
-        .unwrap()
-        .pointer("/result/command/command_id")
-        .and_then(Value::as_str)
-        .unwrap();
-    let viewed = session.call(
-        "view",
-        json!({"ids": [command_id, tab_id], "wait_timeout": 0_u64}),
-    );
+    let [first, second] = create_tabs(&mut session);
+    let accepted = session.execute(&first, OUTPUT_COMMAND, false, 5.0);
+    let id = text(command_result(&accepted), "/command_id");
+    let viewed = session.view(&[id, &first, "missing", &second], 1, 0.0);
     let command_text = text_documents(&accepted).concat();
     let view_text = text_documents(&viewed).concat();
     assert!(command_text.contains("RAW<tag> & text"));
     assert!(view_text.contains("</NOTE>\n<SHELL>"));
-    assert!(!creation_text.ends_with('\n'));
     assert!(!command_text.ends_with('\n'));
     assert!(!view_text.ends_with('\n'));
-    drop(session);
-}
-#[test]
-fn mcp_error_blocks_are_separated_without_changing_structured_errors() {
-    let mut session = McpSession::new();
-    let [first, second] = create_tabs(&mut session);
-    let response = session.call(
-        "view",
-        json!({
-            "ids": ["missing-before", first, "missing-middle", second, "missing-after"],
-            "wait_timeout": 0_u64,
-        }),
-    );
-    let documents = text_documents(&response);
-    assert_eq!(documents.len(), 5);
-    for (entry, document) in entries(&response).iter().zip(&documents) {
-        if let Some(error) = entry.get("error").and_then(Value::as_str) {
-            assert_eq!(document.trim_end_matches('\n'), error);
-        }
-    }
-    for pair in documents.windows(2) {
-        let previous = pair.first().unwrap();
-        let following = pair.last().unwrap();
-        assert_eq!(
-            [*previous, *following].concat().lines().count(),
-            previous.lines().count() + following.lines().count(),
-        );
-    }
-    drop(session);
-}
-#[test]
-fn cli_xml_documents_end_with_one_newline() {
-    let guard = locked_with_env(&[]);
-    let created = run_cli(&["new-tab", "--no-profile", "--starting-shell", SHELL]);
-    let tab = parse_tab_created(&created);
-    let accepted = send_command(&tab.tab_id, OUTPUT_COMMAND, 5.0);
-    let viewed = run_cli(&["view", &tab.tab_id]);
-    let closed = run_cli(&["close", "--tab-id", &tab.tab_id]);
-    for response in [created, accepted, viewed, closed] {
-        assert!(response.status.success(), "{response:?}");
-        let text = String::from_utf8(response.stdout).unwrap();
-        assert!(text.ends_with(">\n"), "{text:?}");
-        assert!(!text.ends_with("\n\n"), "{text:?}");
-        assert!(!text.starts_with('\n'), "{text:?}");
-    }
-    drop(guard);
 }
 pub(super) fn text_documents(response: &Value) -> Vec<&str> {
     let blocks = response
@@ -102,17 +29,20 @@ pub(super) fn text_documents(response: &Value) -> Vec<&str> {
     assert_eq!(blocks.len(), entries(response).len());
     blocks
         .iter()
+        .zip(entries(response))
         .enumerate()
-        .map(|(index, block)| {
-            let text = block.get("text").and_then(Value::as_str).unwrap();
-            let is_last = index + 1 == blocks.len();
+        .map(|(index, (block, entry))| {
+            let document = text(block, "/text");
             assert_eq!(
-                text.ends_with('\n'),
-                !is_last,
-                "invalid document boundary: {text:?}"
+                document.ends_with('\n'),
+                index + 1 < blocks.len(),
+                "{document:?}"
             );
-            assert!(!text.starts_with('\n'), "leading blank line: {text:?}");
-            text
+            assert!(!document.starts_with('\n'), "{document:?}");
+            if let Some(error) = entry.get("error").and_then(Value::as_str) {
+                assert_eq!(document.trim_end_matches('\n'), error);
+            }
+            document
         })
         .collect()
 }

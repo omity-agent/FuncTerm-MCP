@@ -26,6 +26,13 @@ pub(crate) const TERMINAL_MARKER_CODE: &[u8] = b"9999";
 pub(crate) const TERMINAL_MARKER_END: &[u8] = b"end";
 pub(crate) const TERMINAL_MARKER_NAME: &[u8] = b"FuncTerm";
 pub(crate) const TERMINAL_MARKER_START: &[u8] = b"start";
+#[derive(serde::Deserialize, serde::Serialize)]
+pub(crate) struct CommandCompletion<Text> {
+    pub(crate) command_id: Text,
+    pub(crate) exit_code: i32,
+    pub(crate) time_consumption: Text,
+    pub(crate) cwd: Text,
+}
 pub(crate) fn window_title_sequence(title: &str) -> anyhow::Result<String> {
     validate_window_title(title)?;
     Ok(format!("\x1b]2;{title}\x1b\\"))

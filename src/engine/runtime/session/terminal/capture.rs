@@ -2,6 +2,7 @@ use super::rendering::{CommandScreen, RenderedOutput};
 use crate::runtime::session::observation::wait_until;
 use alloc::sync::Arc;
 use anyhow::{Result, bail};
+use bytestring::ByteString;
 use core::time::Duration;
 use event_listener::Event;
 use parking_lot::Mutex;
@@ -43,7 +44,7 @@ impl CommandCapture {
         }
         Ok(state.title.clone())
     }
-    pub(in crate::engine::runtime::session) fn output(&self) -> Result<Option<String>> {
+    pub(in crate::engine::runtime::session) fn output(&self) -> Result<Option<ByteString>> {
         self.state
             .lock()
             .output

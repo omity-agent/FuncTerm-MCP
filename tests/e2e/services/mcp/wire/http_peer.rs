@@ -1,3 +1,4 @@
+use super::wire::{request_message, tool_arguments};
 use crate::support::TestGuard;
 use core::time::Duration;
 use reqwest::{
@@ -77,13 +78,7 @@ impl HttpSession {
     }
     pub(super) fn request(&mut self, method: &str, params: Value) -> Value {
         self.sequence += 1;
-        let mut message = json!({
-            "jsonrpc": "2.0", "id": self.sequence, "method": method,
-        });
-        message
-            .as_object_mut()
-            .unwrap()
-            .insert("params".to_owned(), params);
+        let message = request_message(method, params, self.sequence);
         let response = self
             .builder(Method::POST)
             .body(message.to_string())
@@ -93,12 +88,7 @@ impl HttpSession {
         decode(response, self.sequence)
     }
     pub(super) fn call(&mut self, name: &str, arguments: Value) -> Value {
-        let mut params = json!({"name": name});
-        params
-            .as_object_mut()
-            .unwrap()
-            .insert("arguments".to_owned(), arguments);
-        self.request("tools/call", params)
+        self.request("tools/call", tool_arguments(name, arguments))
     }
 }
 fn decode(response: Response, id: u64) -> Value {

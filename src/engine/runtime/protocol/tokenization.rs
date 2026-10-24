@@ -1,5 +1,6 @@
 use super::{CommandOutput, OutputPresentation, ViewResult};
 use anyhow::{Context as _, Result, ensure};
+use bytestring::ByteString;
 use core::num::NonZeroUsize;
 pub(crate) struct OutputTokenizer {
     tokenizer: toktok::Tokenizer,
@@ -29,26 +30,22 @@ impl OutputTokenizer {
         match view {
             ViewResult::Tab {
                 shell,
-                mut screen,
+                screen,
                 note,
-            } => {
-                self.skip_tokens(&mut screen, start_token);
-                Ok(ViewResult::Tab {
-                    shell,
-                    screen,
-                    note,
-                })
-            }
+            } => Ok(ViewResult::Tab {
+                shell,
+                screen: self.skip_tokens(&screen, start_token)?,
+                note,
+            }),
             ViewResult::Command {
                 shell,
                 mut command,
                 note,
             } => {
                 command.output = match command.output {
-                    CommandOutput::Terminal { mut output } => {
-                        self.skip_tokens(&mut output, start_token);
-                        CommandOutput::Terminal { output }
-                    }
+                    CommandOutput::Terminal { output } => CommandOutput::Terminal {
+                        output: self.skip_tokens(&output, start_token)?,
+                    },
                     separated @ CommandOutput::Separated {
                         stdout: _,
                         stderr: _,
@@ -68,10 +65,13 @@ impl OutputTokenizer {
             }
         }
     }
-    fn skip_tokens(&self, text: &mut String, start_token: NonZeroUsize) {
+    fn skip_tokens(&self, text: &ByteString, start_token: NonZeroUsize) -> Result<ByteString> {
         let prefix = self
             .tokenizer
             .truncate(text.as_bytes(), start_token.get() - 1);
-        drop(text.drain(..prefix.bytes));
+        let suffix = text
+            .get(prefix.bytes..)
+            .context("output tokenizer returned an invalid UTF-8 boundary")?;
+        Ok(text.slice_ref(suffix))
     }
 }

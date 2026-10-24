@@ -1,9 +1,10 @@
-use super::matrix::{
-    case_dir, plain_title_command, required_executable, set_title_command, shell_cases,
-};
+#[cfg(windows)]
+use super::matrix::{case_dir, required_executable, shell_cases};
+use super::matrix::{plain_title_command, set_title_command};
+#[cfg(windows)]
+use crate::support::{create_tab, locked_with_env};
 use crate::support::{
-    create_tab, locked_with_env, parse_command_id, parse_command_result, parse_tab_view, run_cli,
-    send_command,
+    parse_command_id, parse_command_result, parse_tab_view, run_cli, send_command,
 };
 #[cfg(windows)]
 #[test]
@@ -14,123 +15,72 @@ fn cli_distinguishes_native_host_title_from_command_title() {
         .unwrap();
     let executable = required_executable(case);
     let _guard = locked_with_env(&[(case.env_var, &executable)]);
-    let created = create_tab(&case_dir(case.name, "native command title"), case.name);
-    let model_title = parse_tab_view(&run_cli(&["view", &created.tab_id])).title;
-    let native_command = "Write-Output ('HOST_TITLE_BEFORE=<' + [Console]::Title + '>'); where.exe where.exe; Write-Output ('HOST_TITLE_AFTER=<' + [Console]::Title + '>')";
-    let first_output = send_command(&created.tab_id, native_command, 10.0);
-    let first_command_id = parse_command_id(&first_output);
-    let result = parse_command_result(&first_output);
-    assert_finished(&result, case.name, "where.exe");
-    let tab = parse_tab_view(&run_cli(&["view", &created.tab_id]));
-    assert_eq!(
-        (result.title.as_str(), tab.title.as_str()),
-        (model_title.as_str(), model_title.as_str()),
-        "neither a command nor its tab may expose PowerShell's host window title"
-    );
-    assert_native_model_title(&result, &model_title);
-    let intended_title = "MCP_PTY_自定义标题_😀";
-    let title_then_native = format!(
+    let tab = create_tab(&case_dir(case.name, "native command title"), case.name);
+    let model_title = parse_tab_view(&run_cli(&["view", &tab.tab_id])).title;
+    let native = "Write-Output ('HOST_TITLE_BEFORE=<' + [Console]::Title + '>'); where.exe where.exe; Write-Output ('HOST_TITLE_AFTER=<' + [Console]::Title + '>')";
+    let output = send_command(&tab.tab_id, native, 10.0);
+    let first_id = parse_command_id(&output);
+    assert_native_title(&parse_command_result(&output), &model_title);
+    let intended = "MCP_PTY_自定义标题_😀";
+    let command = format!(
         "{}; where.exe where.exe",
-        set_title_command(case.name, intended_title)
+        set_title_command(case.name, intended)
     );
-    let titled = parse_command_result(&send_command(&created.tab_id, &title_then_native, 10.0));
-    assert_finished(&titled, case.name, "MCP_PTY_TITLE_SET");
-    assert_eq!(
-        titled.title, intended_title,
-        "an intentional command title must remain observable"
-    );
-    let reset = parse_command_result(&send_command(&created.tab_id, native_command, 10.0));
-    assert_finished(&reset, case.name, "where.exe");
-    assert_native_model_title(&reset, &model_title);
-    assert_eq!(reset.title, model_title);
-    let historical = parse_command_result(&run_cli(&["view", &first_command_id]));
+    let titled = parse_command_result(&send_command(&tab.tab_id, &command, 10.0));
+    assert_finished(&titled, "MCP_PTY_TITLE_SET");
+    assert_eq!(titled.title, intended);
+    let reset = parse_command_result(&send_command(&tab.tab_id, native, 10.0));
+    assert_native_title(&reset, &model_title);
+    let historical = parse_command_result(&run_cli(&["view", &first_id]));
     assert_eq!(historical.title, model_title);
+    assert_eq!(
+        parse_tab_view(&run_cli(&["view", &tab.tab_id])).title,
+        model_title
+    );
 }
 #[cfg(windows)]
-fn assert_native_model_title(result: &crate::support::CommandResult, model_title: &str) {
+fn assert_native_title(result: &crate::support::CommandResult, model: &str) {
+    assert_finished(result, "where.exe");
+    assert_eq!(result.title, model);
     for phase in ["BEFORE", "AFTER"] {
-        let expected = format!("HOST_TITLE_{phase}=<{model_title}>");
         assert!(
-            result.stdout.contains(&expected),
-            "the real console title should be restored: expected {expected:?}, stdout: {}",
-            result.stdout
+            result
+                .stdout
+                .contains(&format!("HOST_TITLE_{phase}=<{model}>")),
+            "{result:?}"
         );
     }
 }
-#[test]
-fn cli_reports_titles_for_each_command() {
-    for case in shell_cases() {
-        let executable = required_executable(case);
-        let _guard = locked_with_env(&[(case.env_var, &executable)]);
-        let created = create_tab(&case_dir(case.name, "command titles"), case.name);
-        let model_title = parse_tab_view(&run_cli(&["view", &created.tab_id])).title;
-        let first_output = send_command(&created.tab_id, plain_title_command(case.name), 10.0);
-        let first_command_id = parse_command_id(&first_output);
-        let first = parse_command_result(&first_output);
-        assert_finished(&first, case.name, "MCP_PTY_PLAIN_TITLE");
-        assert_eq!(
-            first.title, model_title,
-            "{} command without a title should use the initial title",
-            case.name
-        );
-        let expected_title = format!("MCP_PTY_{}_COMMAND_TITLE", case.name.to_ascii_uppercase());
-        let titled = parse_command_result(&send_command(
-            &created.tab_id,
-            &set_title_command(case.name, &expected_title),
-            10.0,
-        ));
-        assert_finished(&titled, case.name, "MCP_PTY_TITLE_SET");
-        assert_command_title(&titled.title, &expected_title, case.name);
-        let tab = parse_tab_view(&run_cli(&["view", &created.tab_id]));
-        assert_eq!(
-            tab.title, model_title,
-            "{} tab title must remain the model title",
-            case.name
-        );
-        let historical = parse_command_result(&run_cli(&["view", &first_command_id]));
-        assert_eq!(
-            historical.title, model_title,
-            "{} historical command title should not follow the live shell title",
-            case.name
-        );
-        let last = parse_command_result(&send_command(
-            &created.tab_id,
-            plain_title_command(case.name),
-            10.0,
-        ));
-        assert_finished(&last, case.name, "MCP_PTY_PLAIN_TITLE");
-        assert_eq!(
-            last.title, model_title,
-            "{} later command without a title should not inherit a prior command title",
-            case.name
-        );
-    }
-}
-fn assert_finished(result: &crate::support::CommandResult, shell: &str, output_marker: &str) {
-    assert!(result.finished, "{shell} title command should finish");
-    assert_eq!(
-        result.exit_code,
-        Some(0_i32),
-        "{shell} title command failed: stdout: {}\\nstderr: {}",
-        result.stdout,
-        result.stderr
-    );
-    assert!(
-        result.stdout.contains(output_marker),
-        "{shell} title command stdout should include {output_marker}: {}",
-        result.stdout
-    );
-}
-fn assert_command_title(actual: &str, expected: &str, shell: &str) {
+pub(super) fn assert_command_titles(tab: &str, shell: &str) {
+    let model_title = parse_tab_view(&run_cli(&["view", tab])).title;
+    let output = send_command(tab, plain_title_command(shell), 10.0);
+    let id = parse_command_id(&output);
+    let first = parse_command_result(&output);
+    assert_finished(&first, "MCP_PTY_PLAIN_TITLE");
+    assert_eq!(first.title, model_title);
+    let expected = format!("MCP_PTY_{}_COMMAND_TITLE", shell.to_ascii_uppercase());
+    let titled = parse_command_result(&send_command(
+        tab,
+        &set_title_command(shell, &expected),
+        10.0,
+    ));
+    assert_finished(&titled, "MCP_PTY_TITLE_SET");
     if shell == "cmd" {
-        assert!(
-            actual.contains(expected),
-            "CMD may decorate its native title, but should preserve {expected}: {actual}"
-        );
+        assert!(titled.title.contains(&expected), "{titled:?}");
     } else {
-        assert_eq!(
-            actual, expected,
-            "{shell} should report the title set by the command"
-        );
+        assert_eq!(titled.title, expected);
     }
+    assert_eq!(parse_tab_view(&run_cli(&["view", tab])).title, model_title);
+    assert_eq!(
+        parse_command_result(&run_cli(&["view", &id])).title,
+        model_title
+    );
+    let last = parse_command_result(&send_command(tab, plain_title_command(shell), 10.0));
+    assert_finished(&last, "MCP_PTY_PLAIN_TITLE");
+    assert_eq!(last.title, model_title);
+}
+fn assert_finished(result: &crate::support::CommandResult, marker: &str) {
+    assert!(result.finished, "{result:?}");
+    assert_eq!(result.exit_code, Some(0_i32), "{result:?}");
+    assert!(result.stdout.contains(marker), "{result:?}");
 }

@@ -91,6 +91,10 @@ axum = { version = "*", default-features = false, features = [
 ] }
 base64-turbo = "*"
 blake3 = "*"
+bon = { git = "https://github.com/elastio/bon" }
+bytestring = { git = "https://github.com/actix/actix-net", features = [
+    "serde",
+] }
 clap = { git = "https://github.com/clap-rs/clap", features = [
     "derive",
     "deprecated",
@@ -140,7 +144,7 @@ tokio = { version = "*", features = [
     "time",
 ] }
 tokio-serde = { version = "*", features = ["messagepack"] }
-tokio-util = { version = "*", features = ["codec"] }
+tokio-util = { version = "*", features = ["codec", "rt"] }
 toktok-rs = { git = "https://github.com/vectorize-io/toktok" }
 toml = "*"
 tracing = "*"
@@ -151,6 +155,7 @@ which = "*"
 [dev-dependencies]
 reqwest = { version = "*", default-features = false, features = ["blocking"] }
 rmp-serde = "*"
+wait-timeout = "*"
 
 [patch.crates-io]
 anyhow = { git = "https://github.com/dtolnay/anyhow" }

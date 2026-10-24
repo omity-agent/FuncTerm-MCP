@@ -11,12 +11,15 @@ use parking_lot::RwLock;
 use shell_session::process;
 use std::path::{Path, PathBuf};
 use tokio::sync::Semaphore;
+use tokio_util::task::TaskTracker;
 pub(crate) struct Manager {
     launcher: launcher::ShellLauncher,
     tabs: tab::TabDirectory,
     blocking: BlockingExecutor,
     tokenizer: Arc<OutputTokenizer>,
     accepting_tabs: RwLock<bool>,
+    supervisors: TaskTracker,
+    shutdown_timeout: core::time::Duration,
 }
 impl Manager {
     pub(crate) async fn close(&self, tab_id: &str) -> Result<()> {
@@ -25,12 +28,15 @@ impl Manager {
     pub(crate) fn new(settings: Settings) -> Result<Self> {
         let blocking = BlockingExecutor::new(settings.ipc.blocking_concurrency);
         let tokenizer = Arc::new(OutputTokenizer::new(&settings.output_token_encoding)?);
+        let shutdown_timeout = settings.ipc.shutdown_timeout()?;
         Ok(Self {
             launcher: launcher::ShellLauncher::new(settings)?,
             tabs: tab::TabDirectory::default(),
             blocking,
             tokenizer,
             accepting_tabs: RwLock::new(true),
+            supervisors: TaskTracker::new(),
+            shutdown_timeout,
         })
     }
     pub(crate) async fn shutdown(self: &Arc<Self>) -> Result<()> {
@@ -41,7 +47,12 @@ impl Manager {
                 Ok(())
             })
             .await?;
-        self.tabs.close_all().await
+        let closed = self.tabs.close_all().await;
+        self.supervisors.close();
+        tokio::time::timeout(self.shutdown_timeout, self.supervisors.wait())
+            .await
+            .context("command supervision did not finish before daemon shutdown timeout")?;
+        closed
     }
     pub(crate) async fn new_tab(
         self: &Arc<Self>,
@@ -94,6 +105,7 @@ impl Manager {
             session,
             self.blocking.clone(),
             Arc::clone(&self.tokenizer),
+            self.supervisors.clone(),
         )?);
         drop(accepting);
         Ok(tab_id)

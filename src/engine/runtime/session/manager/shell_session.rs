@@ -14,11 +14,15 @@ use portable_pty::{Child, SlavePty};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::thread::JoinHandle;
+#[derive(bon::Builder)]
 pub(super) struct ShellSession {
+    #[builder(with = |value: ShellChoice| Mutex::new(value))]
     choice: Mutex<ShellChoice>,
+    #[builder(with = |value: PathBuf| Mutex::new(value))]
     cwd: Mutex<PathBuf>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     screen: Arc<Terminal>,
+    #[builder(skip)]
     busy: Mutex<Option<Arc<ManagedCommand>>>,
     command_root: PathBuf,
     command_watch: Arc<PathWatch>,
@@ -26,46 +30,15 @@ pub(super) struct ShellSession {
     active_shell_file: PathBuf,
     command_start_timeout: Duration,
     process_tree: process::ProcessTree,
+    #[builder(with = |value: Box<dyn Child + Send + Sync>| Mutex::new(value))]
     child: Mutex<Box<dyn Child + Send + Sync>>,
+    #[builder(with = |value: Option<Box<dyn SlavePty + Send>>| Mutex::new(value))]
     slave: Mutex<Option<Box<dyn SlavePty + Send>>>,
+    #[builder(required)]
     reader: Option<JoinHandle<()>>,
 }
 pub(in crate::engine::runtime::session::manager) use input::KeyboardWriteFailure;
-pub(super) struct ShellSessionParts {
-    pub(super) choice: ShellChoice,
-    pub(super) cwd: PathBuf,
-    pub(super) writer: Arc<Mutex<Box<dyn Write + Send>>>,
-    pub(super) screen: Arc<Terminal>,
-    pub(super) busy: Option<Arc<ManagedCommand>>,
-    pub(super) command_root: PathBuf,
-    pub(super) command_watch: Arc<PathWatch>,
-    pub(super) dispatch_file: PathBuf,
-    pub(super) active_shell_file: PathBuf,
-    pub(super) command_start_timeout: Duration,
-    pub(super) process_tree: process::ProcessTree,
-    pub(super) child: Box<dyn Child + Send + Sync>,
-    pub(super) slave: Option<Box<dyn SlavePty + Send>>,
-    pub(super) reader: Option<JoinHandle<()>>,
-}
 impl ShellSession {
-    pub(super) fn new(parts: ShellSessionParts) -> Self {
-        Self {
-            choice: Mutex::new(parts.choice),
-            cwd: Mutex::new(parts.cwd),
-            writer: parts.writer,
-            screen: parts.screen,
-            busy: Mutex::new(parts.busy),
-            command_root: parts.command_root,
-            command_watch: parts.command_watch,
-            dispatch_file: parts.dispatch_file,
-            active_shell_file: parts.active_shell_file,
-            command_start_timeout: parts.command_start_timeout,
-            process_tree: parts.process_tree,
-            child: Mutex::new(parts.child),
-            slave: Mutex::new(parts.slave),
-            reader: parts.reader,
-        }
-    }
     pub(super) fn cwd(&self) -> PathBuf {
         self.cwd.lock().clone()
     }
@@ -78,7 +51,7 @@ impl ShellSession {
     pub(super) fn set_cwd(&self, cwd: PathBuf) {
         *self.cwd.lock() = cwd;
     }
-    pub(super) fn screen_contents(&self) -> String {
+    pub(super) fn screen_contents(&self) -> bytestring::ByteString {
         self.screen.contents()
     }
     pub(super) fn model_title(&self) -> String {

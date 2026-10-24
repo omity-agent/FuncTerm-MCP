@@ -39,10 +39,20 @@ fn cli_reports_total_tokens_and_forwards_the_view_start_token() {
     let full = run_cli(&["view", &id]);
     assert!(full.status.success(), "{full:?}");
     assert!(
-        String::from_utf8(full.stdout)
+        String::from_utf8(full.stdout.clone())
             .unwrap()
             .contains("<OUTPUT>\nhello world\n</OUTPUT>")
     );
+    let closed = run_cli(&["close", "--tab-id", &tab.tab_id]);
+    for response in [&created, &accepted, &full, &closed] {
+        assert!(response.status.success(), "{response:?}");
+        let document = core::str::from_utf8(&response.stdout).unwrap();
+        assert!(document.ends_with(">\n"), "{document:?}");
+        assert!(
+            !document.ends_with("\n\n") && !document.starts_with('\n'),
+            "{document:?}"
+        );
+    }
     for invalid_start in ["0", "-1"] {
         let invalid = run_cli(&["view", &id, "--start-token", invalid_start]);
         assert!(!invalid.status.success());

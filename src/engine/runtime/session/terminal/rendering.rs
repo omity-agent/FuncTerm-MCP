@@ -1,5 +1,6 @@
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result, ensure};
+use bytestring::ByteString;
 use parking_lot::Mutex;
 use tastty_core::{
     AbsolutePosition, Parser, PlainOptions, Position, ScreenEvent, TerminalMode, TerminalSize,
@@ -12,7 +13,7 @@ pub(super) struct CommandScreen {
 pub(super) enum RenderedOutput {
     Pending(Arc<Mutex<CommandScreen>>),
     Active(Arc<Mutex<CommandScreen>>),
-    Frozen(String),
+    Frozen(ByteString),
 }
 impl CommandScreen {
     pub(super) fn new(size: TerminalSize) -> Self {
@@ -48,6 +49,11 @@ impl CommandScreen {
             *start = (*start).min(top);
         }
         Ok(())
+    }
+    pub(super) fn checkpoint(&mut self) {
+        if self.start.is_none() && self.parser.screen().scrollback_available() > 0 {
+            self.parser.process(b"\x1b[3J");
+        }
     }
     fn contents(&mut self) -> Result<String> {
         let initial = self.start.context("terminal output region is not active")?;
@@ -94,14 +100,14 @@ impl RenderedOutput {
         *self = Self::Active(Arc::clone(screen));
         Ok(())
     }
-    pub(super) fn contents(&self) -> Result<String> {
+    pub(super) fn contents(&self) -> Result<ByteString> {
         #[expect(
             clippy::pattern_type_mismatch,
             reason = "borrow the live screen or frozen output without moving it"
         )]
         match self {
-            Self::Pending(_) => Ok(String::new()),
-            Self::Active(screen) => screen.lock().contents(),
+            Self::Pending(_) => Ok(ByteString::new()),
+            Self::Active(screen) => Ok(screen.lock().contents()?.into()),
             Self::Frozen(output) => Ok(output.clone()),
         }
     }
@@ -115,7 +121,7 @@ impl RenderedOutput {
             Self::Active(screen) => screen.lock().finish()?,
             Self::Frozen(_) => return Ok(()),
         };
-        *self = Self::Frozen(output);
+        *self = Self::Frozen(output.into());
         Ok(())
     }
 }

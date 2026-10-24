@@ -1,12 +1,8 @@
 use super::super::{VariableNamespace, start, template, variables};
 use crate::contract::POWERSHELL_COMMAND_FUNCTION;
 pub(in crate::shell) fn wrapper() -> String {
-    let command_template = COMMAND_TEMPLATE.replace(
-        "@POWERSHELL_COMMAND_ERROR_TRAP@",
-        template::POWERSHELL_COMMAND_ERROR_TRAP,
-    );
     let script = format!(
-        "{}\n{}\n{command_template}\n{}",
+        "{}\n{}\n{COMMAND_TEMPLATE}\n{}",
         start::POWERSHELL,
         start::POWERSHELL_SHIMS,
         template::powershell_dispatcher()
@@ -19,7 +15,7 @@ pub(in crate::shell) fn wrapper() -> String {
     let wrapper = template::render_powershell(&protected);
     VariableNamespace::new().render_powershell(&wrapper)
 }
-const COMMAND_TEMPLATE : & str = "& {
+const COMMAND_TEMPLATE: &str = r"& {
     if (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue) {
         Set-PSReadLineOption -HistorySaveStyle SaveNothing
         $@VAR_setPsReadLineOption@ = Get-Command Set-PSReadLineOption
@@ -54,9 +50,11 @@ function @FUNCTION@ {
         $@VAR_protectedEnvironment@[$@VAR_environmentEntry@.Name] = $@VAR_environmentEntry@.Value
     }
     $@VAR_exitCode@ = 1
-    $@VAR_timeConsumption@ = '0ns'
-    trap {
-        [IO.File]::AppendAllText($@VAR_stderrFile@, [string]$_ + [Environment]::NewLine, [Text.Encoding]::UTF8)
+    $@VAR_commandFailure@ = $null
+    $@VAR_commandPipeline@ = $null
+    $@VAR_commandTimer@ = [Diagnostics.Stopwatch]::new()
+    trap [System.Management.Automation.PipelineStoppedException] {
+        [IO.File]::AppendAllText($@VAR_stderrFile@, [string]$_ + [Environment]::NewLine)
         [Console]::Error.WriteLine($_)
         $@VAR_exitCode@ = 130
         continue
@@ -71,32 +69,39 @@ function @FUNCTION@ {
         $global:LASTEXITCODE = $null
         $@VAR_commandNativeExitCode@ = $null
         $@VAR_commandSucceeded@ = $false
-        $@VAR_commandErrors@ = [Collections.Generic.List[object]]::new()
+        $@VAR_commandReturned@ = $false
+        $@VAR_commandTimer@.Start()
         $@VAR_commandScript@ = [scriptblock]::Create(
-            [IO.File]::ReadAllText($@VAR_scriptFile@, [Text.Encoding]::UTF8) +
-            [Environment]::NewLine +
-            @POWERSHELL_COMMAND_ERROR_TRAP@
+            [IO.File]::ReadAllText($@VAR_scriptFile@, [Text.Encoding]::UTF8)
         )
-        $@VAR_commandTimer@ = [Diagnostics.Stopwatch]::StartNew()
+        $@VAR_commandPipeline@ = [PowerShell]::Create(
+            [System.Management.Automation.RunspaceMode]::CurrentRunspace
+        )
+        $null = $@VAR_commandPipeline@.AddScript(
+            '. $@VAR_commandScript@
+$@VAR_commandSucceeded@ = $?
+$@VAR_commandNativeExitCode@ = $global:LASTEXITCODE
+$@VAR_commandReturned@ = $true',
+            $false
+        )
         if ($@VAR_SeparateOutput@) {
-            . $@VAR_commandScript@ 2> $@VAR_stderrFile@ | Tee-Object -FilePath $@VAR_stdoutFile@
-            $@VAR_commandSucceeded@ = $?
+            [IO.File]::WriteAllText($@VAR_stderrFile@, '')
+            $null = $@VAR_commandPipeline@.AddCommand('Microsoft.PowerShell.Utility\Tee-Object').AddParameter(
+                'FilePath', $@VAR_stdoutFile@
+            )
         }
-        else {
-            . $@VAR_commandScript@ | Microsoft.PowerShell.Core\\Out-Default
-            $@VAR_commandSucceeded@ = $?
+        $null = $@VAR_commandPipeline@.AddCommand('Microsoft.PowerShell.Core\Out-Default')
+        if (-not $@VAR_SeparateOutput@) {
+            $@VAR_commandPipeline@.Commands.Commands[-1].MergeUnclaimedPreviousCommandResults = (
+                [System.Management.Automation.Runspaces.PipelineResultTypes]::Error -bor
+                [System.Management.Automation.Runspaces.PipelineResultTypes]::Output
+            )
         }
-        $@VAR_commandNativeExitCode@ = $global:LASTEXITCODE
-        foreach ($@VAR_error@ in $@VAR_commandErrors@) {
-            [IO.File]::AppendAllText($@VAR_stderrFile@, [string]$@VAR_error@ + [Environment]::NewLine, [Text.Encoding]::UTF8)
-            [Console]::Error.WriteLine($@VAR_error@)
+        $null = $@VAR_commandPipeline@.Invoke()
+        if (-not $@VAR_commandReturned@) {
+            $@VAR_exitCode@ = [int]$global:LASTEXITCODE
+            exit $@VAR_exitCode@
         }
-        $@VAR_commandTimer@.Stop()
-        $@VAR_timeConsumption@ = [string]::Format(
-            [Globalization.CultureInfo]::InvariantCulture,
-            '{0}ms',
-            $@VAR_commandTimer@.Elapsed.TotalMilliseconds
-        )
         if ($null -ne $@VAR_commandNativeExitCode@) {
             $@VAR_exitCode@ = [int]$@VAR_commandNativeExitCode@
         }
@@ -106,21 +111,41 @@ function @FUNCTION@ {
         else {
             $@VAR_exitCode@ = 1
         }
-        if ($@VAR_SeparateOutput@ -and (Test-Path -LiteralPath $@VAR_stderrFile@) -and ((Get-Item -LiteralPath $@VAR_stderrFile@).Length -gt 0)) {
-            Get-Content -LiteralPath $@VAR_stderrFile@ | ForEach-Object { [Console]::Error.WriteLine($_) }
-        }
     }
     catch [System.Management.Automation.ParseException] {
-        $_.Exception.Message | Out-File -LiteralPath $@VAR_stderrFile@ -Append -Encoding utf8
-        [Console]::Error.WriteLine($_.Exception.Message)
+        $@VAR_commandFailure@ = $_.Exception.Message
         $@VAR_exitCode@ = 1
     }
     catch {
-        $_ | Out-File -LiteralPath $@VAR_stderrFile@ -Append -Encoding utf8
-        [Console]::Error.WriteLine($_)
+        if ($null -ne $@VAR_commandPipeline@ -and $null -ne $@VAR_commandPipeline@.InvocationStateInfo.Reason) {
+            $@VAR_commandFailure@ = $@VAR_commandPipeline@.InvocationStateInfo.Reason.Message
+        }
+        else {
+            $@VAR_commandFailure@ = [string]$_
+        }
         $@VAR_exitCode@ = 1
     }
     finally {
+        $@VAR_commandTimer@.Stop()
+        $@VAR_timeConsumption@ = [string]::Format(
+            [Globalization.CultureInfo]::InvariantCulture,
+            '{0}ms',
+            $@VAR_commandTimer@.Elapsed.TotalMilliseconds
+        )
+        if ($null -ne $@VAR_commandPipeline@) {
+            if ($@VAR_commandPipeline@.InvocationStateInfo.State -eq [System.Management.Automation.PSInvocationState]::Stopped) {
+                $@VAR_exitCode@ = 130
+            }
+            foreach ($@VAR_error@ in $@VAR_commandPipeline@.Streams.Error) {
+                [IO.File]::AppendAllText($@VAR_stderrFile@, [string]$@VAR_error@ + [Environment]::NewLine)
+                [Console]::Error.WriteLine($@VAR_error@)
+            }
+            $@VAR_commandPipeline@.Dispose()
+        }
+        if ($null -ne $@VAR_commandFailure@) {
+            [IO.File]::AppendAllText($@VAR_stderrFile@, $@VAR_commandFailure@ + [Environment]::NewLine)
+            [Console]::Error.WriteLine($@VAR_commandFailure@)
+        }
         $@VAR_environmentWasCleared@ = @(Get-ChildItem Env:).Count -eq 0
         foreach ($@VAR_environmentEntry@ in $@VAR_protectedEnvironment@.GetEnumerator()) {
             if (
@@ -161,4 +186,4 @@ function @FUNCTION@ {
         }
     }
 }
-" ;
+";

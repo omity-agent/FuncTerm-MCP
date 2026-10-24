@@ -60,6 +60,17 @@ pub(super) fn required_executable(case: &ShellCase) -> String {
         .to_string_lossy()
         .into_owned()
 }
+pub(super) fn daemon() -> crate::support::TestGuard {
+    let executables = shell_cases()
+        .iter()
+        .map(|case| (case.env_var, required_executable(case)))
+        .collect::<Vec<_>>();
+    let environment = executables
+        .iter()
+        .map(|pair| (pair.0, pair.1.as_str()))
+        .collect::<Vec<_>>();
+    crate::support::locked_with_env(&environment)
+}
 pub(super) fn case_dir(shell: &str, leaf: &str) -> PathBuf {
     let unique = CASE_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
     let path = crate::support::temp_root()

@@ -1,10 +1,8 @@
-use super::capacity::DaemonPermit;
 use super::command::{CLI_COMMAND_TIMEOUT, exe};
 use super::process::ChildGuard;
 use super::temp;
 use core::cell::RefCell;
 use core::sync::atomic::{AtomicU64, Ordering};
-use core::time::Duration;
 use std::io::BufRead as _;
 use std::process::{Command, Stdio};
 use std::thread;
@@ -17,7 +15,6 @@ pub(crate) struct TestGuard {
     http_address: String,
     previous_env: Vec<(String, String)>,
     _runtime: temp::TestRuntime,
-    _permit: DaemonPermit,
 }
 impl TestGuard {
     pub(crate) fn env(&self) -> Vec<(String, String)> {
@@ -31,7 +28,6 @@ impl TestGuard {
     }
     pub(crate) fn restart_daemon(&mut self) {
         self.stop_daemon();
-        thread::sleep(Duration::from_millis(100));
         (self.daemon, self.http_address) = spawn_daemon(&self.env, &self.service_name);
     }
 }
@@ -52,7 +48,6 @@ pub(crate) fn locked() -> TestGuard {
     locked_with_env(&[])
 }
 pub(crate) fn locked_with_env(extra_env: &[(&str, &str)]) -> TestGuard {
-    let permit = DaemonPermit::acquire();
     let runtime = temp::TestRuntime::new();
     let service_name = unique_service_name();
     let mut env = vec![
@@ -81,7 +76,6 @@ pub(crate) fn locked_with_env(extra_env: &[(&str, &str)]) -> TestGuard {
         http_address,
         previous_env,
         _runtime: runtime,
-        _permit: permit,
     }
 }
 pub(crate) fn apply_active_env(command: &mut Command) {

@@ -18,16 +18,17 @@ impl PathWatch {
     pub(in crate::engine::runtime::session) fn new(
         directory: &Path,
         mode: RecursiveMode,
+        relevant: impl Fn(&notify::Event) -> bool + Send + 'static,
     ) -> Result<Self> {
         let signal = Arc::new(Signal::default());
         let observed = Arc::clone(&signal);
         let mut watcher =
             notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-                let mut failure = observed.failure.lock();
-                if let Err(error) = event {
-                    *failure = Some(error.to_string());
+                match event {
+                    Ok(change) if !change.need_rescan() && !relevant(&change) => return,
+                    Ok(_) => {}
+                    Err(error) => *observed.failure.lock() = Some(error.to_string()),
                 }
-                drop(failure);
                 observed.changed.notify(usize::MAX);
             })
             .context("failed to create filesystem watcher")?;
@@ -102,6 +103,6 @@ pub(crate) fn wait_for_path(path: &Path, limit: Duration) -> Result<bool> {
     }
     let parent = path.parent().context("watched path has no parent")?;
     fs_err::create_dir_all(parent)?;
-    let watch = PathWatch::new(parent, RecursiveMode::NonRecursive)?;
+    let watch = PathWatch::new(parent, RecursiveMode::NonRecursive, |_| true)?;
     watch.wait_blocking(limit, || Ok(path.try_exists()?))
 }

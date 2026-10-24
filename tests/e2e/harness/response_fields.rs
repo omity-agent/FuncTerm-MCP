@@ -2,6 +2,7 @@ use std::process::Output;
 pub(crate) struct TabCreated {
     pub(crate) tab_id: String,
 }
+#[derive(Debug)]
 pub(crate) struct CommandResult {
     pub(crate) cwd: String,
     pub(crate) title: String,
