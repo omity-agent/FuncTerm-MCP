@@ -15,6 +15,7 @@ fn mcp_schema_exposes_tool_inputs_and_preserves_descriptions() {
     )))
     .unwrap();
     for tool in tools {
+        assert_references(tool);
         let name = text(tool, "/name");
         let properties = field(tool, "/inputSchema/properties");
         let root = properties.as_object().unwrap();
@@ -23,10 +24,7 @@ fn mcp_schema_exposes_tool_inputs_and_preserves_descriptions() {
         let configuration = settings.get("mcp").unwrap().get(name).unwrap();
         assert_eq!(
             text(tool, "/description"),
-            configuration
-                .get("description")
-                .and_then(toml::Value::as_str)
-                .unwrap()
+            configuration["description"].as_str().unwrap()
         );
         assert_descriptions(
             field(tool, "/inputSchema"),
@@ -49,16 +47,25 @@ fn mcp_schema_exposes_tool_inputs_and_preserves_descriptions() {
         assert!(tool.pointer("/outputSchema/properties/results").is_some());
     }
 }
+pub(super) fn assert_references(value: &Value) {
+    if let Some(object) = value.as_object() {
+        assert!(!object.contains_key("$ref") || object.len() == 1, "{value}");
+        for child in object.values() {
+            assert_references(child);
+        }
+    } else if let Some(array) = value.as_array() {
+        for child in array {
+            assert_references(child);
+        }
+    }
+}
 fn assert_descriptions(schema: &Value, configuration: &toml::Value) {
     let parameters = field(schema, "/properties").as_object().unwrap();
     let required = field(schema, "/required").as_array().unwrap();
     assert_eq!(parameters.len(), required.len(), "{schema}");
     for (parameter, parameter_schema) in parameters {
         assert!(required.contains(&json!(parameter)), "{parameter}");
-        let description = configuration
-            .get(parameter)
-            .and_then(toml::Value::as_str)
-            .unwrap();
+        let description = configuration[parameter].as_str().unwrap();
         assert_eq!(
             parameter_schema.get("description").and_then(Value::as_str),
             (!description.is_empty()).then_some(description)

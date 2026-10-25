@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
     strum :: VariantNames,
 )]
 #[strum(serialize_all = "lowercase")]
+#[schemars(inline)]
 pub(crate) enum ShellChoice {
     #[serde(rename = "powershell")]
     PowerShell,

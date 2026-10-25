@@ -1,5 +1,5 @@
 extern crate alloc;
-use super::wire::{McpSession, assert_field, assert_rejected, text};
+use super::wire::{McpSession, assert_field, assert_rejected, field, text};
 use crate::support::locked_with_env;
 use alloc::rc::Rc;
 use rmcp::serde_json::{Value, json};
@@ -21,6 +21,9 @@ fn schema_and_rejections_cover_every_privilege_and_output_policy_combination() {
                 .and_then(Value::as_array)
                 .unwrap();
             assert_eq!(tools.len(), 4, "{response}");
+            for tool in tools {
+                super::input_schema::assert_references(tool);
+            }
             for (name, property, fixed) in [
                 ("new_tab", "elevated", privilege.is_some()),
                 ("send_command", "separate_output", output.is_some()),
@@ -36,11 +39,8 @@ fn schema_and_rejections_cover_every_privilege_and_output_policy_combination() {
                     if name == "new_tab" {
                         assert_field(schema, "/type", "boolean");
                         assert_field(schema, "/default", false);
-                        let required = tool
-                            .pointer("/inputSchema/properties/exec/items/required")
-                            .and_then(Value::as_array)
-                            .unwrap();
-                        assert!(required.contains(&json!(property)));
+                        let required = field(tool, "/inputSchema/properties/exec/items/required");
+                        assert!(required.as_array().unwrap().contains(&json!(property)));
                     } else {
                         assert_field(schema, "/type", json!(["boolean", "null"]));
                     }
