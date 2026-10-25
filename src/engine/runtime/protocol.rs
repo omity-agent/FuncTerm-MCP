@@ -10,7 +10,7 @@ mod environment;
 pub(crate) mod format;
 mod kind;
 mod presentation;
-mod time_consumption;
+pub(crate) mod time_consumption;
 mod tokenization;
 pub(crate) use emission::{CommandOutput, OutputMode, OutputPresentation};
 pub(crate) use environment::{EnvironmentSnapshot, environment_name_equals};
@@ -56,8 +56,14 @@ pub(crate) enum KeyboardInput {
 }
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) enum Response {
-    Ok { payload: Payload },
-    Err { message: String },
+    Ok {
+        payload: Payload,
+        processing: Option<time_consumption::ProcessingTime>,
+    },
+    Err {
+        message: String,
+        processing: Option<time_consumption::ProcessingTime>,
+    },
 }
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, strum :: EnumDiscriminants)]
 #[strum_discriminants(name(PayloadKind), derive(strum::Display))]

@@ -62,7 +62,9 @@ impl StartupEvents {
             let Some(remaining) = timeout.checked_sub(started.elapsed()) else {
                 return startup_timeout(child, ready_file, screen, timeout);
             };
-            match self.receiver.recv_timeout(remaining) {
+            match crate::runtime::protocol::time_consumption::exclude(|| {
+                self.receiver.recv_timeout(remaining)
+            }) {
                 Ok(StartupEvent::Filesystem(Ok(()))) => {
                     if startup_result(child, ready_file, screen)?.is_some() {
                         return Ok(());

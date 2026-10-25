@@ -1,0 +1,9 @@
+{
+  "drivers": ["powershell"],
+  "counts": {
+    "send_command": 40,
+    "view": 4,
+    "new_tab": 4,
+    "manual_write": 0
+  }
+}

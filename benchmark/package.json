@@ -1,0 +1,30 @@
+{
+  "name": "functerm-benchmark",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "benchmark": "bun run src/launch.ts",
+    "format": "bun fmt .",
+    "lint": "bun run knip; bun run oxlint --config ./oxlint.config.ts .",
+    "test": "bun test tests/integration"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "latest",
+    "effect": "latest"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "knip": "latest",
+    "oxlint": "latest",
+    "oxlint-tsgolint": "latest"
+  },
+  "knip": {
+    "entry": [
+      "tests/integration/**/*.ts"
+    ],
+    "project": [
+      "src/**/*.ts",
+      "tests/**/*.ts"
+    ]
+  }
+}

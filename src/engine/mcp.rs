@@ -9,6 +9,7 @@ mod streamable;
 use crate::engine::privileges::PrivilegeMode;
 use crate::runtime::config::Settings;
 use crate::runtime::protocol::OutputMode;
+use crate::runtime::protocol::time_consumption;
 use anyhow::Result;
 use arguments::{
     FixedCommandExec, FixedNewTabExec, ManualWriteExec, NewTabExec, SendCommandExec, ViewRequest,
@@ -47,17 +48,22 @@ impl ServerHandler for McpServer {
         request: CallToolRequestParams,
         context: RequestContext<rmcp::RoleServer>,
     ) -> Result<CallToolResponse, rmcp::ErrorData> {
-        let june_revision = context.protocol_version() == Some(ProtocolVersion::V_2025_06_18);
-        let call = ToolCallContext::new(self, request, context);
-        if june_revision {
-            let route = self
-                .tool_router
-                .map
-                .get(call.name())
-                .ok_or_else(|| rmcp::ErrorData::invalid_params("tool not found", None))?;
-            return (route.call)(call).await;
-        }
-        self.tool_router.call(call).await
+        let (response, processing) =
+            time_consumption::capture(self.settings.benchmark.processing_timing, async {
+                let june_revision =
+                    context.protocol_version() == Some(ProtocolVersion::V_2025_06_18);
+                let call = ToolCallContext::new(self, request, context);
+                if june_revision {
+                    let route =
+                        self.tool_router.map.get(call.name()).ok_or_else(|| {
+                            rmcp::ErrorData::invalid_params("tool not found", None)
+                        })?;
+                    return (route.call)(call).await;
+                }
+                self.tool_router.call(call).await
+            })
+            .await;
+        output::processing(response?, processing)
     }
 }
 # [tool_router (router = tool_router)]

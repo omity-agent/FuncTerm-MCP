@@ -53,6 +53,10 @@ bun = ["bun"]
 # Python 可执行文件候选。
 python = ["python3", "python"]
 
+[benchmark]
+# 请求路径累计活跃计时；通过 FUNCTERM_BENCHMARK_PROCESSING_TIMING 临时启用。
+processing_timing = false
+
 [ipc]
 # IPC 连接建立与 Daemon 探测的最长等待秒数
 setup_timeout_seconds = 15.0

@@ -1,2 +1,4 @@
 target/
 .DS_Store
+benchmark/node_modules/
+benchmark/results/

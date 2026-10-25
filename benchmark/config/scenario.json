@@ -1,0 +1,24 @@
+{
+  "executable": "../target/x86_64-pc-windows-msvc/release/functerm.exe",
+  "drivers": ["powershell", "bash", "nu", "cmd", "bun", "python"],
+  "counts": {
+    "send_command": 1000,
+    "view": 100,
+    "new_tab": 50,
+    "manual_write": 10
+  },
+  "commandBytes": {
+    "minimum": 16,
+    "maximum": 4096
+  },
+  "timeouts": {
+    "commandSeconds": 30,
+    "requestMilliseconds": 90000,
+    "startupMilliseconds": 90000,
+    "cleanupMilliseconds": 60000,
+    "readyPollMilliseconds": 2
+  },
+  "seed": 381735,
+  "output": "results/analysis.json",
+  "logLevel": "Info"
+}

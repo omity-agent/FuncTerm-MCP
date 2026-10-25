@@ -126,13 +126,14 @@ impl BlockingExecutor {
         T: Send + 'static,
         F: FnOnce() -> Result<T> + Send + 'static,
     {
+        let collector = crate::runtime::protocol::time_consumption::current();
         let permit = Arc::clone(&self.permits)
             .acquire_owned()
             .await
             .context("blocking executor is closed")?;
         tokio::task::spawn_blocking(move || {
             let _permit = permit;
-            operation()
+            crate::runtime::protocol::time_consumption::blocking(collector, operation)
         })
         .await
         .context("blocking operation worker failed")?

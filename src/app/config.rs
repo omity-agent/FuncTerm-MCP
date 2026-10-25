@@ -15,6 +15,7 @@ pub(crate) struct Settings {
     pub(crate) terminal_model_title: String,
     pub(crate) shell_startup_timeout_seconds: f64,
     pub(crate) shell_load_profile: bool,
+    pub(crate) benchmark: BenchmarkSettings,
     pub(crate) shell_ignore_style: bool,
     pub(crate) command_separate_output: bool,
     pub(crate) output_token_encoding: String,
@@ -28,6 +29,10 @@ pub(crate) struct Settings {
     pub(crate) python: Vec<String>,
     pub(crate) ipc: IpcSettings,
     pub(crate) mcp: McpSettings,
+}
+#[derive(Clone, Debug, Deserialize)]
+pub(crate) struct BenchmarkSettings {
+    pub(crate) processing_timing: bool,
 }
 #[derive(Clone, Debug, Deserialize)]
 pub(crate) struct IpcSettings {
@@ -119,6 +124,22 @@ pub(crate) fn load() -> Result<Settings> {
         toml::from_str::<Settings>(SETTINGS).context("failed to parse embedded settings")?;
     settings.ipc.validate()?;
     apply_string_override(DAEMON_SERVICE_NAME_ENV, &mut settings.daemon_service_name);
+    for (name, value) in [
+        (
+            "FUNCTERM_SHELL_LOAD_PROFILE",
+            &mut settings.shell_load_profile,
+        ),
+        (
+            "FUNCTERM_BENCHMARK_PROCESSING_TIMING",
+            &mut settings.benchmark.processing_timing,
+        ),
+    ] {
+        if let Ok(setting) = std::env::var(name) {
+            *value = setting
+                .parse()
+                .with_context(|| format!("invalid boolean in {name}"))?;
+        }
+    }
     if let Some(address) = std::env::var_os("FUNCTERM_MCP_HTTP_BIND") {
         settings.mcp.http.bind_address = address
             .to_str()

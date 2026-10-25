@@ -1,4 +1,8 @@
 use core::time::Duration;
+mod collector;
+mod suspension;
+pub(crate) use collector::{ProcessingTime, capture, current};
+pub(crate) use suspension::{blocking, exclude};
 const NANOS_PER_MILLISECOND: u128 = 1_000_000;
 const NANOS_PER_SECOND: u128 = 1_000_000_000;
 const NANOS_PER_MINUTE: u128 = 60 * NANOS_PER_SECOND;

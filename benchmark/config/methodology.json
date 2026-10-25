@@ -1,0 +1,21 @@
+{
+  "unit": "nanoseconds",
+  "primary": "MCP/Daemon 请求 Future 活跃 poll 与请求阻塞工作线程耗时之和",
+  "includes": [
+    "MCP 路由",
+    "stdio 侧 IPC 客户端处理",
+    "Daemon 请求派发",
+    "请求阻塞工作线程"
+  ],
+  "excludes": [
+    "异步挂起",
+    "Shell 就绪事件的阻塞等待",
+    "Shell 及其子进程的执行",
+    "Benchmark 客户端与网络延迟",
+    "handler 之外的线协议序列化",
+    "后台 PTY 读取线程",
+    "独立的命令监督与清理任务"
+  ],
+  "interpretation": "累计工作线程墙钟活跃耗时",
+  "instrumentation": "FUNCTERM_BENCHMARK_PROCESSING_TIMING=true"
+}

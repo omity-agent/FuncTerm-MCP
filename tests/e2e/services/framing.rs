@@ -9,7 +9,10 @@ enum ProbeRequest {
 }
 #[derive(Debug, Deserialize, PartialEq, Eq)]
 enum ProbeResponse {
-    Ok { payload: ProbePayload },
+    Ok {
+        payload: ProbePayload,
+        processing: Option<()>,
+    },
 }
 #[derive(Debug, Deserialize, PartialEq, Eq)]
 enum ProbePayload {
@@ -82,7 +85,8 @@ async fn assert_pong(stream: &mut LocalSocketStream) {
     assert_eq!(
         response,
         ProbeResponse::Ok {
-            payload: ProbePayload::Pong
+            payload: ProbePayload::Pong,
+            processing: None,
         }
     );
 }

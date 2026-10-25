@@ -1,7 +1,7 @@
 use super::endpoint::ClientConnection;
 use crate::runtime::config::Settings;
 use crate::runtime::protocol::{Payload, Request, RequestKind, Response};
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result};
 use std::io;
 pub(crate) struct DaemonClient {
     stream: ClientConnection,
@@ -28,10 +28,21 @@ impl DaemonClient {
     pub(crate) async fn call(&mut self, request: Request) -> Result<Payload> {
         let kind = RequestKind::from(&request);
         self.stream.send(request).await?;
-        match self.stream.receive().await? {
-            Response::Ok { payload } => payload.ensure_matches(kind),
-            Response::Err { message } => bail!(message),
+        let response = self.stream.receive().await?;
+        let (result, processing) = match response {
+            Response::Ok {
+                payload,
+                processing,
+            } => (payload.ensure_matches(kind), processing),
+            Response::Err {
+                message,
+                processing,
+            } => (Err(anyhow::anyhow!(message)), processing),
+        };
+        if let Some(measurement) = processing {
+            measurement.merge_current();
         }
+        result
     }
 }
 pub(crate) async fn ensure_daemon(settings: &Settings) -> Result<()> {

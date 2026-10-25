@@ -1,5 +1,6 @@
 use crate::runtime::config::Settings;
 use crate::runtime::daemon::report::StartupReporter;
+use crate::runtime::protocol::time_consumption::{self, ProcessingTime};
 use crate::runtime::protocol::{Payload, Request, Response};
 use crate::runtime::session::Manager;
 use crate::runtime::transport::ServerConnection;
@@ -35,6 +36,7 @@ async fn run_inner(settings: Settings, startup_reporter: &mut StartupReporter) -
     let service_name = settings.daemon_service_name.clone();
     let _daemon_instance = crate::runtime::daemon_lock::acquire_instance(&settings)?;
     let ipc = settings.ipc.clone();
+    let measure_processing = settings.benchmark.processing_timing;
     let http_settings = settings.clone();
     let manager = Arc::new(
         tokio::task::spawn_blocking(move || Manager::new(settings))
@@ -55,6 +57,7 @@ async fn run_inner(settings: Settings, startup_reporter: &mut StartupReporter) -
                         Arc::clone(&manager),
                         connection,
                         shutdown.clone(),
+                        measure_processing,
                     ));
                 }
                 Err(error) if recoverable_accept_error(&error) => {
@@ -85,7 +88,10 @@ async fn run_inner(settings: Settings, startup_reporter: &mut StartupReporter) -
     }
     let mut shutdown_connection = shutdown_reason?;
     let completion = http_stopped.and(stopped);
-    let response = response_from(completion.as_ref().map(|&()| Payload::ShutdownComplete));
+    let response = response_from(
+        completion.as_ref().map(|&()| Payload::ShutdownComplete),
+        None,
+    );
     let sent = shutdown_connection.send(response).await;
     completion?;
     sent.context("failed to acknowledge daemon shutdown")
@@ -98,14 +104,18 @@ fn report_worker(result: Result<Result<()>, tokio::task::JoinError>) {
         Err(error) => eprintln!("IPC connection task failed: {error}"),
     }
 }
-fn response_from<E>(result: Result<Payload, E>) -> Response
+fn response_from<E>(result: Result<Payload, E>, processing: Option<ProcessingTime>) -> Response
 where
     E: core::fmt::Display,
 {
     match result {
-        Ok(payload) => Response::Ok { payload },
+        Ok(payload) => Response::Ok {
+            payload,
+            processing,
+        },
         Err(error) => Response::Err {
             message: format!("{error:#}"),
+            processing,
         },
     }
 }
@@ -145,6 +155,7 @@ async fn serve_connection(
     manager: Arc<Manager>,
     mut connection: ServerConnection,
     shutdown: mpsc::Sender<ServerConnection>,
+    measure_processing: bool,
 ) -> Result<()> {
     while let Some(request) = connection.receive_or_eof().await? {
         if matches!(request, Request::Shutdown) {
@@ -154,7 +165,10 @@ async fn serve_connection(
                 .map_err(|error| anyhow::anyhow!("failed to request daemon shutdown: {error}"))?;
             return Ok(());
         }
-        let response = response_from(dispatch::execute(&manager, request).await);
+        let (result, processing) =
+            time_consumption::capture(measure_processing, dispatch::execute(&manager, request))
+                .await;
+        let response = response_from(result, processing);
         connection.send(response).await?;
     }
     Ok(())

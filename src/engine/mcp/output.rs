@@ -4,6 +4,24 @@ use crate::runtime::protocol::{
 };
 use rmcp::model::{CallToolResult, ContentBlock};
 use serde::Serialize;
+pub(super) fn processing(
+    response: rmcp::model::CallToolResponse,
+    measurement: Option<crate::runtime::protocol::time_consumption::ProcessingTime>,
+) -> Result<rmcp::model::CallToolResponse, rmcp::ErrorData> {
+    let rmcp::model::CallToolResponse::Complete(mut result) = response else {
+        return Ok(response);
+    };
+    if let Some(data) = measurement {
+        let value = rmcp::serde_json::to_value(data)
+            .map_err(|error| rmcp::ErrorData::internal_error(error.to_string(), None))?;
+        result
+            .meta
+            .get_or_insert_default()
+            .0
+            .insert("functerm/processing".to_owned(), value);
+    }
+    Ok(result.into())
+}
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
 pub(super) struct NewTabOutput<'payload> {
     pub(super) tab_id: &'payload str,

@@ -1,0 +1,21 @@
+{
+  "usage": "bun run benchmark [--config 路径] [--executable 路径] [--output 路径] [--dry-run]",
+  "configuration": "配置不合法",
+  "starting": "启动 Benchmark 环境",
+  "running": "执行负载",
+  "progress": "调用进度",
+  "saved": "分析数据已保存",
+  "failed": "Benchmark 失败",
+  "cleanup": "清理 Benchmark 环境",
+  "shutdown": "Daemon 清理失败",
+  "unexpected": "MCP 响应不符合预期",
+  "missingTiming": "MCP 响应缺少内部计时",
+  "commandTimeout": "send_command 等待超时",
+  "commandFailed": "命令执行失败",
+  "readyTimeout": "等待交互命令就绪超时",
+  "startupFailed": "Daemon 启动失败",
+  "transportFailed": "MCP 传输失败",
+  "unsafeService": "拒绝操作非 Benchmark Daemon",
+  "counts": "舍入后的调用次数",
+  "stalled": "调度器无法继续推进"
+}

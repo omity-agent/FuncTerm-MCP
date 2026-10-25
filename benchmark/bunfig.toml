@@ -1,0 +1,5 @@
+[fmt]
+logLevel = "warn"
+sortImports = true
+sortTailwindcss = true
+sortPackageJson = true
