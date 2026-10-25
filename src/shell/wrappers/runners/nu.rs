@@ -6,11 +6,8 @@ pub(in crate::shell) fn wrapper() -> String {
     instrumentation::render(TEMPLATE)
 }
 const TEMPLATE : & str = "def --env @FUNCTION@ [@VAR_command_id@: string, @VAR_directory@: path, @VAR_working_directory@: path, @VAR_separate_output@: bool] {
-	    let @VAR_input_dir@ = ($@VAR_directory@ | path join '@INPUT_DIR@')
-	    let @VAR_output_dir@ = ($@VAR_directory@ | path join '@OUTPUT_DIR@')
-	    let @VAR_state_dir@ = ($@VAR_directory@ | path join '@STATE_DIR@')
-	    let @VAR_stdout_file@ = ($@VAR_output_dir@ | path join '@STDOUT@')
-	    let @VAR_stderr_file@ = ($@VAR_output_dir@ | path join '@STDERR@')
+		let @VAR_stdout_file@ = ($@VAR_directory@ | path join '@STDOUT@')
+		let @VAR_stderr_file@ = ($@VAR_directory@ | path join '@STDERR@')
 	    let @VAR_session_state_dir@ = ($env.FUNCTERM_SESSION_ROOT | path join 'state')
 	    let @VAR_env_state_file@ = ($@VAR_session_state_dir@ | path join 'nushell-env.nuon')
 	    let @VAR_config_state_file@ = ($@VAR_session_state_dir@ | path join 'nushell-config.nuon')
@@ -19,11 +16,11 @@ const TEMPLATE : & str = "def --env @FUNCTION@ [@VAR_command_id@: string, @VAR_d
 	    } else {
 	        []
 	    }
-		    let @VAR_cwd_file@ = ($@VAR_state_dir@ | path join 'nushell-cwd.txt')
-		    let @VAR_exit_file@ = ($@VAR_state_dir@ | path join '@NUSHELL_EXIT_REQUEST@')
-	    let @VAR_config_file@ = ($@VAR_input_dir@ | path join 'functerm-config.nu')
-	    let @VAR_env_config_file@ = ($@VAR_input_dir@ | path join 'functerm-env.nu')
-	    let @VAR_launch_file@ = ($@VAR_input_dir@ | path join 'nushell-launch.txt')
+		let @VAR_cwd_file@ = ($@VAR_directory@ | path join 'nushell-cwd.txt')
+		let @VAR_exit_file@ = ($@VAR_directory@ | path join '@NUSHELL_EXIT_REQUEST@')
+		let @VAR_config_file@ = ($@VAR_directory@ | path join 'functerm-config.nu')
+		let @VAR_env_config_file@ = ($@VAR_directory@ | path join 'functerm-env.nu')
+		let @VAR_launch_file@ = ($@VAR_directory@ | path join 'nushell-launch.txt')
 	    let @VAR_previous_command_id@ = $env.@COMMAND_ID_ENV@?
 	    let @VAR_previous_command_directory@ = $env.@COMMAND_DIR_ENV@?
 	    $env.@COMMAND_ID_ENV@ = $@VAR_command_id@

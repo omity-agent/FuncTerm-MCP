@@ -17,8 +17,13 @@ fn cli_keeps_nested_launch_result_stable_after_nested_shell_exits() {
         assert!(launch.finished, "{}: {launch:?}", case.name);
         assert_eq!(launch.exit_code, Some(0_i32), "{}: {launch:?}", case.name);
         let directory = command_directory(&tab.tab_id, &id);
+        let source = if case.name == "cmd" {
+            "command.cmd"
+        } else {
+            "command.txt"
+        };
         assert!(
-            directory.join("input").is_dir(),
+            directory.join(source).is_file(),
             "live wrapper lost input: {}",
             case.name
         );

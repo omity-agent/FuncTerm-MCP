@@ -19,11 +19,13 @@ use notify::RecursiveMode;
 use parking_lot::Mutex;
 use portable_pty::PtySize;
 use std::path::Path;
+use std::sync::OnceLock;
 use tastty_core::TerminalSize;
 pub(super) struct ShellLauncher {
     settings: Settings,
     generation_root: std::path::PathBuf,
     shim_dir: std::path::PathBuf,
+    shim_ready: (OnceLock<()>, OnceLock<()>),
     #[cfg(unix)]
     runtime_root: std::path::PathBuf,
 }
@@ -39,6 +41,7 @@ impl ShellLauncher {
             settings,
             generation_root,
             shim_dir,
+            shim_ready: (OnceLock::new(), OnceLock::new()),
             #[cfg(unix)]
             runtime_root: root,
         })
@@ -66,6 +69,12 @@ impl ShellLauncher {
             &tab_root,
             &shim_dir,
         )?;
+        let ready = if elevated {
+            &self.shim_ready.1
+        } else {
+            &self.shim_ready.0
+        };
+        ready.get_or_try_init(|| shims::ensure_directory(&shim_dir))?;
         let tab_state = temp::tab_state_directory(&tab_root);
         let command_root = temp::tab_commands_directory(&tab_root);
         fs_err::create_dir_all(&tab_state)?;
@@ -75,7 +84,7 @@ impl ShellLauncher {
             RecursiveMode::Recursive,
             crate::runtime::session::records::lifecycle_event,
         )?);
-        let mut managed_environment = shims::environment(
+        let managed_environment = shims::environment(
             &self.settings,
             &tab_root,
             &shim_dir,
@@ -83,13 +92,16 @@ impl ShellLauncher {
             client_environment,
             starting_directory,
         )?;
-        managed_environment.push((shims::TAB_ID_ENV.into(), tab_id.into()));
+        let executable =
+            crate::text::path_text(&managed_environment.executable, "executable path")?;
+        let mut variables = managed_environment.variables;
+        variables.push((shims::TAB_ID_ENV.into(), tab_id.into()));
         let startup = starting_shell.startup(
             starting_directory,
             &tab_root,
             load_profile,
             self.settings.shell_ignore_style,
-            &EnvironmentSnapshot::from_variables(managed_environment),
+            &EnvironmentSnapshot::from_variables(variables),
         )?;
         let screen = Arc::new(Terminal::new(
             TerminalSize {
@@ -98,8 +110,6 @@ impl ShellLauncher {
             },
             &self.settings.terminal_model_title,
         )?);
-        let executable =
-            starting_shell.executable(&self.settings, client_environment, starting_directory)?;
         let ready_file = startup.ready_file.clone();
         let spawned = spawn_builder::launch(
             &executable,

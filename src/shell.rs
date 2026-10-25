@@ -16,17 +16,6 @@ pub(crate) struct ShellStartup {
     pub(crate) ready_file: std::path::PathBuf,
 }
 impl ShellChoice {
-    pub(crate) fn executable(
-        self,
-        settings: &Settings,
-        environment: &crate::runtime::protocol::EnvironmentSnapshot,
-        cwd: &Path,
-    ) -> Result<String> {
-        crate::text::path_text(
-            &self.executable_path(settings, environment, cwd)?,
-            "executable path",
-        )
-    }
     pub(crate) fn executable_path(
         self,
         settings: &Settings,
@@ -106,8 +95,16 @@ impl ShellChoice {
     pub(crate) fn invocation(self) -> Result<Option<drivers::ShellInvocation>> {
         drivers::invocation(self)
     }
-    pub(crate) fn command_script(self, command: &str) -> String {
-        drivers::command_script(self, command)
+    pub(crate) const fn source_file(self) -> &'static str {
+        match self {
+            Self::Cmd => crate::contract::COMMAND_SCRIPT_FILE,
+            Self::PowerShell
+            | Self::Bash
+            | Self::NuShell
+            | Self::Zsh
+            | Self::Bun
+            | Self::Python => crate::contract::COMMAND_FILE,
+        }
     }
     pub(crate) fn prepare_command(self, directory: &Path, session_root: &Path) -> Result<()> {
         drivers::prepare_command(self, directory, session_root)

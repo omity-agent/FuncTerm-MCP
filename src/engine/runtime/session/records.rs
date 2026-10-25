@@ -1,9 +1,4 @@
-use crate::contract::{
-    COMMAND_FILE, COMMAND_INPUT_DIRECTORY, COMMAND_OUTPUT_DIRECTORY,
-    COMMAND_POWERSHELL_SCRIPT_FILE, COMMAND_SCRIPT_FILE, COMMAND_SEPARATION_FILE,
-    COMMAND_STATE_DIRECTORY, COMMAND_WORKING_DIRECTORY_FILE, DONE_FILE, RELEASED_FILE,
-    STARTED_FILE, STDERR_FILE, STDOUT_FILE,
-};
+use crate::contract::{DONE_FILE, RELEASED_FILE, STDERR_FILE, STDOUT_FILE};
 use crate::runtime::protocol::{CommandOutput, CommandSnapshot, CommandView, OutputTokenizer};
 use crate::shell::ShellChoice;
 use anyhow::{Context as _, Result, bail};
@@ -16,69 +11,32 @@ pub(super) struct CommandRecord {
     pub(super) directory: PathBuf,
     pub(super) stdout: PathBuf,
     pub(super) stderr: PathBuf,
-    pub(super) command: PathBuf,
-    pub(super) script: PathBuf,
-    pub(super) powershell_script: PathBuf,
-    pub(super) started: PathBuf,
+    pub(super) source: PathBuf,
     pub(super) done: PathBuf,
     pub(super) released: PathBuf,
 }
 pub(super) type DoneFile = crate::contract::CommandCompletion<String>;
 pub(super) fn lifecycle_event(event: &notify::Event) -> bool {
-    event.paths.iter().any(|path| {
-        path.parent().and_then(Path::file_name)
-            == Some(std::ffi::OsStr::new(COMMAND_STATE_DIRECTORY))
-            && [STARTED_FILE, DONE_FILE, RELEASED_FILE]
-                .iter()
-                .any(|name| path.file_name() == Some(std::ffi::OsStr::new(name)))
-    })
+    event
+        .paths
+        .iter()
+        .any(|path| path.file_name() == Some(std::ffi::OsStr::new(RELEASED_FILE)))
 }
 pub(super) fn create_record(
     command_root: &Path,
     command_id: &str,
-    initial_cwd: &Path,
-    separate_output: bool,
+    choice: ShellChoice,
 ) -> Result<CommandRecord> {
     let command_dir = command_root.join(command_id);
-    let input_dir = command_dir.join(COMMAND_INPUT_DIRECTORY);
-    let output_dir = command_dir.join(COMMAND_OUTPUT_DIRECTORY);
-    let state_dir = command_dir.join(COMMAND_STATE_DIRECTORY);
-    fs::create_dir_all(&input_dir)?;
-    fs::create_dir_all(&output_dir)?;
-    fs::create_dir_all(&state_dir)?;
-    let working_directory = input_dir.join(COMMAND_WORKING_DIRECTORY_FILE);
-    fs::write(
-        &working_directory,
-        crate::text::path_text(initial_cwd, "command working directory")?,
-    )?;
-    fs::write(
-        input_dir.join(COMMAND_SEPARATION_FILE),
-        separate_output.to_string(),
-    )?;
+    fs::create_dir(&command_dir)?;
     Ok(CommandRecord {
+        stdout: command_dir.join(STDOUT_FILE),
+        stderr: command_dir.join(STDERR_FILE),
+        source: command_dir.join(choice.source_file()),
+        done: command_dir.join(DONE_FILE),
+        released: command_dir.join(RELEASED_FILE),
         directory: command_dir,
-        stdout: output_dir.join(STDOUT_FILE),
-        stderr: output_dir.join(STDERR_FILE),
-        command: input_dir.join(COMMAND_FILE),
-        script: input_dir.join(COMMAND_SCRIPT_FILE),
-        powershell_script: input_dir.join(COMMAND_POWERSHELL_SCRIPT_FILE),
-        started: state_dir.join(STARTED_FILE),
-        done: state_dir.join(DONE_FILE),
-        released: state_dir.join(RELEASED_FILE),
     })
-}
-impl CommandRecord {
-    pub(super) fn script_for(&self, choice: ShellChoice) -> &Path {
-        match choice {
-            ShellChoice::PowerShell => &self.powershell_script,
-            ShellChoice::Bash
-            | ShellChoice::NuShell
-            | ShellChoice::Zsh
-            | ShellChoice::Cmd
-            | ShellChoice::Bun
-            | ShellChoice::Python => &self.script,
-        }
-    }
 }
 pub(super) fn read_command_result(
     record: &CommandRecord,

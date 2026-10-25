@@ -5,7 +5,11 @@ use crate::runtime::protocol::EnvironmentSnapshot;
 use anyhow::{Context as _, Result};
 use fs_err as fs;
 use std::ffi::{OsStr, OsString};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+pub(crate) struct ManagedEnvironment {
+    pub(crate) variables: Vec<(OsString, OsString)>,
+    pub(crate) executable: PathBuf,
+}
 pub(crate) const ACTIVE_SHELL_FILE_ENV: &str = "FUNCTERM_ACTIVE_SHELL_FILE";
 pub(crate) const CURRENT_SHELL_ENV: &str = "FUNCTERM_CURRENT_SHELL";
 pub(crate) const IGNORE_SHELL_STYLE_ENV: &str = "FUNCTERM_IGNORE_SHELL_STYLE";
@@ -41,7 +45,8 @@ pub(crate) fn environment(
     current_shell: ShellChoice,
     inherited: &EnvironmentSnapshot,
     cwd: &Path,
-) -> Result<Vec<(OsString, OsString)>> {
+) -> Result<ManagedEnvironment> {
+    let executable = current_shell.executable_path(settings, inherited, cwd)?;
     let current_exe = std::env::current_exe().context("failed to resolve current executable")?;
     let inherited_shim = inherited.value(SHIM_DIR_ENV);
     let path = prepend_path(
@@ -80,10 +85,15 @@ pub(crate) fn environment(
         ),
     ];
     for &shell in ShellChoice::all() {
-        if let Ok(executable) = shell.executable_path(settings, inherited, cwd) {
+        let resolved = if shell == current_shell {
+            Ok(executable.clone())
+        } else {
+            shell.executable_path(settings, inherited, cwd)
+        };
+        if let Ok(resolved_path) = resolved {
             env.push((
                 OsString::from(shell.shim_env_name()),
-                executable.into_os_string(),
+                resolved_path.into_os_string(),
             ));
         }
     }
@@ -93,7 +103,10 @@ pub(crate) fn environment(
         .filter(|pair| !is_managed_name(&pair.0))
         .collect::<Vec<_>>();
     inherited_env.extend(env);
-    Ok(inherited_env)
+    Ok(ManagedEnvironment {
+        variables: inherited_env,
+        executable,
+    })
 }
 pub(crate) fn ensure_directory(shim_dir: &Path) -> Result<()> {
     fs::create_dir_all(shim_dir)?;

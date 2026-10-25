@@ -1,7 +1,7 @@
 use super::StartupContext;
 use crate::contract::{
-    COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, COMMAND_INPUT_DIRECTORY,
-    COMMAND_OUTPUT_DIRECTORY, HELPER_EXECUTABLE_ENV, STDERR_FILE, STDOUT_FILE,
+    COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, HELPER_EXECUTABLE_ENV, STDERR_FILE,
+    STDOUT_FILE,
 };
 use anyhow::{Context as _, Result};
 pub(super) fn script(context: StartupContext<'_>) -> Result<String> {
@@ -57,12 +57,10 @@ if @VAR_startup_file@:
 	    ))
 	    @VAR_command_id@ = @VAR_receipt@["command_id"]
 	    @VAR_directory@ = @VAR_pathlib@.Path(@VAR_receipt@["directory"])
-	    @VAR_input_directory@ = @VAR_directory@ / "{COMMAND_INPUT_DIRECTORY}"
-	    @VAR_output_directory@ = @VAR_directory@ / "{COMMAND_OUTPUT_DIRECTORY}"
-	    @VAR_source@ = (@VAR_input_directory@ / "{COMMAND_FILE}").read_text(encoding="utf-8")
+	    @VAR_source@ = (@VAR_directory@ / "{COMMAND_FILE}").read_text(encoding="utf-8")
 	    @VAR_working_directory@ = @VAR_receipt@["working_directory"]
-	    @VAR_stdout_file@ = @VAR_output_directory@ / "{STDOUT_FILE}"
-	    @VAR_stderr_file@ = @VAR_output_directory@ / "{STDERR_FILE}"
+	    @VAR_stdout_file@ = @VAR_directory@ / "{STDOUT_FILE}"
+	    @VAR_stderr_file@ = @VAR_directory@ / "{STDERR_FILE}"
 	    @VAR_previous_id@ = @VAR_os@.environ.get("{COMMAND_ID_ENV}")
 	    @VAR_previous_directory@ = @VAR_os@.environ.get("{COMMAND_DIRECTORY_ENV}")
 	    @VAR_protected_environment@ = dict(@VAR_os@.environ)

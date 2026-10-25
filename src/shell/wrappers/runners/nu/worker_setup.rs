@@ -1,7 +1,5 @@
 use super::instrumentation;
-use crate::contract::{
-    COMMAND_FILE, COMMAND_INPUT_DIRECTORY, COMMAND_STATE_DIRECTORY, SESSION_STATE_DIRECTORY,
-};
+use crate::contract::{COMMAND_FILE, SESSION_STATE_DIRECTORY};
 use crate::shell::quote;
 use anyhow::Result;
 use std::path::Path;
@@ -9,14 +7,13 @@ pub(in crate::shell) fn prepare_nushell_command(
     directory: &Path,
     session_root: &Path,
 ) -> Result<()> {
-    let input = directory.join(COMMAND_INPUT_DIRECTORY);
     let session_state = session_root.join(SESSION_STATE_DIRECTORY);
     fs_err::create_dir_all(&session_state)?;
     let declarations = session_state.join("nushell-declarations.nu");
     crate::publication::write_once(&declarations, b"")?;
-    let script = input.join("command.nu");
-    fs_err::copy(input.join(COMMAND_FILE), &script)?;
-    fs_err::write(input.join("functerm-env.nu"), b"")?;
+    let script = directory.join("command.nu");
+    fs_err::copy(directory.join(COMMAND_FILE), &script)?;
+    fs_err::write(directory.join("functerm-env.nu"), b"")?;
     let config = format!(
         r#"$env.config.show_banner = false
 $env.config.use_ansi_coloring = false
@@ -35,19 +32,15 @@ $env.config.hooks.display_output = {{ save_nushell_state {cwd} {environment} {co
 "#,
         environment = quote::nushell_path(&session_state.join("nushell-env.nuon"))?,
         configuration = quote::nushell_path(&session_state.join("nushell-config.nuon"))?,
-        cwd = quote::nushell_path(
-            &directory
-                .join(COMMAND_STATE_DIRECTORY)
-                .join("nushell-cwd.txt")
-        )?,
+        cwd = quote::nushell_path(&directory.join("nushell-cwd.txt"))?,
         declarations = quote::nushell_path(&declarations)?,
     );
     fs_err::write(
-        input.join("functerm-config.nu"),
+        directory.join("functerm-config.nu"),
         instrumentation::render_worker(&config),
     )?;
     fs_err::write(
-        input.join("nushell-launch.txt"),
+        directory.join("nushell-launch.txt"),
         format!(
             "source {}; source {}",
             quote::nushell_path(&declarations)?,

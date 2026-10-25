@@ -81,11 +81,18 @@ impl ShellSession {
         command_id: &str,
         command: &str,
         record: &CommandRecord,
+        separate_output: bool,
     ) -> Result<()> {
-        fs_err::write(&record.command, command)?;
+        fs_err::write(&record.source, command)?;
         let choice = self.current_choice();
-        fs_err::write(record.script_for(choice), choice.command_script(command))?;
-        crate::publication::write_replace(&self.dispatch_file, command_id)
+        let cwd = crate::text::path_text(&self.cwd(), "command working directory")?;
+        let dispatch = sonic_rs::to_vec(&crate::contract::CommandDispatch {
+            command_id,
+            working_directory: &cwd,
+            separate_output,
+        })
+        .context("failed to encode command dispatch")?;
+        crate::publication::write_replace(&self.dispatch_file, dispatch)
             .context("failed to publish command dispatch")?;
         let Some(invocation) = choice.invocation()? else {
             return Ok(());

@@ -7,19 +7,11 @@ pub(crate) fn write_once(destination: &Path, contents: impl AsRef<[u8]>) -> Resu
 }
 #[cfg(windows)]
 pub(crate) fn copy_once(source: &Path, destination: &Path) -> Result<()> {
-    if destination.exists() {
+    if destination.try_exists()? {
         return Ok(());
     }
-    let mut source_file = std::fs::File::open(source).with_context(|| {
-        format!(
-            "failed to open executable snapshot source {}",
-            source.display()
-        )
-    })?;
-    let permissions = source_file.metadata()?.permissions();
-    publish_once(destination, |destination_file| {
-        std::io::copy(&mut source_file, destination_file)?;
-        destination_file.set_permissions(permissions)
+    publish_once(destination, |temporary| {
+        fs_err::copy(source, temporary.path()).map(|_| ())
     })
 }
 pub(crate) fn write_replace(destination: &Path, contents: impl AsRef<[u8]>) -> Result<()> {
@@ -35,10 +27,10 @@ pub(crate) fn write_replace(destination: &Path, contents: impl AsRef<[u8]>) -> R
 }
 fn publish_once(
     destination: &Path,
-    operation: impl FnOnce(&mut std::fs::File) -> std::io::Result<()>,
+    operation: impl FnOnce(&mut NamedTempFile) -> std::io::Result<()>,
 ) -> Result<()> {
     let mut temporary = temporary_sibling(destination)?;
-    operation(temporary.as_file_mut())?;
+    operation(&mut temporary)?;
     match temporary.persist_noclobber(destination) {
         Ok(_file) => Ok(()),
         Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {

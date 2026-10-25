@@ -1,9 +1,8 @@
 mod echo_control;
 mod output_capture;
 use crate::contract::{
-    COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, COMMAND_INPUT_DIRECTORY,
-    COMMAND_OUTPUT_DIRECTORY, DISPATCH_FILE, HELPER_EXECUTABLE_ENV, SESSION_STATE_DIRECTORY,
-    STDERR_FILE, STDOUT_FILE,
+    COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, DISPATCH_FILE, HELPER_EXECUTABLE_ENV,
+    SESSION_STATE_DIRECTORY, STDERR_FILE, STDOUT_FILE,
 };
 pub(super) fn script(cwd: &str, ready: &str) -> String {
     let bootstrap = format!(
@@ -123,9 +122,7 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
 		        const @VAR_receipt@ = JSON.parse(@VAR_runHelper@(["internal-claim-command", "--session-root", process.env.FUNCTERM_SESSION_ROOT, "--shell", "bun"], true));
 		        const @VAR_commandId@ = @VAR_receipt@.command_id;
 		        const @VAR_directory@ = @VAR_receipt@.directory;
-	        const @VAR_input@ = @VAR_join@(@VAR_directory@, "{input_directory}");
-	        const @VAR_output@ = @VAR_join@(@VAR_directory@, "{output_directory}");
-	        const @VAR_source@ = @VAR_readFileSync@(@VAR_join@(@VAR_input@, "{command_file}"), "utf8");
+                const @VAR_source@ = @VAR_readFileSync@(@VAR_join@(@VAR_directory@, "{command_file}"), "utf8");
 		        const @VAR_workingDirectory@ = @VAR_receipt@.working_directory;
 	        const @VAR_previousId@ = process.env.{command_id_env};
 	        const @VAR_previousDirectory@ = process.env.{command_directory_env};
@@ -139,7 +136,7 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
 	        const @VAR_previousWriter@ = @VAR_server@.writer;
 	        if (@VAR_receipt@.separate_output) @VAR_server@.writer = @VAR_value@ => @VAR_inspect@(@VAR_value@, {{ ...@VAR_previousWriter@.options, colors: false }});
 	        @VAR_activeCommand@ = {{
-	            id: @VAR_commandId@, directory: @VAR_directory@, output: @VAR_output@,
+				id: @VAR_commandId@, directory: @VAR_directory@, output: @VAR_directory@,
 	            previousId: @VAR_previousId@, previousDirectory: @VAR_previousDirectory@,
 	            protectedEnvironment: @VAR_protectedEnvironment@,
 	            previousError: @VAR_previousError@, previousWriter: @VAR_previousWriter@,
@@ -172,8 +169,6 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
         helper_env = HELPER_EXECUTABLE_ENV,
         session_state = SESSION_STATE_DIRECTORY,
         dispatch_file = DISPATCH_FILE,
-        input_directory = COMMAND_INPUT_DIRECTORY,
-        output_directory = COMMAND_OUTPUT_DIRECTORY,
         command_file = COMMAND_FILE,
         command_id_env = COMMAND_ID_ENV,
         command_directory_env = COMMAND_DIRECTORY_ENV,

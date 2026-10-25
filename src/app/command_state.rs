@@ -39,12 +39,8 @@ fn restore_model_title(output: &mut impl Write, title: &str) -> Result<()> {
         .context("failed to restore terminal model title")
 }
 fn write_start_to(command_id: &str, directory: &Path, output: &mut impl Write) -> Result<()> {
-    write_marker(output, crate::contract::TERMINAL_MARKER_START, command_id)?;
-    let started_path = directory
-        .join(crate::contract::COMMAND_STATE_DIRECTORY)
-        .join(crate::contract::STARTED_FILE);
-    crate::publication::write_once(&started_path, b"")
-        .context("failed to publish command started file")
+    anyhow::ensure!(directory.is_dir(), "command directory is missing");
+    write_marker(output, crate::contract::TERMINAL_MARKER_START, command_id)
 }
 pub(crate) fn write_done(done: &DoneOutput<'_>, directory: &Path) -> Result<()> {
     let guard = early_done_guard(done.command_id, directory)?;
@@ -58,9 +54,7 @@ pub(crate) fn write_done(done: &DoneOutput<'_>, directory: &Path) -> Result<()> 
     write_released(directory)
 }
 fn write_released(directory: &Path) -> Result<()> {
-    let path = directory
-        .join(crate::contract::COMMAND_STATE_DIRECTORY)
-        .join(crate::contract::RELEASED_FILE);
+    let path = directory.join(crate::contract::RELEASED_FILE);
     crate::publication::write_once(&path, b"").context("failed to publish command release file")
 }
 pub(crate) fn write_done_to(
@@ -68,15 +62,14 @@ pub(crate) fn write_done_to(
     directory: &Path,
     output: &mut impl Write,
 ) -> Result<()> {
+    let done_path = directory.join(crate::contract::DONE_FILE);
+    let text = sonic_rs::to_string(done).context("failed to serialize done file")?;
+    crate::publication::write_once(&done_path, text).context("failed to publish done file")?;
     write_marker(
         output,
         crate::contract::TERMINAL_MARKER_END,
         done.command_id,
-    )?;
-    let state_dir = directory.join(crate::contract::COMMAND_STATE_DIRECTORY);
-    let done_path = state_dir.join(crate::contract::DONE_FILE);
-    let text = sonic_rs::to_string(done).context("failed to serialize done file")?;
-    crate::publication::write_once(&done_path, text).context("failed to publish done file")
+    )
 }
 pub(crate) fn write_early_done_guard(command_id: &str, directory: &Path) -> Result<()> {
     let guard = early_done_guard(command_id, directory)?;

@@ -76,34 +76,12 @@ pub(crate) fn invocation(choice: ShellChoice) -> Result<Option<ShellInvocation>>
     };
     ShellInvocation::new(line, invocation_terminator(choice)).map(Some)
 }
-pub(crate) fn command_script(choice: ShellChoice, command: &str) -> String {
-    match choice {
-        ShellChoice::PowerShell => powershell::command_script(command),
-        ShellChoice::Bash
-        | ShellChoice::NuShell
-        | ShellChoice::Zsh
-        | ShellChoice::Cmd
-        | ShellChoice::Bun
-        | ShellChoice::Python => command.to_owned(),
-    }
-}
 pub(crate) fn prepare_command(
     choice: ShellChoice,
     directory: &Path,
     session_root: &Path,
 ) -> Result<()> {
-    let command_file = match choice {
-        ShellChoice::PowerShell => crate::contract::COMMAND_POWERSHELL_SCRIPT_FILE,
-        ShellChoice::Cmd => crate::contract::COMMAND_SCRIPT_FILE,
-        ShellChoice::Bash
-        | ShellChoice::Zsh
-        | ShellChoice::NuShell
-        | ShellChoice::Bun
-        | ShellChoice::Python => crate::contract::COMMAND_FILE,
-    };
-    let source = directory
-        .join(crate::contract::COMMAND_INPUT_DIRECTORY)
-        .join(command_file);
+    let source = directory.join(choice.source_file());
     let metadata = fs_err::metadata(&source).with_context(|| {
         format!(
             "command input is missing or inaccessible: {}",

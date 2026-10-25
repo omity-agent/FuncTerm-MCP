@@ -1,9 +1,8 @@
 use super::super::{start, variables};
 use super::PosixDialect;
 use crate::contract::{
-    COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, COMMAND_INPUT_DIRECTORY,
-    COMMAND_OUTPUT_DIRECTORY, HELPER_EXECUTABLE_ENV, POSIX_COMMAND_FUNCTION, STDERR_FILE,
-    STDOUT_FILE,
+    COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, HELPER_EXECUTABLE_ENV,
+    POSIX_COMMAND_FUNCTION, STDERR_FILE, STDOUT_FILE,
 };
 pub(super) fn command_function(dialect: PosixDialect) -> String {
     format!(
@@ -15,11 +14,9 @@ pub(super) fn command_function(dialect: PosixDialect) -> String {
 	    local @VAR_separate_output@="$4"
 	    @VAR_directory@="$(functerm_posix_path "$@VAR_directory@")" || return 1
 	    @VAR_working_directory@="$(functerm_posix_path "$@VAR_working_directory@")" || return 1
-	    local @VAR_input_dir@="$@VAR_directory@/{input_dir}"
-	    local @VAR_output_dir@="$@VAR_directory@/{output_dir}"
-	    local @VAR_stdout_file@="$@VAR_output_dir@/{stdout}"
-	    local @VAR_stderr_file@="$@VAR_output_dir@/{stderr}"
-	    local @VAR_command_file@="$@VAR_input_dir@/{command_file}"
+	    local @VAR_stdout_file@="$@VAR_directory@/{stdout}"
+	    local @VAR_stderr_file@="$@VAR_directory@/{stderr}"
+	    local @VAR_command_file@="$@VAR_directory@/{command_file}"
 	    local @VAR_previous_command_id@="${{{command_id_env}-}}"
 	    local @VAR_previous_command_directory@="${{{command_dir_env}-}}"
 	{previous_flags}
@@ -144,8 +141,6 @@ functerm_command_time_millis() {{
 }}"#,
         name = POSIX_COMMAND_FUNCTION,
         emulate = dialect.emulate(),
-        input_dir = COMMAND_INPUT_DIRECTORY,
-        output_dir = COMMAND_OUTPUT_DIRECTORY,
         stdout = STDOUT_FILE,
         stderr = STDERR_FILE,
         command_file = COMMAND_FILE,

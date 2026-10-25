@@ -55,12 +55,10 @@ impl Tab {
         }
         session.refresh_choice()?;
         self.remember(&session)?;
-        let initial_cwd = session.cwd();
         let record = create_record(
             session.command_root(),
             &command_id,
-            &initial_cwd,
-            separate_output,
+            session.current_choice(),
         )?;
         let capture = session.capture_command(&command_id, separate_output)?;
         let managed = Arc::new(ManagedCommand::new(
@@ -83,7 +81,12 @@ impl Tab {
             }
         };
         self.insert_command(Arc::clone(&managed));
-        if let Err(error) = session.write_invocation(managed.id(), command_text, managed.record()) {
+        if let Err(error) = session.write_invocation(
+            managed.id(),
+            command_text,
+            managed.record(),
+            separate_output,
+        ) {
             self.abandon_start(&managed, &session)?;
             return Err(error);
         }
@@ -121,7 +124,7 @@ impl StartedCommand {
                 {
                     EndReason::CommandFailed
                 } else {
-                    tracing :: debug ! (command_id = % self . command . id () , started = self . command . record () . started . try_exists () ?, done = self . command . record () . done . try_exists () ?, shell_alive = self . session . is_alive () ?, "command wait timed out");
+                    tracing::debug!(command_id = %self.command.id(), "command wait timed out");
                     EndReason::WaitTimeout
                 }
             }

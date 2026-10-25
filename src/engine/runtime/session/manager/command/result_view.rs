@@ -28,7 +28,11 @@ impl Tab {
         self: &Arc<Self>,
         command: &Arc<ManagedCommand>,
     ) -> Result<()> {
-        tracing :: debug ! (command_id = % command . id () , done = command . record () . done . try_exists () ?, "observed command completion; awaiting terminal title");
+        let _completion = command.completion.lock().await;
+        if !matches!(command.state.lock().wait, CommandWait::Running) {
+            return Ok(());
+        }
+        tracing::debug!(command_id = %command.id(), "observed command completion");
         let title = command.capture.wait_finished().await?;
         let tab = Arc::clone(self);
         let managed = Arc::clone(command);

@@ -36,7 +36,7 @@ fn assert_recovers(shell: &str) {
         next.stdout.contains("MCP_PTY_ENVIRONMENT_RECOVERED"),
         "{next:?}"
     );
-    assert!(!directory.join("state").join("done.json").exists());
+    assert!(!directory.join("done.json").exists());
 }
 fn clear_environment_command(shell: &str) -> &'static str {
     match shell {

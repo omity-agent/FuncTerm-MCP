@@ -17,11 +17,9 @@ if "%~1"=="--capture" goto capture_user_state
 set "@VAR_command_id@=%~1"
 set "@VAR_directory@=%~2"
 set "@VAR_working_directory@=%~3"
-set "@VAR_input_dir@=%@VAR_directory@%\@INPUT_DIR@"
-set "@VAR_output_dir@=%@VAR_directory@%\@OUTPUT_DIR@"
-set "@VAR_stdout_file@=%@VAR_output_dir@%\@STDOUT@"
-set "@VAR_stderr_file@=%@VAR_output_dir@%\@STDERR@"
-set "@VAR_script_file@=%@VAR_input_dir@%\@SCRIPT@"
+set "@VAR_stdout_file@=%@VAR_directory@%\@STDOUT@"
+set "@VAR_stderr_file@=%@VAR_directory@%\@STDERR@"
+set "@VAR_script_file@=%@VAR_directory@%\@SCRIPT@"
 set "@VAR_time_consumption@=0ns"
 set "@VAR_had_previous_command_id@="
 set "@VAR_had_previous_command_directory@="
@@ -48,7 +46,7 @@ call :command_time_millis
 set "@VAR_command_started_at@=%ERRORLEVEL%"
 set > "%~dp0@VAR_environment_before_file@.txt"
 if "%~4"=="1" (
-    "%FUNCTERM_REAL_CMD%" /D /Q /V:OFF /S /C ""%~f0" --capture "%~2"" > "%~2\@OUTPUT_DIR@\@STDOUT@" 2> "%~2\@OUTPUT_DIR@\@STDERR@"
+    "%FUNCTERM_REAL_CMD%" /D /Q /V:OFF /S /C ""%~f0" --capture "%~2"" > "%~2\@STDOUT@" 2> "%~2\@STDERR@"
 ) else (
     "%FUNCTERM_REAL_CMD%" /D /Q /V:OFF /S /C ""%~f0" --capture "%~2""
 )
@@ -90,7 +88,7 @@ call :restore_command_environment
 if defined @VAR_worker_exited@ exit %@VAR_exit_code@%
 exit /b %@VAR_exit_code@%
 :capture_user_state
-call "%~2\@INPUT_DIR@\@SCRIPT@"
+call "%~2\@SCRIPT@"
 > "%~dp0@VAR_exit_code_file@.txt" echo %ERRORLEVEL%
 cd > "%~dp0@VAR_cwd_after_file@.txt"
 set > "%~dp0@VAR_environment_after_file@.txt" 2> nul

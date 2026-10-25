@@ -24,9 +24,6 @@ pub(super) fn startup(context: StartupContext<'_>) -> Result<DriverStartup> {
         env: Vec::new(),
     })
 }
-pub(super) fn command_script(command: &str) -> String {
-    command.to_owned()
-}
 pub(super) fn interactive_arguments(arguments: &[std::ffi::OsString]) -> bool {
     let Some(values) = os_strings_lower(arguments) else {
         return false;

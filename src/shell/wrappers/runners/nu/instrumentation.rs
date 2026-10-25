@@ -3,7 +3,7 @@ use crate::contract::POSIX_COMMAND_FUNCTION;
 use crate::shell::wrappers::{VariableNamespace, template, variables};
 const EXIT_REQUEST_FILE: &str = "exit-request.nuon";
 const EXIT_HOOK: &str = "def exit [@VAR_exit_code@: int = 0, --abort] {
-    let @VAR_exit_file@ = ($env.@COMMAND_DIR_ENV@ | path join 'state' '@NUSHELL_EXIT_REQUEST@')
+    let @VAR_exit_file@ = ($env.@COMMAND_DIR_ENV@ | path join '@NUSHELL_EXIT_REQUEST@')
     { exit_code: $@VAR_exit_code@, abort: $abort }
         | to nuon
         | save --force --raw $@VAR_exit_file@

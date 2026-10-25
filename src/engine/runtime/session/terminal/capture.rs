@@ -53,14 +53,30 @@ impl CommandCapture {
             .transpose()
     }
     pub(in crate::engine::runtime::session) async fn wait_finished(&self) -> Result<String> {
-        wait_until(&self.changed, Duration::MAX, || {
+        self.wait_ended(Duration::MAX).await?;
+        self.current()
+    }
+    pub(in crate::engine::runtime::session) async fn wait_ended(
+        &self,
+        limit: Duration,
+    ) -> Result<bool> {
+        let ended = wait_until(&self.changed, limit, || {
             Ok(!matches!(
                 self.state.lock().phase,
                 CapturePhase::Pending | CapturePhase::Active
             ))
         })
         .await?;
-        self.current()
+        Ok(ended && self.state.lock().phase == CapturePhase::Finished)
+    }
+    pub(in crate::engine::runtime::session) async fn wait_started(
+        &self,
+        limit: Duration,
+    ) -> Result<bool> {
+        wait_until(&self.changed, limit, || {
+            Ok(self.state.lock().phase != CapturePhase::Pending)
+        })
+        .await
     }
     pub(in crate::engine::runtime::session) fn cancel(&self) -> Result<String> {
         let mut state = self.state.lock();
@@ -71,6 +87,12 @@ impl CommandCapture {
         self.changed.notify(usize::MAX);
         Ok(state.title.clone())
     }
+    pub(in crate::engine::runtime::session) fn freeze(&self) -> Result<()> {
+        if let Some(output) = self.state.lock().output.as_mut() {
+            output.finish()?;
+        }
+        Ok(())
+    }
     pub(super) fn start(&self) -> Result<()> {
         let mut state = self.state.lock();
         if state.phase == CapturePhase::Pending {
@@ -80,6 +102,7 @@ impl CommandCapture {
             state.phase = CapturePhase::Active;
         }
         drop(state);
+        self.changed.notify(usize::MAX);
         Ok(())
     }
     pub(super) fn update(&self, title: &str) {

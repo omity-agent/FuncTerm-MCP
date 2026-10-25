@@ -1,5 +1,6 @@
 #![cfg_attr(unix, feature(process_setsid))]
 #![cfg_attr(windows, feature(windows_process_extensions_inherit_handles))]
+#![feature(once_cell_try)]
 mod app;
 mod engine;
 pub(crate) use app::filesystem as publication;

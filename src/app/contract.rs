@@ -1,13 +1,7 @@
 pub(crate) const COMMAND_DIRECTORY_ENV: &str = "FUNCTERM_COMMAND_DIRECTORY";
 pub(crate) const COMMAND_ID_ENV: &str = "FUNCTERM_COMMAND_ID";
-pub(crate) const COMMAND_INPUT_DIRECTORY: &str = "input";
 pub(crate) const COMMAND_FILE: &str = "command.txt";
 pub(crate) const COMMAND_SCRIPT_FILE: &str = "command.cmd";
-pub(crate) const COMMAND_SEPARATION_FILE: &str = "separate-output.txt";
-pub(crate) const COMMAND_WORKING_DIRECTORY_FILE: &str = "cwd.txt";
-pub(crate) const COMMAND_OUTPUT_DIRECTORY: &str = "output";
-pub(crate) const COMMAND_POWERSHELL_SCRIPT_FILE: &str = "command.ps1";
-pub(crate) const COMMAND_STATE_DIRECTORY: &str = "state";
 pub(crate) const DISPATCH_FILE: &str = "dispatch";
 pub(crate) const CLAIM_RECEIPT_FILE: &str = "claim";
 pub(crate) const DISPATCHER_COMMAND: &str = "f";
@@ -20,12 +14,17 @@ pub(crate) const RELEASED_FILE: &str = "released";
 pub(crate) const SESSION_COMMANDS_DIRECTORY: &str = "commands";
 pub(crate) const SESSION_STATE_DIRECTORY: &str = "state";
 pub(crate) const STDERR_FILE: &str = "stderr.txt";
-pub(crate) const STARTED_FILE: &str = "started";
 pub(crate) const STDOUT_FILE: &str = "stdout.txt";
 pub(crate) const TERMINAL_MARKER_CODE: &[u8] = b"9999";
 pub(crate) const TERMINAL_MARKER_END: &[u8] = b"end";
 pub(crate) const TERMINAL_MARKER_NAME: &[u8] = b"FuncTerm";
 pub(crate) const TERMINAL_MARKER_START: &[u8] = b"start";
+#[derive(serde::Deserialize, serde::Serialize)]
+pub(crate) struct CommandDispatch<Text> {
+    pub(crate) command_id: Text,
+    pub(crate) working_directory: Text,
+    pub(crate) separate_output: bool,
+}
 #[derive(serde::Deserialize, serde::Serialize)]
 pub(crate) struct CommandCompletion<Text> {
     pub(crate) command_id: Text,

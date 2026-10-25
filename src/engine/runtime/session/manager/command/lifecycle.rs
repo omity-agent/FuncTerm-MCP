@@ -17,6 +17,7 @@ pub(in crate::engine::runtime::session::manager) struct ManagedCommand {
     pub(super) capture: Arc<CommandCapture>,
     watch: Arc<PathWatch>,
     pub(super) tokenizer: Arc<OutputTokenizer>,
+    pub(super) completion: tokio::sync::Mutex<()>,
 }
 pub(super) struct ManagedCommandState {
     pub(super) wait: CommandWait,
@@ -57,6 +58,7 @@ impl ManagedCommand {
             capture,
             watch,
             tokenizer,
+            completion: tokio::sync::Mutex::new(()),
         }
     }
     pub(in crate::engine::runtime::session::manager) fn id(&self) -> &str {
@@ -82,53 +84,26 @@ impl ManagedCommand {
         &self,
         limit: Duration,
     ) -> Result<CommandWait> {
-        let result = self
-            .watch
-            .wait(limit, || {
-                Ok(!matches!(self.state.lock().wait, CommandWait::Running)
-                    || self.record.done.try_exists().with_context(|| {
-                        format!(
-                            "failed to inspect command completion {}",
-                            self.record.done.display()
-                        )
-                    })?)
-            })
-            .await;
+        let result = self.capture.wait_ended(limit).await;
         let current = self.state.lock().wait;
         if !matches!(current, CommandWait::Running) {
             return Ok(current);
         }
         match result {
             Ok(true) => Ok(CommandWait::Finished),
+            Ok(false) if self.record.done.try_exists()? => Ok(CommandWait::Finished),
             Ok(false) => Ok(CommandWait::Running),
             Err(error) => Err(error),
         }
     }
-    pub(in crate::engine::runtime::session::manager) fn cancel_capture(&self) -> Result<()> {
-        drop(self.capture.cancel()?);
-        Ok(())
+    pub(in crate::engine::runtime::session::manager) fn freeze_output(&self) -> Result<()> {
+        self.capture.freeze()
     }
     pub(in crate::engine::runtime::session::manager) async fn wait_started(
         &self,
         limit: Duration,
     ) -> Result<bool> {
-        self.watch
-            .wait(limit, || {
-                Ok(!matches!(self.state.lock().wait, CommandWait::Running)
-                    || self.record.started.try_exists().with_context(|| {
-                        format!(
-                            "failed to inspect command start {}",
-                            self.record.started.display()
-                        )
-                    })?
-                    || self.record.done.try_exists().with_context(|| {
-                        format!(
-                            "failed to inspect command completion {}",
-                            self.record.done.display()
-                        )
-                    })?)
-            })
-            .await
+        self.capture.wait_started(limit).await
     }
     pub(super) fn wake(&self) {
         self.watch.wake();

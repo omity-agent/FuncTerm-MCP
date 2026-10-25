@@ -36,11 +36,9 @@ function @FUNCTION@ {
         [Parameter(Mandatory = $true)][bool]$@VAR_SeparateOutput@
     )
     Set-FuncTermShimPath
-    $@VAR_inputDir@ = Join-Path $@VAR_Directory@ '@INPUT_DIR@'
-    $@VAR_outputDir@ = Join-Path $@VAR_Directory@ '@OUTPUT_DIR@'
-    $@VAR_stdoutFile@ = Join-Path $@VAR_outputDir@ '@STDOUT@'
-    $@VAR_stderrFile@ = Join-Path $@VAR_outputDir@ '@STDERR@'
-    $@VAR_scriptFile@ = Join-Path $@VAR_inputDir@ '@SCRIPT@'
+    $@VAR_stdoutFile@ = Join-Path $@VAR_Directory@ '@STDOUT@'
+    $@VAR_stderrFile@ = Join-Path $@VAR_Directory@ '@STDERR@'
+    $@VAR_scriptFile@ = Join-Path $@VAR_Directory@ '@SCRIPT@'
     $@VAR_previousCommandId@ = $env:@COMMAND_ID_ENV@
     $@VAR_previousCommandDirectory@ = $env:@COMMAND_DIR_ENV@
     $@VAR_protectedEnvironment@ = [Collections.Generic.Dictionary[string, string]]::new(
