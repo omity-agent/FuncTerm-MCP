@@ -28,6 +28,7 @@ export type Context = {
   elevated: boolean;
   tabId?: string;
   commandBytes?: number;
+  payloadBytes?: number;
   separateOutput?: boolean;
   readyPath?: string;
 };
@@ -39,6 +40,7 @@ export type Sample = Context & {
   pollNs?: number;
   blockingNs?: number;
   processingNs?: number;
+  outputBytes?: number;
   outcome: "running" | "success" | "failure" | "interrupted";
   error?: string;
 };

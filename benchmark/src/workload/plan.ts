@@ -6,7 +6,8 @@ import type { Settings } from "../settings";
 export type Admission = Context & { ordinal: number; after: number };
 export type CommandSpec = {
   ordinal: number;
-  bytes: number;
+  lengthRatio: number;
+  outputBytes: number;
   separate: boolean;
   interactive: boolean;
 };
@@ -46,7 +47,8 @@ export function createPlan(settings: Settings) {
     for (let ordinal = 0; ordinal < counts.send_command; ordinal++) {
       commands.push({
         ordinal,
-        bytes: yield* Random.nextIntBetween(
+        lengthRatio: yield* Random.next,
+        outputBytes: yield* Random.nextIntBetween(
           settings.commandBytes.minimum,
           settings.commandBytes.maximum,
         ),

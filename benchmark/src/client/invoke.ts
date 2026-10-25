@@ -21,11 +21,19 @@ const response = Schema.Struct({
     results: Schema.Array(Schema.Struct({ result: Schema.Unknown })),
   }),
 });
+const commandState = {
+  finished: Schema.Boolean,
+  exit_code: Schema.NullOr(Schema.Int),
+};
 const command = Schema.Struct({
-  command: Schema.Struct({
-    finished: Schema.Boolean,
-    exit_code: Schema.NullOr(Schema.Int),
-  }),
+  command: Schema.Union([
+    Schema.Struct({ ...commandState, output: Schema.String }),
+    Schema.Struct({
+      ...commandState,
+      stdout: Schema.String,
+      stderr: Schema.String,
+    }),
+  ]),
 });
 
 export function createInvoker(
@@ -75,6 +83,11 @@ export function createInvoker(
           const result = parsed.structuredContent.results[0]!.result;
           if (tool === "send_command") {
             const observed = Schema.decodeUnknownSync(command)(result).command;
+            const output =
+              "output" in observed
+                ? observed.output
+                : observed.stdout + observed.stderr;
+            sample.outputBytes = new TextEncoder().encode(output).length;
             if (!observed.finished)
               throw new BenchmarkFailure("commandTimeout", context.tabId);
             if (observed.exit_code !== 0) {
@@ -82,6 +95,14 @@ export function createInvoker(
                 "commandFailed",
                 JSON.stringify(result),
               );
+            }
+            if (
+              context.payloadBytes !== undefined &&
+              !output
+                .replaceAll(/[\r\n]/g, "")
+                .includes("x".repeat(context.payloadBytes))
+            ) {
+              throw new BenchmarkFailure("missingOutput", context.tabId);
             }
           }
           return result;

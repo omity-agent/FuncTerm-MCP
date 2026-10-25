@@ -5,7 +5,8 @@ import { Effect } from "effect";
 import { waitForInput } from "../bootstrap/readiness";
 import type { Invoke, Tab, Transport } from "../domain";
 import type { Settings } from "../settings";
-import { emptyCommand, keyboard, waitingCommand } from "../workload/dialects";
+import { composeCommand } from "../workload/composition";
+import { keyboard } from "../workload/dialects";
 import type { CommandSpec } from "../workload/plan";
 
 export function execute(
@@ -18,9 +19,12 @@ export function execute(
 ) {
   return Effect.gen(function* () {
     const readyPath = join(workspace, `ready-${spec.ordinal}`);
-    const source = spec.interactive
-      ? waitingCommand(tab.driver, readyPath)
-      : emptyCommand(tab.driver, spec.bytes);
+    const source = composeCommand(
+      tab.driver,
+      spec,
+      settings.commandBytes,
+      spec.interactive ? readyPath : undefined,
+    );
     const transport: Transport = spec.ordinal % 2 === 0 ? "stdio" : "http";
     const context = {
       transport,
@@ -28,6 +32,7 @@ export function execute(
       elevated: tab.elevated,
       tabId: tab.id,
       commandBytes: new TextEncoder().encode(source).length,
+      payloadBytes: spec.outputBytes,
       separateOutput: spec.separate,
       ...(spec.interactive ? { readyPath } : {}),
     };

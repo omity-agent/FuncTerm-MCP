@@ -1,6 +1,7 @@
 {
   "usage": "bun run benchmark [--config 路径] [--executable 路径] [--output 路径] [--dry-run]",
   "configuration": "配置不合法",
+  "commandTooShort": "命令长度上限不足以容纳 Shell 负载",
   "starting": "启动 Benchmark 环境",
   "running": "执行负载",
   "progress": "调用进度",
@@ -10,6 +11,7 @@
   "shutdown": "Daemon 清理失败",
   "unexpected": "MCP 响应不符合预期",
   "missingTiming": "MCP 响应缺少内部计时",
+  "missingOutput": "命令输出缺少预期负载",
   "commandTimeout": "send_command 等待超时",
   "commandFailed": "命令执行失败",
   "readyTimeout": "等待交互命令就绪超时",

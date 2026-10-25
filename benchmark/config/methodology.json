@@ -14,7 +14,7 @@
     "Benchmark 客户端与网络延迟",
     "handler 之外的线协议序列化",
     "后台 PTY 读取线程",
-    "独立的命令监督与清理任务"
+    "命令监督与清理任务"
   ],
   "interpretation": "累计工作线程墙钟活跃耗时",
   "instrumentation": "FUNCTERM_BENCHMARK_PROCESSING_TIMING=true"

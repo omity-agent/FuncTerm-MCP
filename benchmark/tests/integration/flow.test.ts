@@ -101,7 +101,10 @@ test("rounds every tab combination and keeps deterministic random lengths", asyn
   expect(combinations.size).toBe(28);
   expect([...combinations.values()].every((count) => count === 2)).toBe(true);
   expect(
-    new Set(first.commands.map((command) => command.bytes)).size,
+    new Set(first.commands.map((command) => command.lengthRatio)).size,
+  ).toBeGreaterThan(100);
+  expect(
+    new Set(first.commands.map((command) => command.outputBytes)).size,
   ).toBeGreaterThan(100);
   for (const transportParity of [0, 1]) {
     const matching = first.commands.filter(

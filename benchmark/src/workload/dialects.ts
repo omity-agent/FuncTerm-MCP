@@ -1,9 +1,5 @@
 import { BenchmarkFailure, type Driver } from "../domain";
 
-export function emptyCommand(driver: Driver, bytes: number): string {
-  const prefix = driver === "cmd" ? "rem " : driver === "bun" ? "//" : "#";
-  return prefix + "x".repeat(Math.max(0, bytes - prefix.length));
-}
 function quoted(text: string): string {
   return `'${text.replaceAll("'", "'\\''")}'`;
 }
@@ -14,15 +10,30 @@ export function waitingCommand(driver: Driver, ready: string): string {
       return `[System.IO.File]::WriteAllText('${filename.replaceAll("'", "''")}', 'ready')\n$null = [Console]::ReadLine()`;
     case "bash":
     case "zsh":
-      return `printf 'ready' > ${quoted(filename)}\nIFS= read -r functerm_benchmark_input`;
+      return `(\nprintf 'ready' > ${quoted(filename)}\nIFS= read -r\n)`;
     case "nu":
       return `'ready' | save --force '${filename.replaceAll("'", "''")}'\ninput | ignore`;
     case "cmd":
-      return `type nul > "${filename}"\nset /p functerm_benchmark_input=`;
+      return `setlocal\ntype nul > "${filename}"\nset /P functerm_benchmark_input=\nendlocal`;
     case "bun":
-      return `await Bun.write(${JSON.stringify(filename)}, 'ready');\nawait new Promise(resolve => process.stdin.once('data', resolve));`;
-    case "python":
-      return `from pathlib import Path\n_ = Path(${JSON.stringify(filename)}).write_text('ready')\n_ = input()`;
+      return `await (async () => {
+  await Promise.resolve();
+  const input = process.stdin;
+  const raw = input.isRaw;
+  input.pause();
+  input.setRawMode(false);
+  try {
+    await Bun.write(${JSON.stringify(filename)}, 'ready');
+    prompt('');
+  } finally {
+    input.setRawMode(raw);
+    input.resume();
+  }
+})();`;
+    case "python": {
+      const script = `from pathlib import Path\nPath(${JSON.stringify(filename)}).write_text('ready')\ninput()`;
+      return `exec(${JSON.stringify(script)}, {})`;
+    }
   }
   throw new BenchmarkFailure("configuration", driver satisfies never);
 }
