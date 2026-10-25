@@ -1,15 +1,13 @@
 use crate::runtime::config::IpcSettings;
 use anyhow::{Context as _, Result, ensure};
-use interprocess::local_socket::ListenerOptions;
-use interprocess::os::windows::local_socket::ListenerOptionsExt as _;
 use interprocess::os::windows::security_descriptor::{
-    AsSecurityDescriptorExt as _, SecurityDescriptor,
+    AsSecurityDescriptor as _, AsSecurityDescriptorExt as _, SecurityDescriptor,
 };
+use std::os::windows::io::{FromRawHandle as _, OwnedHandle};
 use widestring::U16CString;
-pub(super) fn configure<'name>(
-    options: ListenerOptions<'name>,
-    settings: &IpcSettings,
-) -> Result<ListenerOptions<'name>> {
+use windows::Win32::{CreateMutexW, SECURITY_ATTRIBUTES};
+use windows::core::PCWSTR;
+pub(super) fn descriptor(settings: &IpcSettings) -> Result<SecurityDescriptor> {
     let label = U16CString::from_str(&settings.windows_security_label)
         .context("Windows IPC security label contains a NUL character")?;
     let descriptor =
@@ -18,7 +16,7 @@ pub(super) fn configure<'name>(
         descriptor.dacl()?.is_none()
             && descriptor.owner()?.0.is_null()
             && descriptor.group()?.0.is_null(),
-        "windows_security_label can only configure the pipe SACL, not its access principals"
+        "windows_security_label can only configure the IPC object SACL, not its access principals"
     );
     ensure!(
         descriptor.sacl()?.is_some(),
@@ -37,5 +35,26 @@ pub(super) fn configure<'name>(
         secured.dacl()?.is_some_and(|entry| !entry.0.is_null()),
         "Windows IPC access control policy has no DACL"
     );
-    Ok(options.security_descriptor(secured))
+    Ok(secured)
+}
+pub(super) fn create_mutex(name: &str, settings: &IpcSettings) -> Result<OwnedHandle> {
+    let security = descriptor(settings)?;
+    let attributes = SECURITY_ATTRIBUTES {
+        nLength: u32::try_from(core::mem::size_of::<SECURITY_ATTRIBUTES>())?,
+        lpSecurityDescriptor: security.as_sd().cast_mut(),
+        bInheritHandle: false.into(),
+    };
+    let global_name = U16CString::from_str(format!("Global\\{name}"))?;
+    let handle = unsafe {
+        CreateMutexW(
+            Some(core::ptr::from_ref(&attributes).cast_mut()),
+            false,
+            PCWSTR(global_name.as_ptr()),
+        )
+    };
+    if handle.is_null() {
+        return Err(windows::core::Error::from_thread())
+            .context("failed to create secured Windows daemon mutex");
+    }
+    Ok(unsafe { OwnedHandle::from_raw_handle(handle) })
 }

@@ -22,7 +22,7 @@ async fn serialized(settings: &Settings, operation: Operation) -> Result<bool> {
     let configuration = settings.clone();
     tokio::task::spawn_blocking(move || {
         // Windows named mutexes are acquired and released on the same worker thread.
-        let _lifecycle_lock = lock::acquire_startup(&configuration.daemon_service_name)?;
+        let _lifecycle_lock = lock::acquire_startup(&configuration)?;
         tokio::runtime::Handle::current().block_on(async {
             match operation {
                 Operation::Start => start_locked(&configuration).await,
@@ -67,6 +67,6 @@ async fn stop_locked(settings: &Settings) -> Result<bool> {
     )
     .await
     .context("daemon did not shut down before the IPC shutdown timeout")??;
-    lock::wait_for_exit(&settings.daemon_service_name)?;
+    lock::wait_for_exit(settings)?;
     Ok(true)
 }

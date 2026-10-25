@@ -4,6 +4,10 @@
 mod administration;
 #[cfg(test)]
 #[cfg(windows)]
+#[path = "integration/identity_boundary.rs"]
+mod identity_boundary;
+#[cfg(test)]
+#[cfg(windows)]
 #[path = "integration/job_isolation.rs"]
 mod job_isolation;
 #[cfg(test)]

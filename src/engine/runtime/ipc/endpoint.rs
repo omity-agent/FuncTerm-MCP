@@ -5,6 +5,8 @@ use futures_util::{SinkExt as _, StreamExt as _};
 use interprocess::ConnectWaitMode;
 use interprocess::local_socket::tokio::prelude::*;
 use interprocess::local_socket::{GenericNamespaced, ListenerOptions};
+#[cfg(windows)]
+use interprocess::os::windows::local_socket::ListenerOptionsExt as _;
 use serde::{Serialize, de::DeserializeOwned};
 use tokio_serde::{Framed as SerdeFramed, formats::MessagePack};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
@@ -56,7 +58,7 @@ pub(crate) fn listener(service_name: &str, settings: &IpcSettings) -> Result<Loc
         .context("failed to create daemon socket name")?;
     let options = ListenerOptions::new().name(name).try_overwrite(true);
     #[cfg(windows)]
-    let secured = super::pipe_policy::configure(options, settings)?;
+    let secured = options.security_descriptor(super::object_security::descriptor(settings)?);
     #[cfg(unix)]
     let secured = options;
     secured

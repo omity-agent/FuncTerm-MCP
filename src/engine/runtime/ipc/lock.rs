@@ -1,3 +1,4 @@
+use crate::runtime::config::Settings;
 use anyhow::{Context as _, Result};
 use named_lock::{NamedLock, NamedLockGuard};
 #[derive(Debug, thiserror :: Error)]
@@ -21,14 +22,16 @@ pub(crate) struct DaemonLock {
     _lock: NamedLock,
     _guard: NamedLockGuard,
 }
-pub(crate) fn acquire_instance(service_name: &str) -> Result<DaemonLock> {
-    let lock = create_lock(service_name, "instance")?;
+pub(crate) fn acquire_instance(settings: &Settings) -> Result<DaemonLock> {
+    let lock = create_lock(settings, "instance")?;
     match lock.try_lock() {
         Ok(guard) => Ok(DaemonLock {
             _lock: lock,
             _guard: guard,
         }),
-        Err(named_lock::Error::WouldBlock) => Err(DaemonAlreadyRunning::new(service_name).into()),
+        Err(named_lock::Error::WouldBlock) => {
+            Err(DaemonAlreadyRunning::new(&settings.daemon_service_name).into())
+        }
         Err(error) => Err(error).context("failed to acquire daemon instance lock"),
     }
 }
@@ -39,8 +42,8 @@ pub(crate) fn already_running_service_name(error: &anyhow::Error) -> Option<&str
             .map(DaemonAlreadyRunning::service_name)
     })
 }
-pub(crate) fn acquire_startup(service_name: &str) -> Result<DaemonLock> {
-    let lock = create_lock(service_name, "startup")?;
+pub(crate) fn acquire_startup(settings: &Settings) -> Result<DaemonLock> {
+    let lock = create_lock(settings, "startup")?;
     let guard = lock
         .lock()
         .context("failed to acquire daemon startup lock")?;
@@ -49,14 +52,17 @@ pub(crate) fn acquire_startup(service_name: &str) -> Result<DaemonLock> {
         _guard: guard,
     })
 }
-pub(super) fn wait_for_exit(service_name: &str) -> Result<()> {
-    let lock = create_lock(service_name, "instance")?;
+pub(super) fn wait_for_exit(settings: &Settings) -> Result<()> {
+    let lock = create_lock(settings, "instance")?;
     let _guard = lock
         .lock()
         .context("failed to wait for daemon instance shutdown")?;
     Ok(())
 }
-fn create_lock(service_name: &str, kind: &str) -> Result<NamedLock> {
-    let name = super::transport::lock_name(service_name, kind);
+fn create_lock(settings: &Settings, kind: &str) -> Result<NamedLock> {
+    let name = super::transport::lock_name(&settings.daemon_service_name, kind);
+    #[cfg(windows)]
+    let _secured = super::object_security::create_mutex(&name, &settings.ipc)
+        .with_context(|| format!("failed to create daemon {kind} lock"))?;
     NamedLock::create(&name).with_context(|| format!("failed to create daemon {kind} lock"))
 }

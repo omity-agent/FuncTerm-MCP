@@ -66,10 +66,10 @@ max_frame_bytes = 67108864
 # Daemon 中可同时执行的阻塞操作数
 blocking_concurrency = 32
 
-# Windows IPC 仅授予 SYSTEM 及 Daemon 用户访问权限；{user_sid} 从进程令牌读取。
+# Windows IPC 管道与互斥锁仅授予 SYSTEM 及当前用户访问权限；{user_sid} 从进程令牌读取。
 windows_access_control = "D:P(A;;GA;;;SY)(A;;GA;;;{user_sid})"
 
-# 中等完整性标签允许已获 DACL 授权的普通权限 Shell 访问管理员 Daemon
+# 中等完整性标签允许已获 DACL 授权的普通权限客户端访问管理员 Daemon 的管道与互斥锁。
 windows_security_label = "S:(ML;;NW;;;ME)"
 
 [mcp.http]

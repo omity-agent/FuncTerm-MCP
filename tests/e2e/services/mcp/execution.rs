@@ -76,6 +76,24 @@ fn mcp_wait_budget_is_shared_and_timeout_does_not_cancel_commands() {
     let mut session = McpSession::new();
     let [first, second] = create_tabs(&mut session);
     #[cfg(windows)]
+    let initialization = "Write-Output BATCH_READY";
+    #[cfg(not(windows))]
+    let initialization = "printf '%s\\n' BATCH_READY";
+    let ready = session.call(
+        "send_command",
+        json!({
+            "exec": [
+                {"tab_id": first, "command": initialization, "separate_output": true},
+                {"tab_id": second, "command": initialization, "separate_output": true}
+            ], "wait_timeout": 10_u64
+        }),
+    );
+    for entry in entries(&ready) {
+        assert_field(entry, "/result/command/finished", true);
+        assert_field(entry, "/result/command/exit_code", 0_i32);
+        assert!(text(entry, "/result/command/stdout").contains("BATCH_READY"));
+    }
+    #[cfg(windows)]
     let source = "Start-Sleep -Seconds 4\nWrite-Output BATCH_FINISHED";
     #[cfg(not(windows))]
     let source = "sleep 4\necho BATCH_FINISHED";
@@ -89,9 +107,10 @@ fn mcp_wait_budget_is_shared_and_timeout_does_not_cancel_commands() {
             ], "wait_timeout": 1.5_f64
         }),
     );
+    let elapsed = started.elapsed();
     assert!(
-        started.elapsed() < Duration::from_millis(2800),
-        "{response}"
+        elapsed < Duration::from_millis(2800),
+        "{elapsed:?}: {response}"
     );
     let ids = entries(&response)
         .iter()
