@@ -39,7 +39,7 @@ fn mcp_schema_exposes_tool_inputs_and_preserves_descriptions() {
         for path in [
             "/inputSchema/properties/start_token/format",
             "/inputSchema/properties/exec/items/properties/bytes/items/format",
-            "/outputSchema/$defs/CommandPresentation/properties/tokens/format",
+            "/outputSchema/$defs/CommandPresentation/properties/total_output_tokens/format",
             "/outputSchema/$defs/CommandPresentation/properties/exit_code/format",
         ] {
             assert!(tool.pointer(path).is_none(), "{name}: {path}");

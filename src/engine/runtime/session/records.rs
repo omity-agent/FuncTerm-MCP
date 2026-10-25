@@ -105,7 +105,7 @@ pub(super) fn read_command_result(
     Ok(CommandSnapshot {
         title,
         command: CommandView {
-            tokens: tokenizer.count(&output)?,
+            total_output_tokens: tokenizer.count(&output)?,
             output,
             exit_code,
             time_consumption: measured_time_consumption,

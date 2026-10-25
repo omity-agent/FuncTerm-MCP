@@ -19,7 +19,7 @@ pub(super) fn create_tabs<const N: usize>(session: &mut McpSession) -> [String; 
     let response = session.call("new_tab", json!({"exec": exec}));
     let created = entries(&response);
     assert_eq!(created.len(), N);
-    super::boundaries::text_documents(&response);
+    super::wire::text_documents(&response);
     core::array::from_fn(|index| {
         text(
             created
@@ -47,7 +47,7 @@ fn mcp_batch_preserves_order_and_isolates_errors() {
     );
     let results = entries(&response);
     assert_eq!(results.len(), 3);
-    let documents = super::boundaries::text_documents(&response);
+    let documents = super::wire::text_documents(&response);
     assert!(documents.iter().all(|block| !block.starts_with("exec[")));
     assert!(
         text(results.first().unwrap(), "/result/command/stdout").contains("FIRST_BATCH_RESULT")

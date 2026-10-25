@@ -5,16 +5,6 @@ use crate::support::{
 use core::time::Duration;
 use std::process::Output;
 use std::time::Instant;
-#[path = "transparency/exit_status.rs"]
-mod exit_status;
-#[cfg(windows)]
-#[path = "transparency/object_format.rs"]
-mod object_format;
-#[cfg(windows)]
-#[path = "transparency/prompt_integrity.rs"]
-mod prompt_integrity;
-#[path = "transparency/redraw.rs"]
-mod redraw;
 #[test]
 fn terminal_mode_preserves_tty_and_switches_back_to_separated_output() {
     let _guard = locked_with_env(&[]);
@@ -120,6 +110,30 @@ fn terminal_mode_accepts_input_and_honors_user_redirection() {
             .unwrap()
             .contains("FILE_ONLY")
     );
+}
+#[test]
+fn terminal_mode_preserves_external_exit_codes() {
+    let _guard = locked_with_env(&[]);
+    let directory = temp_dir("terminal-exit-status");
+    #[cfg(windows)]
+    let shells = ["powershell", "cmd", "bash", "nu"];
+    #[cfg(unix)]
+    let shells = ["bash", "zsh"];
+    for shell in shells {
+        let tab = create_tab(&directory, shell);
+        let result = run_terminal(
+            &tab.tab_id,
+            "python -c \"import sys; print('NONZERO_TERMINAL', flush=True); sys.exit(7)\"",
+            "10",
+        );
+        let text = checked_text(&result);
+        assert!(
+            terminal_output(&text).contains("NONZERO_TERMINAL"),
+            "{shell}: {text}"
+        );
+        assert!(text.contains("<EXIT_CODE>\n7\n"), "{shell}: {text}");
+        assert!(text.contains("<FINISHED>\ntrue\n"), "{shell}: {text}");
+    }
 }
 fn run_terminal(tab_id: &str, command: &str, wait_timeout: &str) -> Output {
     run_cli(&[

@@ -18,7 +18,6 @@ pub(crate) use command::{create_tab, create_tab_with_env, manual_write, run_cli,
 pub(crate) use daemon::locked;
 pub(crate) use daemon::{TestGuard, locked_with_env};
 pub(crate) use executable::required as required_executable;
-pub(crate) use parse::CommandResult;
 #[cfg(windows)]
 pub(crate) use parse::assert_powershell_primary_prompt;
 pub(crate) use parse::parse_tab_created;

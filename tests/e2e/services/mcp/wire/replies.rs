@@ -44,3 +44,25 @@ pub(crate) fn assert_saved(sent: &Value, viewed: &Value) {
         .unwrap();
     assert_eq!(&expected, command_result(viewed), "{viewed}");
 }
+pub(crate) fn text_documents(response: &Value) -> Vec<&str> {
+    let blocks = field(response, "/result/content").as_array().unwrap();
+    assert_eq!(blocks.len(), entries(response).len());
+    blocks
+        .iter()
+        .zip(entries(response))
+        .enumerate()
+        .map(|(index, (block, entry))| {
+            let document = text(block, "/text");
+            assert_eq!(
+                document.ends_with('\n'),
+                index + 1 < blocks.len(),
+                "{document:?}"
+            );
+            assert!(!document.starts_with('\n'), "{document:?}");
+            if let Some(error) = entry.get("error").and_then(Value::as_str) {
+                assert_eq!(document.trim_end_matches('\n'), error);
+            }
+            document
+        })
+        .collect()
+}

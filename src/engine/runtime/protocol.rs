@@ -98,7 +98,7 @@ pub(crate) struct ShellView {
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub(crate) struct CommandView {
     pub(crate) output: CommandOutput,
-    pub(crate) tokens: usize,
+    pub(crate) total_output_tokens: usize,
     pub(crate) exit_code: Option<i32>,
     pub(crate) time_consumption: Duration,
     pub(crate) finished: bool,

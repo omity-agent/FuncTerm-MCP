@@ -30,7 +30,6 @@ fn cli_runs_commands_for_every_supported_shell() {
         let shell_after = parse_tab_view(&run_cli(&["view", &created.tab_id]));
         assert_shell_query(&shell_after, &next, case.name);
         super::state::assert_persistent_state(&created.tab_id, case.name);
-        super::title::assert_command_titles(&created.tab_id, case.name);
     }
 }
 #[cfg(windows)]

@@ -22,7 +22,10 @@ fn cli_reports_total_tokens_and_forwards_the_view_start_token() {
     assert!(accepted.status.success(), "{accepted:?}");
     let text = String::from_utf8(accepted.stdout.clone()).unwrap();
     assert!(text.contains("<OUTPUT>\nhello world\n</OUTPUT>"), "{text}");
-    assert!(text.contains("<TOKENS>\n2\n</TOKENS>"), "{text}");
+    assert!(
+        text.contains("<TOTAL_OUTPUT_TOKENS>\n2\n</TOTAL_OUTPUT_TOKENS>"),
+        "{text}"
+    );
     let id = parse_command_id(&accepted);
     for (offset, expected) in [("2", " world"), ("3", ""), ("9999999", "")] {
         let viewed = run_cli(&["view", &id, "--start-token", offset]);
@@ -34,7 +37,10 @@ fn cli_reports_total_tokens_and_forwards_the_view_start_token() {
             format!("<OUTPUT>\n{expected}\n</OUTPUT>")
         };
         assert!(document.contains(&output_tag), "{document}");
-        assert!(document.contains("<TOKENS>\n2\n</TOKENS>"), "{document}");
+        assert!(
+            document.contains("<TOTAL_OUTPUT_TOKENS>\n2\n</TOTAL_OUTPUT_TOKENS>"),
+            "{document}"
+        );
     }
     let full = run_cli(&["view", &id]);
     assert!(full.status.success(), "{full:?}");

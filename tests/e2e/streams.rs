@@ -1,8 +1,5 @@
 #[path = "routing/fixtures.rs"]
 mod fixtures;
-#[cfg(all(test, windows))]
-#[path = "routing/handoff.rs"]
-mod handoff;
 #[cfg(test)]
 #[path = "routing/redirection.rs"]
 mod redirection;

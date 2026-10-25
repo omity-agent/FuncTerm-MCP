@@ -5,7 +5,6 @@ pub(crate) struct TabCreated {
 #[derive(Debug)]
 pub(crate) struct CommandResult {
     pub(crate) cwd: String,
-    pub(crate) title: String,
     pub(crate) finished: bool,
     pub(crate) stdout: String,
     pub(crate) stderr: String,
@@ -14,16 +13,13 @@ pub(crate) struct CommandResult {
 }
 pub(crate) struct TabView {
     pub(crate) alive: bool,
-    pub(crate) title: String,
     pub(crate) cwd: String,
     pub(crate) screen: String,
 }
 pub(crate) fn parse_command_result(output: &Output) -> CommandResult {
     let text = checked_stdout(output);
-    let shell = element(&text, "SHELL");
     CommandResult {
         cwd: element(&text, "CWD"),
-        title: element(&shell, "TITLE"),
         finished: element(&text, "FINISHED").parse().unwrap(),
         exit_code: parse_exit_code(&element(&text, "EXIT_CODE")),
         time_consumption: element(&text, "TIME_CONSUMPTION"),
@@ -38,7 +34,6 @@ pub(crate) fn parse_tab_view(output: &Output) -> TabView {
     let text = checked_stdout(output);
     TabView {
         alive: element(&text, "ALIVE").parse().unwrap(),
-        title: element(&text, "TITLE"),
         cwd: element(&text, "CWD"),
         screen: element(&text, "SCREEN"),
     }

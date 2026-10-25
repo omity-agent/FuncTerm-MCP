@@ -47,7 +47,7 @@ fn mcp_views_preserve_mixed_id_order_errors_and_shared_completion() {
         )
         .contains("unknown id missing")
     );
-    super::boundaries::text_documents(&viewed);
+    super::wire::text_documents(&viewed);
     #[cfg(windows)]
     let source = "Start-Sleep -Seconds 2\nWrite-Output MANY_WAITERS_FINISHED";
     #[cfg(not(windows))]

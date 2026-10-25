@@ -6,6 +6,7 @@ use alloc::rc::Rc;
 use core::time::Duration;
 pub(super) use replies::{
     assert_field, assert_rejected, assert_saved, command_result, entries, field, result, text,
+    text_documents,
 };
 use rmcp::serde_json::{Value, json};
 use std::{

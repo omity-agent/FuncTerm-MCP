@@ -1,4 +1,5 @@
 use crate::support::{create_tab, locked_with_env, parse_command_result, send_command, temp_dir};
+
 #[test]
 fn interpreter_shims_restore_parent_after_python_exit_and_bun_native_exit() {
     let _guard = locked_with_env(&[]);

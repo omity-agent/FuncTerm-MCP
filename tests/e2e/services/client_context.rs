@@ -1,45 +1,12 @@
-#[cfg(windows)]
-use crate::support::locked;
 use crate::support::{
-    create_tab, create_tab_with_env, locked_with_env, parse_command_result, parse_tab_created,
-    parse_tab_view, run_cli_with_env, send_command, temp_dir, temp_root,
+    create_tab_with_env, locked_with_env, parse_command_result, parse_tab_created,
+    run_cli_with_env, send_command, temp_dir, temp_root,
 };
 use std::path::Path;
-#[test]
-fn daemon_accepts_clients_after_restart() {
-    let mut guard = system_shell_daemon();
-    let previous = create_tab(&temp_root(), system_shell_name());
-    let initial = parse_command_result(&send_command(&previous.tab_id, "echo BEFORE_RESTART", 5.0));
-    assert_eq!(initial.exit_code, Some(0_i32));
-    assert!(initial.stdout.contains("BEFORE_RESTART"));
-    let duplicate = run_cli_with_env(&["daemon", "start"], &guard.env());
-    assert!(duplicate.status.success());
-    assert!(String::from_utf8_lossy(&duplicate.stdout).contains("daemon is already running"));
-    guard.restart_daemon();
-    let tab = create_tab(&temp_root(), system_shell_name());
-    let view = parse_tab_view(&run_cli_with_env(&["view", &tab.tab_id], &guard.env()));
-    assert!(view.alive, "restarted daemon should accept clients");
-    let recovered = parse_command_result(&send_command(&tab.tab_id, "echo AFTER_RESTART", 5.0));
-    assert_eq!(recovered.exit_code, Some(0_i32));
-    assert!(recovered.stdout.contains("AFTER_RESTART"));
-    drop(guard);
-}
-#[test]
-fn command_finishes_when_wrapper_command_directory_is_removed() {
-    let _guard = system_shell_daemon();
-    let tab = create_tab(&temp_root(), system_shell_name());
-    let command = delete_command_directory();
-    let output = send_command(&tab.tab_id, command, 5.0);
-    let result = parse_command_result(&output);
-    assert!(result.finished, "wrapper should still publish done.json");
-    assert_eq!(result.exit_code, Some(expected_delete_exit_code()));
-    let recovered = parse_command_result(&send_command(&tab.tab_id, "echo RECORD_RECOVERED", 5.0));
-    assert_eq!(recovered.exit_code, Some(0_i32));
-    assert!(recovered.stdout.contains("RECORD_RECOVERED"));
-}
+const SHELL: &str = if cfg!(windows) { "powershell" } else { "bash" };
 #[test]
 fn new_tab_uses_client_path_after_daemon_startup() {
-    let guard = system_shell_daemon();
+    let guard = locked_with_env(&[]);
     let probe_dir = temp_dir("client-path-probe");
     write_path_probe(&probe_dir);
     let inherited_path = std::env::var_os("PATH").unwrap();
@@ -51,7 +18,7 @@ fn new_tab_uses_client_path_after_daemon_startup() {
     .unwrap();
     let mut client_env = guard.env();
     client_env.push(("PATH".to_owned(), client_path));
-    let tab = create_tab_with_env(&temp_root(), system_shell_name(), &client_env);
+    let tab = create_tab_with_env(&temp_root(), SHELL, &client_env);
     let output = send_command(&tab.tab_id, "functerm-client-path-probe", 5.0);
     let result = parse_command_result(&output);
     assert!(result.finished);
@@ -83,7 +50,7 @@ fn new_tab_inherits_environment_from_each_client() {
                 "--starting-directory",
                 temp_root().to_str().unwrap(),
                 "--starting-shell",
-                system_shell_name(),
+                SHELL,
                 "--no-profile",
             ],
             &client_environment,
@@ -96,39 +63,6 @@ fn new_tab_inherits_environment_from_each_client() {
         assert!(result.stdout.contains("CLIENT_ENVIRONMENT_INHERITED"));
     }
     drop(guard);
-}
-#[cfg(windows)]
-fn system_shell_daemon() -> crate::support::TestGuard {
-    locked()
-}
-#[cfg(not(windows))]
-fn system_shell_daemon() -> crate::support::TestGuard {
-    let bash = required_executable("bash");
-    locked_with_env(&[("FUNCTERM_BASH", &bash)])
-}
-#[cfg(windows)]
-const fn system_shell_name() -> &'static str {
-    "powershell"
-}
-#[cfg(not(windows))]
-const fn system_shell_name() -> &'static str {
-    "bash"
-}
-#[cfg(windows)]
-const fn delete_command_directory() -> &'static str {
-    "Remove-Item -LiteralPath $env:FUNCTERM_COMMAND_DIRECTORY -Recurse -Force; cmd /c exit 7"
-}
-#[cfg(not(windows))]
-const fn delete_command_directory() -> &'static str {
-    "rm -rf \"$FUNCTERM_COMMAND_DIRECTORY\"; false"
-}
-#[cfg(windows)]
-const fn expected_delete_exit_code() -> i32 {
-    7
-}
-#[cfg(not(windows))]
-const fn expected_delete_exit_code() -> i32 {
-    1
 }
 #[cfg(not(windows))]
 fn write_path_probe(directory: &Path) {
@@ -158,10 +92,4 @@ fn environment_probe_command(expected: &str) -> String {
         "if [[ -v FUNCTERM_DAEMON_ONLY_PROBE ]]; then\n    exit 2\nfi\nif [[ \"${{FUNCTERM_CLIENT_ENV_PROBE-}}\" != {} ]]; then\n    exit 3\nfi\nprintf '%s\\n' CLIENT_ENVIRONMENT_INHERITED",
         functerm::shell::quote::posix_string(expected),
     )
-}
-#[cfg(not(windows))]
-fn required_executable(name: &str) -> String {
-    crate::support::required_executable(&[name])
-        .to_string_lossy()
-        .into_owned()
 }

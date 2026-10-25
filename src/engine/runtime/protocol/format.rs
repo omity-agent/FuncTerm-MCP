@@ -98,7 +98,11 @@ fn command_text(command: &CommandView, command_id: Option<&str>) -> String {
         }
         OutputPresentation::Terminal { output } => append_element(&mut text, "OUTPUT", output),
     }
-    append_element(&mut text, "TOKENS", &presentation.tokens.to_string());
+    append_element(
+        &mut text,
+        "TOTAL_OUTPUT_TOKENS",
+        &presentation.total_output_tokens.to_string(),
+    );
     append_element(&mut text, "EXIT_CODE", &exit_code);
     append_element(
         &mut text,

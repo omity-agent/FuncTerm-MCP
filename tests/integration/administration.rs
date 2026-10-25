@@ -12,6 +12,12 @@ const SHELL: &str = "bash";
 #[test]
 fn start_and_stop_are_idempotent_and_restart_starts_an_absent_daemon() {
     let guard = locked_with_env(&[]);
+    let directory = temp_root();
+    assert!(
+        directory.starts_with(std::env::temp_dir().join("functerm")),
+        "test runtime escaped the application temporary directory: {}",
+        directory.display()
+    );
     let environment = guard.env();
     let existing = create_tab(&temp_root(), SHELL);
     assert_lifecycle("start", "already running");
@@ -32,6 +38,7 @@ fn start_and_stop_are_idempotent_and_restart_starts_an_absent_daemon() {
     let restarted = create_tab(&temp_root(), SHELL);
     assert!(parse_tab_view(&run_cli(&["view", &restarted.tab_id])).alive);
     drop(guard);
+    assert!(!directory.exists(), "test runtime was not removed on drop");
 }
 #[test]
 fn restart_discards_old_tabs_without_stopping_another_service() {

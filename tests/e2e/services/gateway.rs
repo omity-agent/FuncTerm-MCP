@@ -1,7 +1,4 @@
 #[cfg(test)]
-#[path = "mcp/presentation/boundaries.rs"]
-mod boundaries;
-#[cfg(test)]
 #[path = "mcp/presentation/cli_cursor.rs"]
 mod cli_cursor;
 #[cfg(test)]
@@ -13,9 +10,6 @@ mod execution;
 #[path = "mcp/wire/http_peer.rs"]
 mod http_peer;
 #[cfg(test)]
-#[path = "mcp/inheritance.rs"]
-mod inheritance;
-#[cfg(test)]
 #[path = "mcp/input_delivery.rs"]
 mod input_delivery;
 #[cfg(test)]
@@ -25,9 +19,6 @@ mod input_schema;
 #[path = "mcp/inspection.rs"]
 mod inspection;
 #[cfg(test)]
-#[path = "mcp/wire/lifetime.rs"]
-mod lifetime;
-#[cfg(test)]
 #[path = "mcp/presentation/live_output.rs"]
 mod live_output;
 #[cfg(test)]
@@ -35,15 +26,6 @@ mod live_output;
 mod pagination;
 #[path = "mcp/presentation/policy_matrix.rs"]
 mod policy_matrix;
-#[cfg(test)]
-#[path = "mcp/profiles.rs"]
-mod profiles;
-#[cfg(test)]
-#[path = "mcp/presentation/selection.rs"]
-mod selection;
-#[cfg(test)]
-#[path = "mcp/tool_restrictions.rs"]
-mod tool_restrictions;
 #[path = "mcp/wire/stdio_peer.rs"]
 mod wire;
 use rmcp::serde_json::{Value, json};

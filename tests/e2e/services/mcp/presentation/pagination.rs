@@ -1,7 +1,6 @@
 use super::{
-    boundaries::text_documents,
     execution::create_tabs,
-    wire::{McpSession, assert_field, assert_saved, command_result, result, text},
+    wire::{McpSession, assert_field, assert_saved, command_result, result, text, text_documents},
 };
 #[cfg(windows)]
 const OUTPUT_COMMAND: &str = "[Console]::Write(\"hello world 你好 🧠🚀 <|endoftext|>`nTAIL\")";
@@ -18,12 +17,10 @@ fn token_offsets_preserve_unicode_totals_and_saved_command_and_screen_output() {
     let tokenizer = toktok::Tokenizer::builtin("o200k_base").unwrap();
     let total = tokenizer.count(output.as_bytes());
     assert!(output.contains("你好 🧠🚀"), "{accepted}");
-    assert_field(command, "/tokens", total);
-    assert!(
-        text_documents(&accepted)
-            .concat()
-            .contains(&format!("<TOKENS>\n{total}\n</TOKENS>"))
-    );
+    assert_field(command, "/total_output_tokens", total);
+    assert!(text_documents(&accepted).concat().contains(&format!(
+        "<TOTAL_OUTPUT_TOKENS>\n{total}\n</TOTAL_OUTPUT_TOKENS>"
+    )));
     for start in (1..=total + 2).chain(core::iter::once(usize::MAX)) {
         let viewed = session.view(&[id], start, 0.0);
         let saved = command_result(&viewed);
@@ -32,7 +29,7 @@ fn token_offsets_preserve_unicode_totals_and_saved_command_and_screen_output() {
             expected_suffix(&tokenizer, output, start),
             "{viewed}"
         );
-        assert_field(saved, "/tokens", total);
+        assert_field(saved, "/total_output_tokens", total);
         assert_field(saved, "/finished", true);
         assert_field(saved, "/exit_code", 0_i32);
     }
@@ -56,12 +53,12 @@ fn token_offsets_preserve_unicode_totals_and_saved_command_and_screen_output() {
     let noop = ":";
     let empty = session.execute(&tab, noop, false, 5.0);
     let empty_command = command_result(&empty);
-    assert_field(empty_command, "/tokens", 0_u64);
+    assert_field(empty_command, "/total_output_tokens", 0_u64);
     assert_field(empty_command, "/output", "");
     let empty_id = text(empty_command, "/command_id");
     for start in [1, 2, usize::MAX] {
         let viewed = session.view(&[empty_id], start, 0.0);
-        assert_field(command_result(&viewed), "/tokens", 0_u64);
+        assert_field(command_result(&viewed), "/total_output_tokens", 0_u64);
         assert_field(command_result(&viewed), "/output", "");
     }
 }

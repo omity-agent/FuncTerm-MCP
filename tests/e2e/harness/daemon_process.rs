@@ -9,9 +9,8 @@ use std::thread;
 static SERVICE_COUNTER: AtomicU64 = AtomicU64::new(0);
 thread_local! { static ACTIVE_CLI_ENV : RefCell < Vec < (String , String) >> = const { RefCell :: new (Vec :: new ()) } ; }
 pub(crate) struct TestGuard {
-    daemon: ChildGuard,
+    _daemon: ChildGuard,
     env: Vec<(String, String)>,
-    service_name: String,
     http_address: String,
     previous_env: Vec<(String, String)>,
     _runtime: temp::TestRuntime,
@@ -22,13 +21,6 @@ impl TestGuard {
     }
     pub(crate) fn http_address(&self) -> &str {
         &self.http_address
-    }
-    pub(crate) fn stop_daemon(&mut self) {
-        self.daemon.terminate();
-    }
-    pub(crate) fn restart_daemon(&mut self) {
-        self.stop_daemon();
-        (self.daemon, self.http_address) = spawn_daemon(&self.env, &self.service_name);
     }
 }
 impl Drop for TestGuard {
@@ -70,9 +62,8 @@ pub(crate) fn locked_with_env(extra_env: &[(&str, &str)]) -> TestGuard {
     let previous_env = active_env();
     set_active_env(&env);
     TestGuard {
-        daemon: child,
+        _daemon: child,
         env,
-        service_name,
         http_address,
         previous_env,
         _runtime: runtime,

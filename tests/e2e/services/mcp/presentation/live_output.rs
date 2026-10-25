@@ -22,7 +22,7 @@ fn mcp_separated_output_counts_both_streams_and_rejects_skipping_tokens() {
     let tokenizer = toktok::Tokenizer::builtin("o200k_base").unwrap();
     assert_field(
         result,
-        "/tokens",
+        "/total_output_tokens",
         tokenizer.count(stdout.as_bytes()) + tokenizer.count(stderr.as_bytes()),
     );
     let id = text(result, "/command_id");
@@ -49,14 +49,18 @@ fn mcp_running_command_recounts_new_output_and_can_resume_from_a_token_offset() 
     let tokenizer = toktok::Tokenizer::builtin("o200k_base").unwrap();
     let observed_tokens = tokenizer.count(first.as_bytes());
     let start_token = observed_tokens + 1;
-    assert_field(initial, "/tokens", observed_tokens);
+    assert_field(initial, "/total_output_tokens", observed_tokens);
     let id = text(initial, "/command_id");
     let waiting = session.view(&[id], 2, 0.0);
     assert_eq!(
         text(command_result(&waiting), "/output"),
         expected_suffix(&tokenizer, first, 2)
     );
-    assert_field(command_result(&waiting), "/tokens", observed_tokens);
+    assert_field(
+        command_result(&waiting),
+        "/total_output_tokens",
+        observed_tokens,
+    );
     let written = session.call(
         "manual_write",
         json!({"exec": [{"tab_id": tab, "text": "\r\n"}], "wait_timeout": 0_u64}),
@@ -68,12 +72,12 @@ fn mcp_running_command_recounts_new_output_and_can_resume_from_a_token_offset() 
     let total = tokenizer.count(output.as_bytes());
     assert!(output.contains("SECOND_CHUNK"), "{completed}");
     assert!(total > observed_tokens);
-    assert_field(full, "/tokens", total);
+    assert_field(full, "/total_output_tokens", total);
     assert_field(full, "/finished", true);
     let resumed = session.view(&[id], start_token, 0.0);
     assert_eq!(
         text(command_result(&resumed), "/output"),
         expected_suffix(&tokenizer, output, start_token)
     );
-    assert_field(command_result(&resumed), "/tokens", total);
+    assert_field(command_result(&resumed), "/total_output_tokens", total);
 }

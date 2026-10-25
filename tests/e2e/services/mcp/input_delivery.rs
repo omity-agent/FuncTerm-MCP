@@ -43,7 +43,7 @@ fn mcp_manual_write_delivers_text_and_bytes_to_distinct_tabs() {
         "exec": [{"tab_id": first, "text": "FIRST\r\n", "bytes": null}, {"tab_id": second, "text": null, "bytes": b"SECOND\r\n".to_vec()}], "wait_timeout": 2_u64
     }));
     assert_eq!(entries(&written).len(), 2);
-    super::boundaries::text_documents(&written);
+    super::wire::text_documents(&written);
     assert!(
         entries(&written)
             .iter()

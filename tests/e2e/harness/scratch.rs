@@ -10,11 +10,13 @@ pub(super) struct TestRuntime {
 }
 impl TestRuntime {
     pub(super) fn new() -> Self {
+        let root = std::env::temp_dir().join("functerm").join("tests");
+        std::fs::create_dir_all(&root).unwrap();
         Self {
             directory: Some(
                 tempfile::Builder::new()
-                    .prefix("functerm-tests-")
-                    .tempdir()
+                    .prefix("runtime-")
+                    .tempdir_in(root)
                     .unwrap(),
             ),
         }
