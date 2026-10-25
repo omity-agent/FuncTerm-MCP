@@ -1,3 +1,0 @@
-[profile.default]
-test-threads = 6
-slow-timeout = { period = "30s", terminate-after = 4 }

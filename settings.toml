@@ -103,7 +103,7 @@ exec = ""
 
 [mcp.new_tab.exec_parameters]
 starting_directory = "初始位置。已有的 Tab 也可通过 send_command 改变 cwd（如 `cd` 命令）。"
-starting_shell = "启动时使用的交互式命令环境。Shell 适合系统交互、调度已有外部程序，缺点是逻辑复杂时可靠性低；Python REPL 标准库和数据处理生态强；TypeScript REPL（Bun）性能更优，且在 JS/TS 项目中实用。已有的 Tab 也可通过 send_command 切换 Shell 或进入 REPL（如在 Bash 中使用 `python` 命令）。"
+starting_shell = "启动时使用的交互式命令环境。在 Windows 系统，Bash 对应 MSYS2。"
 elevated = "默认为 false（普通权限）"
 
 [mcp.manual_write]
@@ -123,7 +123,7 @@ description = "执行命令。工具会在等待时长结束或命令结束时�
 
 [mcp.send_command.parameters]
 exec = "向一个或多个不同的 Tab 发送命令"
-wait_timeout = "等待时长，单位为秒。时间结束后命令不会被终止，仍可通过 view 查看其状态。对于一般命令，**等待时长设置过小会造成不必要的轮询和重复输出**；等待时长设置过大会导致出现异常高耗时时无法及时处理。通常建议设置略大于预期耗时，建议根据上一次执行类似命令结束时的 Time Consumption 动态更正预期。若非计划在命令结束前同时做其他事，不建议设为 0 或个位数。"
+wait_timeout = "等待时长，单位为秒。时间结束后命令不会被终止，仍可通过 view 查看其状态。对于一般命令，**等待时长设置过小会造成不必要的轮询和重复输出**；等待时长设置过大会导致出现异常高耗时时无法及时处理。通常建议设置略大于预期耗时，建议根据上一次执行类似命令结束时的 Time Consumption 动态更正预期。若非计划在命令结束前同时做其他事，不建议设为个位数。"
 
 [mcp.send_command.exec_parameters]
 tab_id = "每个 Tab 在同一时刻仅能有一份命令正在运行，Tab 繁忙时收到的命令会被丢弃。"

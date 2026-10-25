@@ -4,7 +4,15 @@ use crate::runtime::config::{McpSettings, ToolDescription};
 use crate::runtime::protocol::OutputMode;
 use alloc::{borrow::Cow, collections::BTreeMap, sync::Arc};
 use anyhow::{Context as _, Result, bail};
-use rmcp::{handler::server::router::tool::ToolRouter, model::Tool, serde_json::Value};
+use rmcp::{
+    handler::server::router::tool::ToolRouter,
+    model::{JsonObject, Tool},
+    serde_json::Value,
+};
+use schemars::{
+    Schema,
+    transform::{RecursiveTransform, RestrictFormats, Transform as _},
+};
 pub(super) fn router(
     settings: &McpSettings,
     privilege_mode: Option<PrivilegeMode>,
@@ -84,8 +92,31 @@ fn apply_to_route(name: &str, tool: &mut Tool, description: &ToolDescription) ->
     } else if !description.exec_parameters.is_empty() {
         bail!("MCP tool {name} has exec parameter descriptions but no exec parameter");
     }
-    tool.input_schema = Arc::new(input_schema);
+    tool.input_schema = normalize_schema(input_schema, true)?;
+    tool.output_schema = tool
+        .output_schema
+        .as_deref()
+        .cloned()
+        .map(|schema| normalize_schema(schema, false))
+        .transpose()?;
     Ok(())
+}
+fn normalize_schema(schema: JsonObject, input: bool) -> Result<Arc<JsonObject>> {
+    let mut normalized = Schema::from(schema);
+    RestrictFormats::default().transform(&mut normalized);
+    if input {
+        RecursiveTransform(require_properties).transform(&mut normalized);
+    }
+    let Value::Object(object) = normalized.to_value() else {
+        bail!("MCP tool schema is not an object");
+    };
+    Ok(Arc::new(object))
+}
+fn require_properties(schema: &mut Schema) {
+    if let Some(properties) = schema.get("properties").and_then(Value::as_object) {
+        let required = properties.keys().cloned().map(Value::String).collect();
+        schema.insert("required".to_owned(), Value::Array(required));
+    }
 }
 fn apply_parameters(
     name: &str,

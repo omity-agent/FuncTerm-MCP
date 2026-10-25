@@ -28,27 +28,39 @@ fn mcp_schema_exposes_tool_inputs_and_preserves_descriptions() {
                 .and_then(toml::Value::as_str)
                 .unwrap()
         );
-        assert_descriptions(root, configuration.get("parameters").unwrap());
+        assert_descriptions(
+            field(tool, "/inputSchema"),
+            configuration.get("parameters").unwrap(),
+        );
         if name != "view" {
-            let parameters = field(properties, "/exec/items/properties")
-                .as_object()
-                .unwrap();
-            assert_descriptions(parameters, configuration.get("exec_parameters").unwrap());
+            assert_descriptions(
+                field(properties, "/exec/items"),
+                configuration.get("exec_parameters").unwrap(),
+            );
+        }
+        for path in [
+            "/inputSchema/properties/start_token/format",
+            "/inputSchema/properties/exec/items/properties/bytes/items/format",
+            "/outputSchema/$defs/CommandPresentation/properties/tokens/format",
+            "/outputSchema/$defs/CommandPresentation/properties/exit_code/format",
+        ] {
+            assert!(tool.pointer(path).is_none(), "{name}: {path}");
         }
         assert!(tool.pointer("/outputSchema/properties/results").is_some());
     }
 }
-fn assert_descriptions(
-    parameters: &rmcp::serde_json::Map<String, Value>,
-    configuration: &toml::Value,
-) {
-    for (parameter, schema) in parameters {
+fn assert_descriptions(schema: &Value, configuration: &toml::Value) {
+    let parameters = field(schema, "/properties").as_object().unwrap();
+    let required = field(schema, "/required").as_array().unwrap();
+    assert_eq!(parameters.len(), required.len(), "{schema}");
+    for (parameter, parameter_schema) in parameters {
+        assert!(required.contains(&json!(parameter)), "{parameter}");
         let description = configuration
             .get(parameter)
             .and_then(toml::Value::as_str)
             .unwrap();
         assert_eq!(
-            schema.get("description").and_then(Value::as_str),
+            parameter_schema.get("description").and_then(Value::as_str),
             (!description.is_empty()).then_some(description)
         );
     }

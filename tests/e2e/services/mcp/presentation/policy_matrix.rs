@@ -40,7 +40,7 @@ fn schema_and_rejections_cover_every_privilege_and_output_policy_combination() {
                             .pointer("/inputSchema/properties/exec/items/required")
                             .and_then(Value::as_array)
                             .unwrap();
-                        assert!(!required.contains(&json!(property)));
+                        assert!(required.contains(&json!(property)));
                     } else {
                         assert_field(schema, "/type", json!(["boolean", "null"]));
                     }
