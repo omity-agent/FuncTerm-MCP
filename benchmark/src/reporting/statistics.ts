@@ -1,4 +1,3 @@
-import methodology from "../../config/methodology.json";
 import { type Counts, type RunState, type Sample, tools } from "../domain";
 import type { Settings } from "../settings";
 
@@ -60,7 +59,6 @@ export function summarize(
     schemaVersion: 1,
     status: complete ? "completed" : "failed",
     generatedAt: new Date().toISOString(),
-    measurement: methodology,
     configuration: settings,
     actualCounts: actual,
     peakInFlight: state.peakInFlight,
