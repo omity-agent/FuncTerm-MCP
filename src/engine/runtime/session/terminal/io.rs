@@ -43,6 +43,7 @@ fn read_pty(
             eprintln!("PTY reader returned an invalid byte count: {read_len}");
             return;
         };
+        tracing::trace!(output = ?String::from_utf8_lossy(chunk), "terminal PTY output");
         match terminal.process(chunk, &host) {
             Ok(replies) => {
                 if let Err(error) = write_replies(writer, &replies) {

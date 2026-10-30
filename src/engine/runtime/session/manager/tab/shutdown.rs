@@ -26,7 +26,9 @@ impl TabDirectory {
 }
 impl Tab {
     pub(super) async fn close(self: &Arc<Self>) -> Result<()> {
+        tracing::debug!(tab_id = %self.id(), "waiting for tab operation before close");
         let _operation = self.operation.lock().await;
+        tracing::debug!(tab_id = %self.id(), "closing tab session");
         let Some(session) = self.optional_session() else {
             return Ok(());
         };

@@ -44,7 +44,9 @@ fn close_current_from_nested_shell_targets_its_own_tab() {
     let _guard = locked_with_env(&[]);
     let target = create_tab(&temp_root(), SHELL);
     let other = create_tab(&temp_root(), SHELL);
-    let nested = send_command(&target.tab_id, SHELL, 5.0);
+    let accepted = send_command(&target.tab_id, SHELL, 0.0);
+    let command_id = parse_command_id(&accepted);
+    let nested = run_cli(&["view", &command_id, "--wait-timeout", "10"]);
     assert!(
         parse_command_result(&nested).finished,
         "nested launch: {nested:?}; terminal: {:?}",

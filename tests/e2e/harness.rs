@@ -22,6 +22,7 @@ pub(crate) use executable::required as required_executable;
 pub(crate) use parse::assert_powershell_primary_prompt;
 pub(crate) use parse::parse_tab_created;
 pub(crate) use parse::{TabView, parse_command_id, parse_command_result, parse_tab_view};
+pub(crate) use parse::{assert_tag_randomization, tagged_content};
 #[cfg(windows)]
 pub(crate) use process::ChildGuard;
 pub(crate) use temp::{command_directory, temp_dir, temp_root};

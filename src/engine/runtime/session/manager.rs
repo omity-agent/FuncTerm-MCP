@@ -40,6 +40,7 @@ impl Manager {
         })
     }
     pub(crate) async fn shutdown(self: &Arc<Self>) -> Result<()> {
+        tracing::debug!("waiting for in-flight tab creation before shutdown");
         let manager = Arc::clone(self);
         self.blocking
             .run(move || {
@@ -47,11 +48,14 @@ impl Manager {
                 Ok(())
             })
             .await?;
+        tracing::debug!("closing daemon tabs");
         let closed = self.tabs.close_all().await;
         self.supervisors.close();
+        tracing::debug!("waiting for command supervision during shutdown");
         tokio::time::timeout(self.shutdown_timeout, self.supervisors.wait())
             .await
             .context("command supervision did not finish before daemon shutdown timeout")?;
+        tracing::debug!("daemon terminal session shutdown completed");
         closed
     }
     pub(crate) async fn new_tab(

@@ -2,6 +2,7 @@ use super::{
     execution::create_tabs,
     wire::{McpSession, assert_field, assert_saved, command_result, result, text, text_documents},
 };
+use crate::support::tagged_content;
 #[cfg(windows)]
 const OUTPUT_COMMAND: &str = "[Console]::Write(\"hello world 你好 🧠🚀 <|endoftext|>`nTAIL\")";
 #[cfg(not(windows))]
@@ -18,9 +19,10 @@ fn token_offsets_preserve_unicode_totals_and_saved_command_and_screen_output() {
     let total = tokenizer.count(output.as_bytes());
     assert!(output.contains("你好 🧠🚀"), "{accepted}");
     assert_field(command, "/total_output_tokens", total);
-    assert!(text_documents(&accepted).concat().contains(&format!(
-        "<TOTAL_OUTPUT_TOKENS>\n{total}\n</TOTAL_OUTPUT_TOKENS>"
-    )));
+    assert_eq!(
+        tagged_content(&text_documents(&accepted).concat(), "TOTAL_OUTPUT_TOKENS"),
+        Some(format!("\n{total}\n").as_str())
+    );
     for start in (1..=total + 2).chain(core::iter::once(usize::MAX)) {
         let viewed = session.view(&[id], start, 0.0);
         let saved = command_result(&viewed);

@@ -113,11 +113,22 @@ fn command_text(command: &CommandView, command_id: Option<&str>) -> String {
     text
 }
 fn append_element(text: &mut String, tag: &str, content: &str) {
+    let name: String = tag
+        .chars()
+        .zip(nanoid::rngs::thread_local(tag.len()))
+        .map(|(letter, random)| {
+            if random.is_multiple_of(2) {
+                letter.to_ascii_lowercase()
+            } else {
+                letter.to_ascii_uppercase()
+            }
+        })
+        .collect();
     if !text.is_empty() {
         text.push('\n');
     }
     text.push('<');
-    text.push_str(tag);
+    text.push_str(&name);
     text.push_str(">\n");
     if !content.is_empty() {
         text.push_str(content);
@@ -126,7 +137,7 @@ fn append_element(text: &mut String, tag: &str, content: &str) {
         }
     }
     text.push_str("</");
-    text.push_str(tag);
+    text.push_str(&name);
     text.push('>');
 }
 fn element(tag: &str, content: &str) -> String {

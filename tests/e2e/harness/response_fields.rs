@@ -1,3 +1,5 @@
+extern crate alloc;
+use alloc::collections::{BTreeMap, BTreeSet};
 use std::process::Output;
 pub(crate) struct TabCreated {
     pub(crate) tab_id: String,
@@ -69,21 +71,63 @@ fn checked_stdout(output: &Output) -> String {
     String::from_utf8(output.stdout.clone()).unwrap()
 }
 fn element(text: &str, name: &str) -> String {
+    let content = tagged_content(text, name).unwrap();
     if matches!(name, "STDOUT" | "STDERR") {
-        return inline_element(text, name);
+        return content.to_owned();
     }
-    let open = format!("<{name}>\n");
-    let close = format!("</{name}>");
-    let (_, after_open) = text.split_once(&open).unwrap();
-    let (content, _) = after_open.rsplit_once(&close).unwrap();
-    content.trim_end_matches('\n').to_owned()
+    content
+        .strip_prefix('\n')
+        .unwrap()
+        .trim_end_matches('\n')
+        .to_owned()
 }
-fn inline_element(text: &str, name: &str) -> String {
-    let open = format!("<{name}>");
-    let close = format!("</{name}>");
-    let (_, after_open) = text.split_once(&open).unwrap();
-    let (content, _) = after_open.rsplit_once(&close).unwrap();
-    content.to_owned()
+pub(crate) fn tagged_content<'text>(text: &'text str, name: &str) -> Option<&'text str> {
+    let tag = text
+        .lines()
+        .filter_map(|line| line.strip_prefix('<')?.strip_suffix('>'))
+        .find(|tag| tag.eq_ignore_ascii_case(name))?;
+    let (_, after_open) = text.split_once(&format!("<{tag}>"))?;
+    let (content, _) = after_open.rsplit_once(&format!("</{tag}>"))?;
+    Some(content)
+}
+pub(crate) fn assert_tag_randomization<'text>(documents: impl IntoIterator<Item = &'text str>) {
+    let mut observed = BTreeMap::<String, BTreeSet<&str>>::new();
+    for document in documents {
+        let mut pending = Vec::new();
+        for tag in document
+            .lines()
+            .filter_map(|line| line.strip_prefix('<')?.strip_suffix('>'))
+        {
+            if let Some(name) = tag.strip_prefix('/') {
+                assert_eq!(pending.pop(), Some(name), "{document}");
+            } else {
+                pending.push(tag);
+                observed
+                    .entry(tag.to_ascii_uppercase())
+                    .or_default()
+                    .insert(tag);
+            }
+        }
+        assert!(pending.is_empty(), "{document}");
+    }
+    assert!(!observed.is_empty());
+    for (name, variants) in observed {
+        assert!(variants.len() > 2, "{name}: {variants:?}");
+        for (index, letter) in name
+            .bytes()
+            .enumerate()
+            .filter(|&(_, byte)| byte.is_ascii_alphabetic())
+        {
+            for expected in [letter.to_ascii_lowercase(), letter] {
+                assert!(
+                    variants
+                        .iter()
+                        .any(|tag| tag.as_bytes().get(index) == Some(&expected)),
+                    "{name}: {variants:?}"
+                );
+            }
+        }
+    }
 }
 fn parse_exit_code(value: &str) -> Option<i32> {
     match value {

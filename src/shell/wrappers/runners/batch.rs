@@ -29,7 +29,6 @@ set "@VAR_previous_command_id@=%@COMMAND_ID_ENV@%"
 set "@VAR_previous_command_directory@=%@COMMAND_DIR_ENV@%"
 set "@COMMAND_ID_ENV@=%@VAR_command_id@%"
 set "@COMMAND_DIR_ENV@=%@VAR_directory@%"
-call :prepend_functerm_paths
 cd /d "%@VAR_working_directory@%"
 if errorlevel 1 (
     call :publish_done 1
@@ -37,6 +36,7 @@ if errorlevel 1 (
     exit /b 1
 )
 call :publish_start
+if not errorlevel 1 call :prepend_functerm_paths
 if errorlevel 1 (
     call :publish_done 1
     call :restore_command_environment
@@ -67,11 +67,12 @@ if not exist "%~dp0@VAR_environment_after_file@.txt" (
 @CMD_PROTECTED_ENVIRONMENT_CAPTURE@
 for /f "usebackq delims=" %%e in ("%~dp0@VAR_environment_after_file@.txt") do set "%%e"
 @CMD_PROTECTED_ENVIRONMENT_RESTORE@
-call :prepend_functerm_paths
 set /p "@VAR_exit_code@="<"%~dp0@VAR_exit_code_file@.txt"
 set /p "@VAR_current_directory@="<"%~dp0@VAR_cwd_after_file@.txt"
 del /q "%~dp0@VAR_environment_before_file@.txt" "%~dp0@VAR_environment_after_file@.txt" "%~dp0@VAR_protected_environment_file@.txt" "%~dp0@VAR_exit_code_file@.txt" "%~dp0@VAR_cwd_after_file@.txt"
 cd /d "%@VAR_current_directory@%"
+call :prepend_functerm_paths
+if errorlevel 1 set "@VAR_exit_code@=1"
 :publish_result
 call :command_time_millis
 set /a @VAR_command_elapsed@=%ERRORLEVEL% - @VAR_command_started_at@
@@ -94,20 +95,15 @@ cd > "%~dp0@VAR_cwd_after_file@.txt"
 set > "%~dp0@VAR_environment_after_file@.txt" 2> nul
 exit /b 0
 :prepend_functerm_paths
-if "%FUNCTERM_SHIM_DIR%"=="" exit /b 0
-set "@VAR_startup_path@=%~dp0"
-set "@VAR_new_path@=%FUNCTERM_SHIM_DIR%;%@VAR_startup_path@%"
-set "@VAR_remaining_path@=%PATH%"
-:prepend_functerm_path_entry
-if not defined @VAR_remaining_path@ goto prepend_functerm_path_done
-for /f "tokens=1* delims=;" %%a in ("%@VAR_remaining_path@%") do set "@VAR_path_entry@=%%~a" & set "@VAR_remaining_path@=%%b"
-if /i "%@VAR_path_entry@%"=="%FUNCTERM_SHIM_DIR%" goto prepend_functerm_path_entry
-if /i "%@VAR_path_entry@%"=="%@VAR_startup_path@%" goto prepend_functerm_path_entry
-if defined @VAR_path_entry@ set "@VAR_new_path@=%@VAR_new_path@%;%@VAR_path_entry@%"
-goto prepend_functerm_path_entry
-:prepend_functerm_path_done
-set "PATH=%@VAR_new_path@%"
-exit /b 0
+"%@HELPER_ENV@%" internal-cmd-path --startup-directory "%~dp0." > "%~dp0@VAR_search_path_file@.txt"
+if errorlevel 1 (
+    del /q "%~dp0@VAR_search_path_file@.txt"
+    exit /b 1
+)
+for /f "usebackq delims=" %%p in ("%~dp0@VAR_search_path_file@.txt") do set "PATH=%%p"
+set "@VAR_path_exit_code@=%ERRORLEVEL%"
+del /q "%~dp0@VAR_search_path_file@.txt"
+exit /b %@VAR_path_exit_code@%
 :publish_done
 if "%@HELPER_ENV@%"=="" (
     echo @HELPER_ENV@ is not set 1>&2

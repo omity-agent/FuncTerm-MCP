@@ -30,6 +30,10 @@ pub(crate) async fn run() -> Result<()> {
             command,
         } => crate::engine::privileges::stream_host::run(rows, cols, command),
         CliCommand::InternalTimeMillis => print_result(crate::app::command_state::time_millis()),
+        #[cfg(windows)]
+        CliCommand::InternalCmdPath { startup_directory } => print_result(
+            crate::app::command_state::cmd_search_path(&startup_directory),
+        ),
         CliCommand::InternalClaimCommand {
             session_root,
             shell,

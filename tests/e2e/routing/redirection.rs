@@ -68,3 +68,22 @@ fn piped_python_respects_output_redirection() {
     );
     assert_parent(&created.tab_id, parent);
 }
+#[cfg(windows)]
+#[test]
+fn cmd_preserves_custom_search_paths_and_empty_entries() {
+    let (_guard, cwd, _parent) = start_runtime("empty search entries");
+    fs_err::create_dir(cwd.join("search")).unwrap();
+    fs_err::write(cwd.join("search/lookup.cmd"), "@echo SEARCH_PATH_READY").unwrap();
+    let tab = create_tab(&cwd, "cmd");
+    for command in [
+        "set \"PATH=;%CD%\\search;%PATH%;;\"\necho SEARCH_PATH_READY",
+        "lookup",
+        "python -c \"print('SEARCH_PATH_READY')\"",
+    ] {
+        let result = parse_command_result(&send_command(&tab.tab_id, command, 10.0));
+        assert!(result.finished, "{result:?}");
+        assert_eq!(result.exit_code, Some(0_i32), "{result:?}");
+        assert!(result.stdout.contains("SEARCH_PATH_READY"), "{result:?}");
+    }
+    assert_parent(&tab.tab_id, "cmd");
+}

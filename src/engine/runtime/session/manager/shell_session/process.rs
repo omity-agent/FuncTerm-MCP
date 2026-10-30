@@ -30,8 +30,10 @@ impl ProcessTree {
             signal: "SIGKILL".to_owned(),
             ..Default::default()
         };
+        tracing::debug!(process_id, "terminating shell process tree");
         kill_tree_with_config(process_id, &config)
             .with_context(|| format!("failed to terminate shell process tree {process_id}"))?;
+        tracing::debug!(process_id, "shell process tree termination requested");
         *stored_process_id = None;
         drop(stored_process_id);
         Ok(())

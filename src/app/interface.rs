@@ -108,6 +108,12 @@ pub(super) enum CliCommand {
     },
     #[command(hide = true)]
     InternalTimeMillis,
+    #[cfg(windows)]
+    #[command(hide = true)]
+    InternalCmdPath {
+        #[arg(long)]
+        startup_directory: PathBuf,
+    },
     #[command(hide = true)]
     InternalClaimCommand {
         #[arg(long)]

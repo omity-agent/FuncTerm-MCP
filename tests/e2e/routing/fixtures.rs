@@ -1,6 +1,6 @@
 use crate::support::{
     TestGuard, locked_with_env, parse_command_result, required_executable, run_cli, send_command,
-    temp_dir,
+    tagged_content, temp_dir,
 };
 use functerm::shell::quote;
 use std::path::PathBuf;
@@ -44,8 +44,9 @@ pub(super) fn assert_parent(tab_id: &str, parent: &str) {
     let viewed = run_cli(&["view", tab_id]);
     assert!(viewed.status.success(), "view failed: {viewed:?}");
     let text = String::from_utf8(viewed.stdout).unwrap();
-    assert!(
-        text.contains(&format!("<TYPE>\n{expected}\n</TYPE>")),
+    assert_eq!(
+        tagged_content(&text, "TYPE"),
+        Some(format!("\n{expected}\n").as_str()),
         "parent shell changed: {text}"
     );
     let result = parse_command_result(&send_command(tab_id, parent_marker(parent), 10.0));

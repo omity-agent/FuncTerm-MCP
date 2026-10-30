@@ -2,6 +2,7 @@ use super::{
     execution::create_tabs,
     wire::{McpSession, assert_field, command_result, entries, field, result, text},
 };
+use crate::support::assert_tag_randomization;
 use sugar_path::SugarPath as _;
 #[test]
 fn mcp_views_preserve_mixed_id_order_errors_and_shared_completion() {
@@ -65,4 +66,5 @@ fn mcp_views_preserve_mixed_id_order_errors_and_shared_completion() {
             "{waited}"
         );
     }
+    assert_tag_randomization(super::wire::text_documents(&waited));
 }

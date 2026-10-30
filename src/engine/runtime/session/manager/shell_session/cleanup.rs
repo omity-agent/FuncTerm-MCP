@@ -5,7 +5,9 @@ impl ShellSession {
     pub(in crate::engine::runtime::session::manager) fn terminate(&self) -> Result<()> {
         let mut child = self.child.lock();
         self.process_tree.terminate()?;
+        tracing::debug!("waiting for closed shell process");
         child.wait().context("failed to wait for closed shell")?;
+        tracing::debug!("closed shell process exited");
         drop(child);
         drop(self.slave.lock().take());
         Ok(())
@@ -21,7 +23,9 @@ impl Drop for ShellSession {
         let slave = self.slave.get_mut();
         drop(slave.take());
         if let Some(reader) = self.reader.take() {
+            tracing::debug!("joining closed shell PTY reader");
             process::join_reader(reader, "pty reader thread");
+            tracing::debug!("closed shell PTY reader joined");
         }
     }
 }

@@ -76,11 +76,11 @@ fn mcp_rapid_batches_retain_results_across_command_notifications() {
     let mut session = McpSession::new();
     let tabs: [String; 2] = create_tabs(&mut session);
     let mut saved = Vec::new();
-    for round in 0..8 {
+    for round in 0_u8..8 {
         let exec = tabs
             .iter()
             .map(|tab| {
-                json!({"tab_id": tab, "command": format!("echo ROUND_{round}"), "separate_output": round % 2 == 0})
+                json!({"tab_id": tab, "command": format!("echo ROUND_{round}"), "separate_output": round.is_multiple_of(2)})
             })
             .collect::<Vec<_>>();
         let accepted = session.call(
@@ -95,19 +95,21 @@ fn mcp_rapid_batches_retain_results_across_command_notifications() {
     }
     let ids = saved.iter().map(String::as_str).collect::<Vec<_>>();
     let viewed = session.view(&ids, 1, 0.0);
-    for (index, entry) in entries(&viewed).iter().enumerate() {
-        assert_field(entry, "/result/command/finished", true);
-        assert_field(entry, "/result/command/exit_code", 0_i32);
-        let field = if index / 2 % 2 == 0 {
-            "stdout"
-        } else {
-            "output"
-        };
-        assert!(
-            text(entry, &format!("/result/command/{field}"))
-                .contains(&format!("ROUND_{}", index / 2)),
-            "{viewed}"
-        );
+    for (round_index, batch) in entries(&viewed).chunks(tabs.len()).enumerate() {
+        for entry in batch {
+            assert_field(entry, "/result/command/finished", true);
+            assert_field(entry, "/result/command/exit_code", 0_i32);
+            let field = if round_index.is_multiple_of(2) {
+                "stdout"
+            } else {
+                "output"
+            };
+            assert!(
+                text(entry, &format!("/result/command/{field}"))
+                    .contains(&format!("ROUND_{round_index}")),
+                "{viewed}"
+            );
+        }
     }
 }
 #[test]

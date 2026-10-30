@@ -1,5 +1,8 @@
 use super::execution::SHELL;
-use crate::support::{locked_with_env, parse_command_id, parse_tab_created, run_cli};
+use crate::support::{
+    assert_tag_randomization, locked_with_env, parse_command_id, parse_tab_created, run_cli,
+    tagged_content,
+};
 #[test]
 fn cli_reports_total_tokens_and_forwards_the_view_start_token() {
     let guard = locked_with_env(&[]);
@@ -21,34 +24,31 @@ fn cli_reports_total_tokens_and_forwards_the_view_start_token() {
     ]);
     assert!(accepted.status.success(), "{accepted:?}");
     let text = String::from_utf8(accepted.stdout.clone()).unwrap();
-    assert!(text.contains("<OUTPUT>\nhello world\n</OUTPUT>"), "{text}");
-    assert!(
-        text.contains("<TOTAL_OUTPUT_TOKENS>\n2\n</TOTAL_OUTPUT_TOKENS>"),
-        "{text}"
-    );
+    assert_eq!(tagged_content(&text, "OUTPUT"), Some("\nhello world\n"));
+    assert_eq!(tagged_content(&text, "TOTAL_OUTPUT_TOKENS"), Some("\n2\n"));
     let id = parse_command_id(&accepted);
-    for (offset, expected) in [("2", " world"), ("3", ""), ("9999999", "")] {
+    for (offset, expected) in [("2", "\n world\n"), ("3", "\n"), ("9999999", "\n")] {
         let viewed = run_cli(&["view", &id, "--start-token", offset]);
         assert!(viewed.status.success(), "{viewed:?}");
         let document = String::from_utf8(viewed.stdout).unwrap();
-        let output_tag = if expected.is_empty() {
-            "<OUTPUT>\n</OUTPUT>".to_owned()
-        } else {
-            format!("<OUTPUT>\n{expected}\n</OUTPUT>")
-        };
-        assert!(document.contains(&output_tag), "{document}");
-        assert!(
-            document.contains("<TOTAL_OUTPUT_TOKENS>\n2\n</TOTAL_OUTPUT_TOKENS>"),
-            "{document}"
+        assert_eq!(tagged_content(&document, "OUTPUT"), Some(expected));
+        assert_eq!(
+            tagged_content(&document, "TOTAL_OUTPUT_TOKENS"),
+            Some("\n2\n")
         );
     }
     let full = run_cli(&["view", &id]);
     assert!(full.status.success(), "{full:?}");
-    assert!(
-        String::from_utf8(full.stdout.clone())
-            .unwrap()
-            .contains("<OUTPUT>\nhello world\n</OUTPUT>")
-    );
+    let documents: Vec<_> = core::iter::repeat_with(|| {
+        let viewed = run_cli(&["view", &id]);
+        assert!(viewed.status.success(), "{viewed:?}");
+        let document = String::from_utf8(viewed.stdout).unwrap();
+        assert_eq!(tagged_content(&document, "OUTPUT"), Some("\nhello world\n"));
+        document
+    })
+    .take(64)
+    .collect();
+    assert_tag_randomization(documents.iter().map(String::as_str));
     let closed = run_cli(&["close", "--tab-id", &tab.tab_id]);
     for response in [&created, &accepted, &full, &closed] {
         assert!(response.status.success(), "{response:?}");

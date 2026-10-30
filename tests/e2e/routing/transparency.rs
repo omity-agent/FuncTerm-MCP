@@ -1,6 +1,6 @@
 use crate::support::{
     create_tab, locked_with_env, manual_write, parse_command_id, parse_command_result, run_cli,
-    send_command, temp_dir,
+    send_command, tagged_content, temp_dir,
 };
 use core::time::Duration;
 use std::process::Output;
@@ -26,9 +26,9 @@ fn terminal_mode_preserves_tty_and_switches_back_to_separated_output() {
             "{shell}: {text}"
         );
         assert!(output.contains("TERMINAL_ERROR"), "{shell}: {text}");
-        assert!(!text.contains("<STDOUT>"), "{shell}: {text}");
-        assert!(!text.contains("<STDERR>"), "{shell}: {text}");
-        assert!(text.contains("<EXIT_CODE>\n0\n"), "{shell}: {text}");
+        assert!(tagged_content(&text, "STDOUT").is_none(), "{shell}: {text}");
+        assert!(tagged_content(&text, "STDERR").is_none(), "{shell}: {text}");
+        assert_eq!(tagged_content(&text, "EXIT_CODE"), Some("\n0\n"));
         let next = parse_command_result(&send_command(&tab.tab_id, &query, 10.0));
         assert_eq!(next.exit_code, Some(0_i32), "{shell}: {next:?}");
         assert!(next.stdout.contains("TTY_STATE"), "{shell}: {next:?}");
@@ -58,7 +58,7 @@ fn terminal_state_keeps_scrolled_unicode_output_and_command_boundaries() {
     assert!(output.contains("FINAL_ERROR"), "{text}");
     assert!(!output.contains("BEFORE_CAPTURE"), "{text}");
     assert!(!output.contains("FuncTerm;"), "{text}");
-    assert!(text.contains("<EXIT_CODE>\n7\n"), "{text}");
+    assert_eq!(tagged_content(&text, "EXIT_CODE"), Some("\n7\n"));
     let saved_id = parse_command_id(&result);
     let next = run_terminal(&tab.tab_id, "echo AFTER_CAPTURE", "10");
     assert!(terminal_output(&checked_text(&next)).contains("AFTER_CAPTURE"));
@@ -84,10 +84,7 @@ fn terminal_mode_accepts_input_and_honors_user_redirection() {
         );
         pending_text = checked_text(&run_cli(&["view", &id, "--wait-timeout", "0.05"]));
     }
-    assert!(
-        pending_text.contains("<FINISHED>\nfalse\n"),
-        "{pending_text}"
-    );
+    assert_eq!(tagged_content(&pending_text, "FINISHED"), Some("\nfalse\n"));
     let input = manual_write(&tab.tab_id, b"hello\r", 0.1);
     assert!(input.status.success(), "{input:?}");
     let finished = checked_text(&run_cli(&["view", &id, "--wait-timeout", "10"]));
@@ -95,7 +92,7 @@ fn terminal_mode_accepts_input_and_honors_user_redirection() {
         terminal_output(&finished).contains("INPUT_RECEIVED_hello"),
         "{finished}"
     );
-    assert!(finished.contains("<FINISHED>\ntrue\n"), "{finished}");
+    assert_eq!(tagged_content(&finished, "FINISHED"), Some("\ntrue\n"));
     let redirected = run_terminal(
         &tab.tab_id,
         "python -c \"import sys; print('FILE_ONLY'); print('SCREEN_ONLY', file=sys.stderr)\" > user-output.txt",
@@ -131,8 +128,8 @@ fn terminal_mode_preserves_external_exit_codes() {
             terminal_output(&text).contains("NONZERO_TERMINAL"),
             "{shell}: {text}"
         );
-        assert!(text.contains("<EXIT_CODE>\n7\n"), "{shell}: {text}");
-        assert!(text.contains("<FINISHED>\ntrue\n"), "{shell}: {text}");
+        assert_eq!(tagged_content(&text, "EXIT_CODE"), Some("\n7\n"));
+        assert_eq!(tagged_content(&text, "FINISHED"), Some("\ntrue\n"));
     }
 }
 fn run_terminal(tab_id: &str, command: &str, wait_timeout: &str) -> Output {
@@ -152,12 +149,10 @@ fn checked_text(result: &Output) -> String {
     String::from_utf8(result.stdout.clone()).unwrap()
 }
 fn terminal_output(text: &str) -> &str {
-    text.split_once("<OUTPUT>\n")
+    tagged_content(text, "OUTPUT")
         .unwrap()
-        .1
-        .split_once("</OUTPUT>")
+        .strip_prefix('\n')
         .unwrap()
-        .0
 }
 const fn parent_shell() -> &'static str {
     if cfg!(windows) { "powershell" } else { "bash" }
