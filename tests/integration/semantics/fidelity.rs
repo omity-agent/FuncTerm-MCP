@@ -1,5 +1,6 @@
 use crate::support::{
-    complete_command, create_tab, locked_with_env, parse_command_result, run_cli, temp_dir,
+    complete_command, create_tab, locked_with_env, parse_command_result, run_cli, tagged_content,
+    temp_dir,
 };
 #[cfg(windows)]
 #[test]
@@ -31,12 +32,21 @@ fn terminal_capture_preserves_spacing_and_wide_character_wraps() {
         format!("{} B", "A".repeat(119)),
         format!("{} B", "A".repeat(239)),
         format!("{} B", "A".repeat(359)),
+        format!("{} B", "A".repeat(4999)),
         format!("{}界B", "A".repeat(119)),
         format!("{}界B", "A".repeat(239)),
         format!("{}A界B", "界".repeat(59)),
+        "e\u{301} 中文 🧠🚀".to_owned(),
     ];
-    let text = expected.join("\n");
-    for shell in ["bun", if cfg!(windows) { "powershell" } else { "bun" }] {
+    let text = format!(
+        "\x1b[2J\x1b[H\x1b]2;终端标题\x1b\\\x1b[31m{}\nOVERWRITTEN\r\x1b[2KFINAL_FRAME\x1b[0m",
+        expected.join("\n")
+    );
+    for shell in [
+        "bun",
+        #[cfg(windows)]
+        "powershell",
+    ] {
         let tab = create_tab(&temp_dir("wide-wrap"), shell).tab_id;
         let source = if shell == "powershell" {
             format!(
@@ -46,7 +56,7 @@ fn terminal_capture_preserves_spacing_and_wide_character_wraps() {
         } else {
             format!("console.log({})", sonic_rs::to_string(&text).unwrap())
         };
-        let result = parse_command_result(&run_cli(&[
+        let response = run_cli(&[
             "send-command",
             &tab,
             "--command",
@@ -55,8 +65,13 @@ fn terminal_capture_preserves_spacing_and_wide_character_wraps() {
             "false",
             "--wait-timeout",
             "5",
-        ]));
+        ]);
+        let result = parse_command_result(&response);
         assert_eq!(result.exit_code, Some(0_i32), "{result:?}");
+        let document = String::from_utf8(response.stdout).unwrap();
+        assert_eq!(tagged_content(&document, "TITLE"), Some("\n终端标题\n"));
+        assert!(!result.stdout.contains("OVERWRITTEN"), "{result:?}");
+        assert!(result.stdout.contains("FINAL_FRAME"), "{result:?}");
         for line in &expected {
             assert!(result.stdout.contains(line), "{shell}: {result:?}");
         }

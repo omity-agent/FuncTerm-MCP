@@ -1,4 +1,4 @@
-use super::{capture::CommandCapture, output_events::ProtocolEvent, rendering::CommandScreen};
+use super::{capture::CommandCapture, markers::ProtocolEvent, rendering::CommandScreen};
 use alloc::{collections::BTreeMap, sync::Arc};
 use anyhow::{Result, bail};
 use parking_lot::Mutex;
@@ -32,7 +32,7 @@ impl CaptureRegistry {
         self.captures.insert(id.to_owned(), Arc::clone(&capture));
         Ok(capture)
     }
-    pub(super) fn handle(&mut self, event: ProtocolEvent, screen_title: &str) -> Result<()> {
+    pub(super) fn handle(&mut self, event: ProtocolEvent) -> Result<()> {
         match event {
             ProtocolEvent::Start(id) => {
                 tracing::debug!(command_id = %id, "terminal command start marker");
@@ -42,14 +42,12 @@ impl CaptureRegistry {
                 tracing::debug!(command_id = %id, "terminal command end marker");
                 self.finish(&id)
             }
-            ProtocolEvent::WindowTitleAssigned => self.update(screen_title),
             ProtocolEvent::Prompt(cwd) => {
                 if let Some(id) = self.active.as_deref() {
                     self.require(id)?.observe_prompt(cwd);
                 }
                 Ok(())
             }
-            ProtocolEvent::Invalid(message) => bail!(message),
         }
     }
     pub(super) fn fail_all(&mut self, message: &str) {
@@ -80,7 +78,7 @@ impl CaptureRegistry {
         }
         Ok(())
     }
-    fn update(&self, title: &str) -> Result<()> {
+    pub(super) fn update(&self, title: &str) -> Result<()> {
         if let Some(id) = self.active.as_deref() {
             self.require(id)?.update(title);
         }

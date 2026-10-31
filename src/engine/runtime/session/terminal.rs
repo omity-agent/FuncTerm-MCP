@@ -1,20 +1,24 @@
 mod activity;
 mod capture;
+mod emulation;
 mod io;
-mod output_events;
+mod markers;
 mod registry;
 mod rendering;
+mod transcript;
 pub(super) use self::capture::CommandCapture;
+use self::emulation::PtyResponder;
 pub(super) use self::io::start_reader;
-use self::output_events::{OutputEvent, OutputParser};
 use self::registry::CaptureRegistry;
 use self::rendering::CommandScreen;
-use alloc::sync::Arc;
+use alloc::sync::{Arc, Weak};
 use anyhow::{Context as _, Result, bail};
 use bytestring::ByteString;
 use event_listener::Event;
 use parking_lot::Mutex;
-use tastty_core::{HostProfile, host_reply::auto_reply_bytes};
+use portable_pty::PtySize;
+use std::io::Write;
+use wezterm_escape_parser::{Action, parser::Parser};
 pub(super) struct Terminal {
     model_title: String,
     state: Mutex<TerminalState>,
@@ -22,7 +26,8 @@ pub(super) struct Terminal {
 }
 struct TerminalState {
     screen: Arc<Mutex<CommandScreen>>,
-    protocol: OutputParser,
+    screen_title: String,
+    parser: Parser,
     captures: CaptureRegistry,
     visible_revision: u64,
     visible_contents: ByteString,
@@ -31,28 +36,33 @@ struct TerminalState {
     process_exited: bool,
 }
 impl Terminal {
-    pub(super) fn new(size: tastty_core::TerminalSize, model_title: &str) -> Result<Self> {
-        let mut screen = CommandScreen::new(size);
-        screen
-            .parser
-            .process(crate::contract::window_title_sequence(model_title)?.as_bytes());
-        drop(screen.parser.screen_mut().drain_events());
-        let visible_contents = screen.parser.screen().contents();
-        screen.parser.screen_mut().clear_dirty();
-        Ok(Self {
-            model_title: model_title.to_owned(),
-            state: Mutex::new(TerminalState {
-                screen: Arc::new(Mutex::new(screen)),
-                protocol: OutputParser::new(),
-                captures: CaptureRegistry::new(model_title.to_owned()),
-                visible_revision: 0,
-                visible_contents: visible_contents.into(),
-                reader_closed: false,
-                reader_failure: None,
-                process_exited: false,
-            }),
-            changed: Event::new(),
-        })
+    pub(super) fn new(
+        size: PtySize,
+        model_title: &str,
+        writer: Arc<Mutex<Box<dyn Write + Send>>>,
+    ) -> Result<Arc<Self>> {
+        let initial_title = crate::contract::window_title_sequence(model_title)?;
+        Ok(Arc::new_cyclic(|terminal| {
+            let responder = PtyResponder::new(writer, Weak::clone(terminal));
+            let mut screen = CommandScreen::new(size, Box::new(responder));
+            screen.model.advance_bytes(initial_title.as_bytes());
+            let visible_contents = screen.visible_contents().into();
+            Self {
+                model_title: model_title.to_owned(),
+                state: Mutex::new(TerminalState {
+                    screen: Arc::new(Mutex::new(screen)),
+                    screen_title: model_title.to_owned(),
+                    parser: Parser::new(),
+                    captures: CaptureRegistry::new(model_title.to_owned()),
+                    visible_revision: 0,
+                    visible_contents,
+                    reader_closed: false,
+                    reader_failure: None,
+                    process_exited: false,
+                }),
+                changed: Event::new(),
+            }
+        }))
     }
     pub(super) fn capture_command(
         &self,
@@ -78,85 +88,63 @@ impl Terminal {
     pub(super) fn complete_at_prompt(&self, id: &str) -> Result<()> {
         self.state.lock().captures.finish(id)
     }
-    pub(super) fn process(&self, chunk: &[u8], host: &HostProfile) -> Result<Vec<Vec<u8>>> {
+    pub(super) fn process(&self, chunk: &[u8]) -> Result<()> {
         let mut state = self.state.lock();
-        let processed = (|| {
-            let replies = state.process(chunk, host)?;
-            let shared_screen = Arc::clone(&state.screen);
-            let mut screen = shared_screen.lock();
-            if screen.parser.screen().dirty_rows().next().is_some() {
-                let contents = screen.parser.screen().contents();
-                if state.visible_contents != contents {
-                    state.visible_revision = state
-                        .visible_revision
-                        .checked_add(1)
-                        .context("terminal visible content revision overflow")?;
-                    state.visible_contents = contents.into();
-                }
-                screen.parser.screen_mut().clear_dirty();
-            }
-            drop(screen);
-            Ok(replies)
-        })();
-        match processed {
-            Ok(replies) => {
-                drop(state);
-                self.changed.notify(usize::MAX);
-                Ok(replies)
-            }
-            Err(error) => {
-                let message = format!("failed to process terminal output: {error:#}");
-                state.captures.fail_all(&message);
-                state.reader_closed = true;
-                state.reader_failure = Some(message);
-                drop(state);
-                self.changed.notify(usize::MAX);
-                Err(error)
-            }
+        let processed = state.process(chunk);
+        if let Err(error) = processed.as_ref() {
+            let message = format!("failed to process terminal output: {error:#}");
+            state.captures.fail_all(&message);
+            state.reader_closed = true;
+            state.reader_failure = Some(message);
         }
+        drop(state);
+        self.changed.notify(usize::MAX);
+        processed
     }
 }
 impl TerminalState {
-    fn process(&mut self, chunk: &[u8], host: &HostProfile) -> Result<Vec<Vec<u8>>> {
-        let mut replies = Vec::new();
-        let mut remaining = chunk;
-        while !remaining.is_empty() {
-            let (consumed, event) = self.protocol.advance(remaining);
-            if consumed == 0 {
-                bail!("terminal protocol parser made no progress");
-            }
-            let (segment, tail) = remaining
-                .split_at_checked(consumed)
-                .context("terminal event offset exceeds PTY output")?;
-            self.process_screen(segment, host, &mut replies)?;
-            match event {
-                Some(OutputEvent::Capture(protocol_event)) => {
-                    let title = self.screen.lock().parser.screen().title().to_owned();
-                    self.captures.handle(protocol_event, &title)?;
+    fn process(&mut self, chunk: &[u8]) -> Result<()> {
+        let mut actions = Vec::new();
+        self.parser
+            .parse(chunk, |action| action.append_to(&mut actions));
+        let mut pending = Vec::new();
+        for action in actions {
+            if let Some(event) = markers::parse(&action)? {
+                self.apply(core::mem::take(&mut pending))?;
+                self.captures.handle(event)?;
+            } else {
+                let checkpoint = matches!(
+                    action,
+                    Action::CSI(_) | Action::Esc(_) | Action::OperatingSystemCommand(_)
+                );
+                pending.push(action);
+                if checkpoint {
+                    self.apply(core::mem::take(&mut pending))?;
                 }
-                Some(OutputEvent::ScreenCheckpoint) => self.screen.lock().checkpoint(),
-                None => {}
             }
-            remaining = tail;
         }
-        Ok(replies)
+        self.apply(pending)?;
+        let contents = self.screen.lock().visible_contents();
+        if self.visible_contents != contents {
+            self.visible_revision = self
+                .visible_revision
+                .checked_add(1)
+                .context("terminal visible content revision overflow")?;
+            self.visible_contents = contents.into();
+        }
+        Ok(())
     }
-    fn process_screen(
-        &self,
-        bytes: &[u8],
-        host: &HostProfile,
-        replies: &mut Vec<Vec<u8>>,
-    ) -> Result<()> {
-        let mut screen = self.screen.lock();
-        screen.parser.process(bytes);
-        for event in screen.parser.screen_mut().drain_events() {
-            screen.observe(&event)?;
-            if let Some(reply_bytes) = auto_reply_bytes(&event, host) {
-                tracing::debug!(?event, "terminal host query reply");
-                replies.push(reply_bytes);
-            }
+    fn apply(&mut self, actions: Vec<Action>) -> Result<()> {
+        if actions.is_empty() {
+            return Ok(());
         }
-        drop(screen);
+        let mut screen = self.screen.lock();
+        screen.apply(actions);
+        if self.screen_title != screen.model.get_title() {
+            screen.model.get_title().clone_into(&mut self.screen_title);
+            drop(screen);
+            self.captures.update(&self.screen_title)?;
+        }
         Ok(())
     }
 }

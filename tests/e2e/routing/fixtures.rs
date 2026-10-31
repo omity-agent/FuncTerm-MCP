@@ -1,6 +1,6 @@
 use crate::support::{
-    TestGuard, locked_with_env, parse_command_result, required_executable, run_cli, send_command,
-    tagged_content, temp_dir,
+    TestGuard, complete_command, locked_with_env, required_executable, run_cli, tagged_content,
+    temp_dir,
 };
 use functerm::shell::quote;
 use std::path::PathBuf;
@@ -49,7 +49,7 @@ pub(super) fn assert_parent(tab_id: &str, parent: &str) {
         Some(format!("\n{expected}\n").as_str()),
         "parent shell changed: {text}"
     );
-    let result = parse_command_result(&send_command(tab_id, parent_marker(parent), 10.0));
+    let result = complete_command(tab_id, parent_marker(parent));
     assert!(result.finished, "{result:?}");
     assert_eq!(result.exit_code, Some(0_i32), "{result:?}");
     assert!(result.stdout.contains("PARENT_CONTINUED"), "{result:?}");

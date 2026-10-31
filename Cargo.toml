@@ -120,7 +120,7 @@ named-lock = "*"
 nanoid = "*"
 notify = "*"
 parking_lot = "*"
-portable-pty = { git = "https://github.com/wez/wezterm" }
+portable-pty = { git = "https://github.com/wezterm/wezterm" }
 rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk", default-features = false, features = [
     "server",
     "macros",
@@ -139,7 +139,6 @@ snmalloc-rs = { git = "https://github.com/microsoft/snmalloc", features = [
 sonic-rs = { git = "https://github.com/cloudwego/sonic-rs" }
 strum = { version = "*", features = ["derive"] }
 sugar_path = "*"
-tastty-core = "*"
 tempfile = "*"
 thiserror = { git = "https://github.com/dtolnay/thiserror" }
 tokio = { version = "*", features = [
@@ -154,7 +153,8 @@ toktok-rs = { git = "https://github.com/vectorize-io/toktok" }
 toml = "*"
 tracing = "*"
 tracing-subscriber = { version = "*", features = ["env-filter"] }
-vte = { git = "https://github.com/alacritty/vte" }
+wezterm-escape-parser = { git = "https://github.com/wezterm/wezterm" }
+wezterm-term = { git = "https://github.com/wezterm/wezterm" }
 which = "*"
 
 [dev-dependencies]

@@ -38,9 +38,9 @@ fn mcp_running_command_recounts_new_output_and_can_resume_from_a_token_offset() 
     let mut session = McpSession::new();
     let [tab] = create_tabs(&mut session);
     #[cfg(windows)]
-    let command = "[Console]::WriteLine('FIRST_CHUNK')\n$null = [Console]::In.ReadLine()\n[Console]::Write('SECOND_CHUNK')";
+    let command = "[Console]::Write(\"`e[?1049h`e[2J`e[HFIRST_CHUNK`n\")\n$null = [Console]::In.ReadLine()\n[Console]::Write(\"`e[?1049lFIRST_CHUNK`nSECOND_CHUNK\")";
     #[cfg(not(windows))]
-    let command = "printf 'FIRST_CHUNK\\n'\nread -r line\nprintf 'SECOND_CHUNK'";
+    let command = "printf '\\033[?1049h\\033[2J\\033[HFIRST_CHUNK\\n'\nread -r line\nprintf '\\033[?1049lFIRST_CHUNK\\nSECOND_CHUNK'";
     let accepted = session.execute(&tab, command, false, 0.5);
     let initial = command_result(&accepted);
     assert_field(initial, "/finished", false);

@@ -1,7 +1,8 @@
 # 本地 Daemon 的 IPC 服务名
 daemon_service_name = "functerm/daemon"
 
-# Daemon 结构化诊断的过滤规则；设为 functerm=debug 可观察命令生命周期。
+# Daemon 结构化诊断的过滤规则；可通过 FUNCTERM_DIAGNOSTICS_FILTER 覆盖。
+# 设为 functerm=debug 可观察命令生命周期。
 diagnostics_filter = "warn"
 
 # Shell PTY 的默认行数。

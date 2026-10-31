@@ -122,7 +122,16 @@ pub(crate) struct ToolDescription {
 pub(crate) fn load() -> Result<Settings> {
     let mut settings =
         toml::from_str::<Settings>(SETTINGS).context("failed to parse embedded settings")?;
+    ensure!(
+        settings.terminal_rows > 0 && settings.terminal_cols > 0,
+        "terminal_rows and terminal_cols must be positive"
+    );
+    crate::contract::validate_window_title(&settings.terminal_model_title)?;
     settings.ipc.validate()?;
+    apply_string_override(
+        "FUNCTERM_DIAGNOSTICS_FILTER",
+        &mut settings.diagnostics_filter,
+    );
     apply_string_override(DAEMON_SERVICE_NAME_ENV, &mut settings.daemon_service_name);
     for (name, value) in [
         (

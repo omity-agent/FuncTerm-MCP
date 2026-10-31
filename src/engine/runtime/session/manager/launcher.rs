@@ -20,7 +20,6 @@ use parking_lot::Mutex;
 use portable_pty::PtySize;
 use std::path::Path;
 use std::sync::OnceLock;
-use tastty_core::TerminalSize;
 pub(super) struct ShellLauncher {
     settings: Settings,
     generation_root: std::path::PathBuf,
@@ -103,26 +102,15 @@ impl ShellLauncher {
             self.settings.shell_ignore_style,
             &EnvironmentSnapshot::from_variables(variables),
         )?;
-        let screen = Arc::new(Terminal::new(
-            TerminalSize {
-                rows: self.settings.terminal_rows,
-                cols: self.settings.terminal_cols,
-            },
-            &self.settings.terminal_model_title,
-        )?);
+        let size = PtySize {
+            rows: self.settings.terminal_rows,
+            cols: self.settings.terminal_cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        };
         let ready_file = startup.ready_file.clone();
-        let spawned = spawn_builder::launch(
-            &executable,
-            startup,
-            starting_directory,
-            &identity,
-            PtySize {
-                rows: self.settings.terminal_rows,
-                cols: self.settings.terminal_cols,
-                pixel_width: 0,
-                pixel_height: 0,
-            },
-        )?;
+        let spawned =
+            spawn_builder::launch(&executable, startup, starting_directory, &identity, size)?;
         let process_tree = process::ProcessTree::new();
         let mut child = spawned.child;
         let retained_slave = spawned.slave;
@@ -134,13 +122,23 @@ impl ShellLauncher {
             return Err(error);
         }
         let writer = Arc::new(Mutex::new(spawned.writer));
+        let screen = match Terminal::new(
+            size,
+            &self.settings.terminal_model_title,
+            Arc::clone(&writer),
+        ) {
+            Ok(screen) => screen,
+            Err(error) => {
+                process::cleanup(child.as_mut(), "unregistered shell child");
+                return Err(error);
+            }
+        };
         let startup_timeout =
             Duration::try_from_secs_f64(self.settings.shell_startup_timeout_seconds)
                 .context("shell_startup_timeout_seconds must be finite and non-negative")?;
         let startup_events = startup::StartupEvents::new();
         let reader_worker = match start_reader(
             Arc::clone(&screen),
-            Arc::clone(&writer),
             spawned.reader,
             startup_events.reader_exit_notifier(),
         ) {

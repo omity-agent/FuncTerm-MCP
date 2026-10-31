@@ -1,151 +1,116 @@
-use alloc::sync::Arc;
+use super::emulation;
 use anyhow::{Context as _, Result, ensure};
-use bytestring::ByteString;
-use itertools::Itertools as _;
-use parking_lot::Mutex;
-use tastty_core::{
-    AbsolutePosition, Parser, PlainOptions, Position, ScreenEvent, TerminalMode, TerminalSize,
-    screen::LogicalLineOptions,
+use portable_pty::PtySize;
+use std::io::Write;
+use wezterm_escape_parser::{
+    Action, CSI,
+    csi::{Edit, EraseInDisplay},
+    esc::{Esc, EscCode},
 };
+use wezterm_term::StableRowIndex;
 pub(super) struct CommandScreen {
-    pub(super) parser: Parser,
-    start: Option<AbsolutePosition>,
-}
-pub(super) enum RenderedOutput {
-    Pending(Arc<Mutex<CommandScreen>>),
-    Active(Arc<Mutex<CommandScreen>>),
-    Frozen(ByteString),
+    pub(super) model: wezterm_term::Terminal,
+    start: Option<(StableRowIndex, usize)>,
 }
 impl CommandScreen {
-    pub(super) fn new(size: TerminalSize) -> Self {
+    pub(super) fn new(size: PtySize, writer: Box<dyn Write + Send>) -> Self {
         Self {
-            parser: Parser::new(size, usize::MAX),
+            model: emulation::emulator(size, writer),
             start: None,
         }
     }
-    fn begin(&mut self) -> Result<()> {
+    pub(super) fn apply(&mut self, actions: Vec<Action>) {
+        let reset = matches!(
+            actions.last(),
+            Some(Action::Esc(Esc::Code(EscCode::FullReset)))
+        );
+        let cleared = reset
+            || matches!(
+                actions.last(),
+                Some(Action::CSI(CSI::Edit(Edit::EraseInDisplay(
+                    EraseInDisplay::EraseDisplay
+                ))))
+            );
+        self.model.perform_actions(actions);
+        if cleared
+            && !self.model.is_alt_screen_active()
+            && let Some(start) = self.start.as_mut()
+        {
+            *start = (*start).min((self.model.screen().visible_row_to_stable_row(0), 0));
+        }
+        if self.start.is_none() {
+            self.model.screen_mut().erase_scrollback();
+        }
+    }
+    pub(super) fn begin(&mut self) -> Result<()> {
         ensure!(
             self.start.is_none(),
             "terminal output region is already active"
         );
-        let screen = self.parser.screen();
-        let cursor = screen.cursor();
-        let mut start = screen
-            .visible_to_absolute(Position::new(cursor.row, 0))
-            .context("command start cursor is outside the terminal")?;
-        start.col = cursor.col;
-        self.start = Some(start);
+        let cursor = self.model.cursor_pos();
+        self.start = Some((
+            self.model.screen().visible_row_to_stable_row(cursor.y),
+            cursor.x,
+        ));
         Ok(())
     }
-    pub(super) fn observe(&mut self, event: &ScreenEvent) -> Result<()> {
-        if matches!(event, ScreenEvent::ScreenCleared)
-            && !self.parser.screen().mode(TerminalMode::AlternateScreen)
-            && let Some(start) = self.start.as_mut()
-        {
-            let top = self
-                .parser
-                .screen()
-                .visible_to_absolute(Position::new(0, 0))
-                .context("cleared terminal has no first row")?;
-            *start = (*start).min(top);
-        }
-        Ok(())
-    }
-    pub(super) fn checkpoint(&mut self) {
-        if self.start.is_none() && self.parser.screen().scrollback_available() > 0 {
-            self.parser.process(b"\x1b[3J");
-        }
-    }
-    fn contents(&mut self) -> Result<String> {
+    pub(super) fn contents(&self) -> Result<String> {
         let initial = self.start.context("terminal output region is not active")?;
-        let screen = self.parser.screen_mut();
-        if screen.mode(TerminalMode::AlternateScreen) {
-            let mut options = PlainOptions::default();
-            options.join_wrapped = true;
-            options.include_scrollback = true;
-            return Ok(screen.contents_plain(options));
-        }
-        let oldest = AbsolutePosition::new(screen.scrollback_origin_row(), 0);
-        let start = initial.max(oldest);
-        let options = LogicalLineOptions {
-            join_wrapped: true,
-            include_scrollback: true,
-            trim_trailing_blanks: true,
+        let start = if self.model.is_alt_screen_active() {
+            (self.model.screen().phys_to_stable_row_index(0), 0)
+        } else {
+            initial.max((self.model.screen().phys_to_stable_row_index(0), 0))
         };
-        let mut output = String::new();
-        for (index, line) in screen
-            .logical_lines(options)
-            .filter(|line| line.end.row >= start.row)
-            .enumerate()
-        {
-            if index > 0 {
-                output.push('\n');
-            }
-            for (_, cells) in &line.cells().chunk_by(|cell| cell.0.row) {
-                let mut physical_row = String::new();
-                let mut populated = 0;
-                for (position, cell) in cells {
-                    if position >= start {
-                        if cell.contents().is_empty() {
-                            physical_row.push(' ');
-                        } else {
-                            physical_row.push_str(cell.contents());
-                        }
-                        if cell.has_contents() {
-                            populated = physical_row.len();
-                        }
-                    }
-                }
-                physical_row.truncate(populated);
-                output.push_str(&physical_row);
-            }
-        }
-        Ok(output)
+        Ok(self.text(start, true))
     }
-    fn finish(&mut self) -> Result<String> {
+    pub(super) fn finish(&mut self) -> Result<String> {
         let output = self.contents()?;
         self.start = None;
+        self.model.screen_mut().erase_scrollback();
         Ok(output)
     }
-}
-impl RenderedOutput {
-    pub(super) const fn new(screen: Arc<Mutex<CommandScreen>>) -> Self {
-        Self::Pending(screen)
+    pub(super) fn visible_contents(&self) -> String {
+        self.text((self.model.screen().visible_row_to_stable_row(0), 0), false)
     }
-    #[expect(
-        clippy::pattern_type_mismatch,
-        reason = "borrow the pending screen while advancing the capture state"
-    )]
-    pub(super) fn start(&mut self) -> Result<()> {
-        let Self::Pending(screen) = self else {
-            anyhow::bail!("terminal output capture is not pending");
-        };
-        screen.lock().begin()?;
-        *self = Self::Active(Arc::clone(screen));
-        Ok(())
-    }
-    pub(super) fn contents(&self) -> Result<ByteString> {
-        #[expect(
-            clippy::pattern_type_mismatch,
-            reason = "borrow the live screen or frozen output without moving it"
-        )]
-        match self {
-            Self::Pending(_) => Ok(ByteString::new()),
-            Self::Active(screen) => Ok(screen.lock().contents()?.into()),
-            Self::Frozen(output) => Ok(output.clone()),
-        }
-    }
-    #[expect(
-        clippy::pattern_type_mismatch,
-        reason = "borrow the active screen before replacing it with its frozen output"
-    )]
-    pub(super) fn finish(&mut self) -> Result<()> {
-        let output = match self {
-            Self::Pending(_) => String::new(),
-            Self::Active(screen) => screen.lock().finish()?,
-            Self::Frozen(_) => return Ok(()),
-        };
-        *self = Self::Frozen(output.into());
-        Ok(())
+    fn text(&self, start: (StableRowIndex, usize), join_wrapped: bool) -> String {
+        let screen = self.model.screen();
+        let cursor = self.model.cursor_pos();
+        let cursor_row = screen.visible_row_to_stable_row(cursor.y);
+        let end = screen.phys_to_stable_row_index(screen.scrollback_rows());
+        let mut output = String::new();
+        let mut first = true;
+        let mut wrapped = false;
+        let mut populated = 0;
+        screen.for_each_logical_line_in_stable_range(start.0..end, |range, lines| {
+            for (row, line) in range.zip(lines) {
+                if row >= start.0 {
+                    if !(first || join_wrapped && wrapped) {
+                        output.push('\n');
+                    }
+                    let from = if first { start.1 } else { 0 };
+                    first = false;
+                    let mut text = line.columns_as_str(from..screen.physical_cols);
+                    wrapped = line.last_cell_was_wrapped();
+                    let retained = if join_wrapped && wrapped {
+                        text.len()
+                    } else {
+                        let cursor_text = if row == cursor_row {
+                            line.columns_as_str(from..cursor.x)
+                        } else {
+                            String::new()
+                        };
+                        text.trim_end_matches(' ').len().max(cursor_text.len())
+                    };
+                    if retained > 0 {
+                        text.truncate(retained);
+                        output.push_str(&text);
+                        populated = output.len();
+                    }
+                }
+            }
+            true
+        });
+        output.truncate(populated);
+        output
     }
 }

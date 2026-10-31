@@ -58,6 +58,9 @@ pub(crate) fn locked_with_env(extra_env: &[(&str, &str)]) -> TestGuard {
         (key, value)
     }));
     env.extend(runtime.environment());
+    if let Ok(filter) = std::env::var("FUNCTERM_DIAGNOSTICS_FILTER") {
+        env.push(("FUNCTERM_DIAGNOSTICS_FILTER".to_owned(), filter));
+    }
     let (child, http_address) = spawn_daemon(&env, &service_name);
     let previous_env = active_env();
     set_active_env(&env);

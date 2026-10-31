@@ -1,4 +1,4 @@
-use super::rendering::{CommandScreen, RenderedOutput};
+use super::{rendering::CommandScreen, transcript::RenderedOutput};
 use crate::runtime::session::observation::wait_until;
 use alloc::sync::Arc;
 use anyhow::{Result, bail};

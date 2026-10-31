@@ -1,6 +1,7 @@
 use crate::support::{
-    create_tab, locked_with_env, manual_write, parse_command_id, parse_command_result, run_cli,
-    send_command, tagged_content, temp_dir,
+    complete_command, create_tab, locked_with_env, manual_write, parse_command_id,
+    parse_command_result, parse_tab_view, run_cli, send_command, tagged_content, temp_dir,
+    wait_for_completion,
 };
 use core::time::Duration;
 use std::process::Output;
@@ -14,106 +15,97 @@ fn terminal_mode_preserves_tty_and_switches_back_to_separated_output() {
     #[cfg(unix)]
     let shells = ["bash", "zsh", "python", "bun"];
     for shell in shells {
-        let tab = create_tab(&directory, shell);
+        let tab = create_tab(&directory, shell).tab_id;
         let query = tty_query(shell);
-        let separated = parse_command_result(&send_command(&tab.tab_id, &query, 10.0));
+        let separated = complete_command(&tab, query);
         assert_eq!(separated.exit_code, Some(0_i32), "{shell}: {separated:?}");
-        let direct = run_terminal(&tab.tab_id, &query, "10");
-        let text = checked_text(&direct);
-        let output = terminal_output(&text);
+        let direct = run_terminal(&tab, query, "10");
+        let terminal = wait_for_completion(&direct);
+        let document = String::from_utf8(direct.stdout.clone()).unwrap();
+        for tag in ["STDOUT", "STDERR"] {
+            assert!(tagged_content(&document, tag).is_none(), "{document}");
+        }
+        let native = if shell == "bun" { "false" } else { "true" };
+        let expected = format!("tty_state true {native} {native}");
         assert!(
-            output.to_lowercase().contains(if shell == "bun" {
-                "tty_state true false false"
-            } else {
-                "tty_state true true true"
-            }),
-            "{shell}: {text}"
+            terminal.stdout.to_lowercase().contains(&expected),
+            "{terminal:?}"
         );
-        assert!(output.contains("TERMINAL_ERROR"), "{shell}: {text}");
-        assert!(tagged_content(&text, "STDOUT").is_none(), "{shell}: {text}");
-        assert!(tagged_content(&text, "STDERR").is_none(), "{shell}: {text}");
-        assert_eq!(tagged_content(&text, "EXIT_CODE"), Some("\n0\n"));
-        let next = parse_command_result(&send_command(&tab.tab_id, &query, 10.0));
+        assert!(terminal.stdout.contains("TERMINAL_ERROR"), "{terminal:?}");
+        assert_eq!(terminal.exit_code, Some(0_i32), "{terminal:?}");
+        let next = complete_command(&tab, query);
         assert_eq!(next.exit_code, Some(0_i32), "{shell}: {next:?}");
         assert!(next.stdout.contains("TTY_STATE"), "{shell}: {next:?}");
-        assert!(
-            if shell == "nu" {
-                &next.stdout
-            } else {
-                &next.stderr
-            }
-            .contains("TERMINAL_ERROR"),
-            "{shell}: {next:?}"
-        );
-        let saved = run_cli(&["view", &parse_command_id(&direct)]);
-        assert_eq!(terminal_output(&checked_text(&saved)), output, "{shell}");
-        assert!(
-            run_cli(&["close", "--tab-id", &tab.tab_id])
-                .status
-                .success()
-        );
+        let errors = if shell == "nu" {
+            &next.stdout
+        } else {
+            &next.stderr
+        };
+        assert!(errors.contains("TERMINAL_ERROR"), "{shell}: {next:?}");
+        let saved = parse_command_result(&run_cli(&["view", &parse_command_id(&direct)]));
+        assert_eq!(saved.stdout, terminal.stdout, "{shell}");
+        assert!(run_cli(&["close", "--tab-id", &tab]).status.success());
     }
 }
 #[test]
 fn terminal_state_keeps_scrolled_unicode_output_and_command_boundaries() {
     let _guard = locked_with_env(&[]);
-    let directory = temp_dir("rendered-unicode");
-    let tab = create_tab(&directory, parent_shell());
-    let prior = send_command(&tab.tab_id, "echo BEFORE_CAPTURE", 10.0);
-    assert!(prior.status.success());
-    let command = "python -c \"import sys; [print('记录_%03d' % i, flush=True) for i in range(150)]; print('FINAL_ERROR', file=sys.stderr, flush=True); sys.exit(7)\"";
-    let result = run_terminal(&tab.tab_id, command, "10");
-    let text = checked_text(&result);
-    let output = terminal_output(&text);
-    assert!(output.contains("记录_000"), "{text}");
-    assert!(output.contains("记录_149"), "{text}");
-    assert!(output.contains("FINAL_ERROR"), "{text}");
-    assert!(!output.contains("BEFORE_CAPTURE"), "{text}");
-    assert!(!output.contains("FuncTerm;"), "{text}");
-    assert_eq!(tagged_content(&text, "EXIT_CODE"), Some("\n7\n"));
-    let saved_id = parse_command_id(&result);
-    let next = run_terminal(&tab.tab_id, "echo AFTER_CAPTURE", "10");
-    assert!(terminal_output(&checked_text(&next)).contains("AFTER_CAPTURE"));
-    let saved = checked_text(&run_cli(&["view", &saved_id]));
-    assert_eq!(terminal_output(&saved), output);
-    assert!(!saved.contains("AFTER_CAPTURE"), "{saved}");
+    let tab = create_tab(&temp_dir("rendered-unicode"), parent_shell()).tab_id;
+    assert!(
+        send_command(&tab, "echo BEFORE_CAPTURE", 10.0)
+            .status
+            .success()
+    );
+    let command = "python -c \"import sys; sys.stdout.write(''.join('记录_%04d\\n' % i for i in range(4200))); print('FINAL_ERROR', file=sys.stderr); sys.exit(7)\"";
+    let accepted = run_terminal(&tab, command, "10");
+    let result = wait_for_completion(&accepted);
+    for expected in ["记录_0000", "记录_4199", "FINAL_ERROR"] {
+        assert!(result.stdout.contains(expected), "{result:?}");
+    }
+    for excluded in ["BEFORE_CAPTURE", "FuncTerm;"] {
+        assert!(!result.stdout.contains(excluded), "{result:?}");
+    }
+    assert_eq!(result.exit_code, Some(7_i32), "{result:?}");
+    let screen = parse_tab_view(&run_cli(&["view", &tab])).screen;
+    assert!(!screen.contains("记录_0000"), "{screen}");
+    assert!(screen.contains("记录_4199"), "{screen}");
+    let next = wait_for_completion(&run_terminal(&tab, "echo AFTER_CAPTURE", "10"));
+    assert!(next.stdout.contains("AFTER_CAPTURE"), "{next:?}");
+    let saved = parse_command_result(&run_cli(&["view", &parse_command_id(&accepted)]));
+    assert_eq!(saved.stdout, result.stdout);
+    assert!(!saved.stdout.contains("AFTER_CAPTURE"), "{saved:?}");
 }
 #[test]
 fn terminal_mode_accepts_input_and_honors_user_redirection() {
     let _guard = locked_with_env(&[]);
     let directory = temp_dir("terminal-interaction");
-    let tab = create_tab(&directory, parent_shell());
+    let tab = create_tab(&directory, parent_shell()).tab_id;
     let command =
         "python -c \"reply = input('INPUT_READY:'); print('INPUT_RECEIVED_' + reply, flush=True)\"";
-    let pending = run_terminal(&tab.tab_id, command, "0.3");
-    let id = parse_command_id(&pending);
-    let mut pending_text = checked_text(&pending);
+    let accepted = run_terminal(&tab, command, "0.3");
+    let id = parse_command_id(&accepted);
+    let mut pending = parse_command_result(&accepted);
     let started = Instant::now();
-    while !terminal_output(&pending_text).contains("INPUT_READY:") {
-        assert!(
-            started.elapsed() < Duration::from_secs(10),
-            "{pending_text}"
-        );
-        pending_text = checked_text(&run_cli(&["view", &id, "--wait-timeout", "0.05"]));
+    while !pending.stdout.contains("INPUT_READY:") {
+        assert!(started.elapsed() < Duration::from_secs(10), "{pending:?}");
+        pending = parse_command_result(&run_cli(&["view", &id, "--wait-timeout", "0.05"]));
     }
-    assert_eq!(tagged_content(&pending_text, "FINISHED"), Some("\nfalse\n"));
-    let input = manual_write(&tab.tab_id, b"hello\r", 0.1);
-    assert!(input.status.success(), "{input:?}");
-    let finished = checked_text(&run_cli(&["view", &id, "--wait-timeout", "10"]));
+    assert!(!pending.finished, "{pending:?}");
+    assert!(manual_write(&tab, b"hello\r", 0.1).status.success());
+    let finished = parse_command_result(&run_cli(&["view", &id, "--wait-timeout", "10"]));
     assert!(
-        terminal_output(&finished).contains("INPUT_RECEIVED_hello"),
-        "{finished}"
+        finished.stdout.contains("INPUT_RECEIVED_hello"),
+        "{finished:?}"
     );
-    assert_eq!(tagged_content(&finished, "FINISHED"), Some("\ntrue\n"));
+    assert!(finished.finished, "{finished:?}");
     let redirected = run_terminal(
-        &tab.tab_id,
+        &tab,
         "python -c \"import sys; print('FILE_ONLY'); print('SCREEN_ONLY', file=sys.stderr)\" > user-output.txt",
         "10",
     );
-    let redirected_text = checked_text(&redirected);
-    let output = terminal_output(&redirected_text);
-    assert!(output.contains("SCREEN_ONLY"), "{redirected_text}");
-    assert!(!output.contains("FILE_ONLY"), "{redirected_text}");
+    let result = parse_command_result(&redirected);
+    assert!(result.stdout.contains("SCREEN_ONLY"), "{result:?}");
+    assert!(!result.stdout.contains("FILE_ONLY"), "{result:?}");
     assert!(
         fs_err::read_to_string(directory.join("user-output.txt"))
             .unwrap()
@@ -132,23 +124,19 @@ fn run_terminal(tab_id: &str, command: &str, wait_timeout: &str) -> Output {
         wait_timeout,
     ])
 }
-fn checked_text(result: &Output) -> String {
-    assert!(result.status.success(), "{result:?}");
-    String::from_utf8(result.stdout.clone()).unwrap()
-}
-fn terminal_output(text: &str) -> &str {
-    tagged_content(text, "OUTPUT")
-        .unwrap()
-        .strip_prefix('\n')
-        .unwrap()
-}
 const fn parent_shell() -> &'static str {
     if cfg!(windows) { "powershell" } else { "bash" }
 }
-fn tty_query(shell: &str) -> String {
-    match shell {
-        "bun" => "console.log('TTY_STATE', Boolean(process.stdin.isTTY), Boolean(process.stdout.isTTY), Boolean(process.stderr.isTTY)); console.error('TERMINAL_ERROR')".to_owned(),
-        "python" => "import sys; print('TTY_STATE', *(stream.isatty() for stream in (sys.stdin, sys.stdout, sys.stderr))); print('TERMINAL_ERROR', file=sys.stderr)".to_owned(),
-        _ => "python -c \"import sys; print('TTY_STATE', *(stream.isatty() for stream in (sys.stdin, sys.stdout, sys.stderr))); print('TERMINAL_ERROR', file=sys.stderr)\"".to_owned(),
+const fn tty_query(shell: &str) -> &'static str {
+    match shell.as_bytes() {
+        b"bun" => {
+            "console.log('TTY_STATE', Boolean(process.stdin.isTTY), Boolean(process.stdout.isTTY), Boolean(process.stderr.isTTY)); console.error('TERMINAL_ERROR')"
+        }
+        b"python" => {
+            "import sys; print('TTY_STATE', *(stream.isatty() for stream in (sys.stdin, sys.stdout, sys.stderr))); print('TERMINAL_ERROR', file=sys.stderr)"
+        }
+        _ => {
+            "python -c \"import sys; print('TTY_STATE', *(stream.isatty() for stream in (sys.stdin, sys.stdout, sys.stderr))); print('TERMINAL_ERROR', file=sys.stderr)\""
+        }
     }
 }
