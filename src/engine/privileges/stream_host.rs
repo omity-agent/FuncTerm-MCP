@@ -4,8 +4,9 @@ use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::ffi::OsString;
 use std::io::{self, Write as _};
 use std::os::windows::io::AsHandle as _;
+use std::path::Path;
 use std::thread;
-pub(crate) fn run(rows: u16, cols: u16, arguments: Vec<OsString>) -> Result<()> {
+pub(crate) fn run(rows: u16, cols: u16, cwd: &Path, arguments: Vec<OsString>) -> Result<i32> {
     ensure!(
         !is_elevated(&current_token()?)?,
         "ordinary PTY host still has administrator permissions"
@@ -19,6 +20,7 @@ pub(crate) fn run(rows: u16, cols: u16, arguments: Vec<OsString>) -> Result<()> 
         })
         .context("failed to open ordinary PTY")?;
     let mut command = CommandBuilder::from_argv(arguments);
+    command.cwd(cwd);
     command.env_clear();
     for (name, value) in std::env::vars_os() {
         command.env(name, value);
@@ -63,6 +65,5 @@ pub(crate) fn run(rows: u16, cols: u16, arguments: Vec<OsString>) -> Result<()> 
     output_worker.join().map_err(|panic_payload| {
         anyhow::anyhow!("ordinary PTY output forwarding panicked: {panic_payload:?}")
     })??;
-    ensure!(status.success(), "ordinary PTY shell exited with {status}");
-    Ok(())
+    Ok(status.exit_code().cast_signed())
 }

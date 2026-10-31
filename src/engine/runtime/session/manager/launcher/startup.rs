@@ -29,8 +29,11 @@ impl StartupEvents {
         screen: &Arc<Terminal>,
         timeout: Duration,
     ) -> Result<()> {
-        #[cfg(windows)]
-        super::host_wait::monitor_child(child.as_ref(), self.sender.clone(), Arc::clone(screen))?;
+        super::process_watch::monitor_child(
+            child.as_ref(),
+            self.sender.clone(),
+            Arc::clone(screen),
+        )?;
         let parent = ready_file
             .parent()
             .context("shell ready path has no parent")?;
@@ -76,11 +79,9 @@ impl StartupEvents {
                 Ok(StartupEvent::ReaderClosed) => {
                     return reader_closed_result(child, screen);
                 }
-                #[cfg(windows)]
                 Ok(StartupEvent::ProcessExited(Ok(()))) => {
                     return process_exited_result(child, screen);
                 }
-                #[cfg(windows)]
                 Ok(StartupEvent::ProcessExited(Err(error))) => {
                     return Err(error).context("shell process monitor failed");
                 }
@@ -122,7 +123,6 @@ fn reader_closed_result(child: &mut Box<dyn Child + Send + Sync>, screen: &Termi
         startup_screen(screen)
     );
 }
-#[cfg(windows)]
 fn process_exited_result(
     child: &mut Box<dyn Child + Send + Sync>,
     screen: &Terminal,
@@ -150,6 +150,5 @@ fn startup_screen(screen: &Terminal) -> String {
 pub(super) enum StartupEvent {
     Filesystem(notify::Result<()>),
     ReaderClosed,
-    #[cfg(windows)]
     ProcessExited(Result<()>),
 }

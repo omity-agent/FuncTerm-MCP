@@ -6,7 +6,7 @@ pub(super) const BOUNDARY: &str = r#"const @VAR_streamBoundary@ = (@VAR_phase@, 
     @VAR_writeSync@(1, @VAR_bytes@);
     @VAR_writeSync@(2, @VAR_bytes@);
 };"#;
-pub(super) const HOST: &str = r#"import { openSync, closeSync, appendFileSync } from "node:fs";
+pub(super) const HOST: &str = r#"import { openSync, closeSync, appendFileSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 const prefix = Buffer.from("\x1b]9998;FuncTerm;");
@@ -22,7 +22,12 @@ const route = async (stream, name, terminal) => {
     const emit = bytes => {
         if (!bytes.length) return;
         if (output !== undefined) appendFileSync(output, bytes);
-        terminal.write(bytes);
+        let offset = 0;
+        while (offset < bytes.length) {
+            const written = writeSync(terminal.fd, bytes, offset, bytes.length - offset);
+            if (written === 0) throw new Error("terminal output write made no progress");
+            offset += written;
+        }
     };
     try {
         for await (const chunk of stream) {
@@ -57,9 +62,12 @@ const route = async (stream, name, terminal) => {
                     active = undefined;
                     const previous = completions.get(frame.id);
                     if (!previous) {
-                        completions.set(frame.id, name);
+                        let release;
+                        const completed = new Promise(resolve => { release = resolve; });
+                        completions.set(frame.id, { name, release });
+                        await completed;
                     } else {
-                        if (previous === name) throw new Error("duplicate stream completion");
+                        if (previous.name === name) throw new Error("duplicate stream completion");
                         completions.delete(frame.id);
                         const result = spawnSync(helper, [
                             "internal-write-done", "--command-id", frame.id,
@@ -69,6 +77,7 @@ const route = async (stream, name, terminal) => {
                         ], { stdio: "inherit" });
                         if (result.error) throw result.error;
                         if (result.status !== 0) throw new Error(`stream completion helper exited with ${result.status}`);
+                        previous.release();
                     }
                 } else {
                     throw new Error("unknown stream boundary phase");
@@ -76,6 +85,7 @@ const route = async (stream, name, terminal) => {
             }
         }
         emit(pending);
+        if (completions.size) throw new Error("stream ended before command boundary completed");
     } finally {
         if (output !== undefined) closeSync(output);
     }

@@ -65,7 +65,7 @@ impl ManagedCommand {
                 self.capture.current()?,
                 self.capture.output()?,
                 &self.tokenizer,
-                read_done(&self.record.done)?.as_ref(),
+                None,
             )
         };
         drop(state);

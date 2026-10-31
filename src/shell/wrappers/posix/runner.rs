@@ -1,104 +1,9 @@
-use super::super::{start, variables};
+use super::super::start;
 use super::PosixDialect;
-use crate::contract::{
-    COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, HELPER_EXECUTABLE_ENV,
-    POSIX_COMMAND_FUNCTION, STDERR_FILE, STDOUT_FILE,
-};
-pub(super) fn command_function(dialect: PosixDialect) -> String {
+use crate::contract::{COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV, HELPER_EXECUTABLE_ENV};
+pub(super) fn helpers(dialect: PosixDialect) -> String {
     format!(
-        r#"{name}() {{
-		    local @VAR_command_id@="$1"
-	    local @VAR_native_directory@="$2"
-	    local @VAR_directory@="$@VAR_native_directory@"
-	    local @VAR_working_directory@="$3"
-	    local @VAR_separate_output@="$4"
-	    @VAR_directory@="$(functerm_posix_path "$@VAR_directory@")" || return 1
-	    @VAR_working_directory@="$(functerm_posix_path "$@VAR_working_directory@")" || return 1
-	    local @VAR_stdout_file@="$@VAR_directory@/{stdout}"
-	    local @VAR_stderr_file@="$@VAR_directory@/{stderr}"
-	    local @VAR_command_file@="$@VAR_directory@/{command_file}"
-	    local @VAR_previous_command_id@="${{{command_id_env}-}}"
-	    local @VAR_previous_command_directory@="${{{command_dir_env}-}}"
-	{previous_flags}
-	{environment_snapshot}
-	    export {command_id_env}="$@VAR_command_id@"
-	    export {command_dir_env}="$@VAR_directory@"
-		    functerm_ensure_shim_path || return 1
-	    local @VAR_script@
-	    if ! @VAR_script@="$(cat "$@VAR_command_file@" 2> "$@VAR_stderr_file@")"; then
-	        local @VAR_publish_result@=0
-	        functerm_publish_done "$@VAR_command_id@" 1 "0ns" "$PWD" "$@VAR_native_directory@" || @VAR_publish_result@=$?
-	        cat "$@VAR_stderr_file@" >&2
-	        functerm_restore_command_environment \
-	            "$@VAR_had_previous_command_id@" "$@VAR_previous_command_id@" \
-	            "$@VAR_had_previous_command_directory@" "$@VAR_previous_command_directory@"
-	        if [ "$@VAR_publish_result@" -ne 0 ]; then
-	            return "$@VAR_publish_result@"
-	        fi
-	        return 1
-	    fi
-	    if ! {cd} "$@VAR_working_directory@"; then
-	        local @VAR_publish_result@=0
-	        functerm_publish_done "$@VAR_command_id@" 1 "0ns" "$PWD" "$@VAR_native_directory@" || @VAR_publish_result@=$?
-	        functerm_restore_command_environment \
-	            "$@VAR_had_previous_command_id@" "$@VAR_previous_command_id@" \
-	            "$@VAR_had_previous_command_directory@" "$@VAR_previous_command_directory@"
-	        if [ "$@VAR_publish_result@" -ne 0 ]; then
-	            return "$@VAR_publish_result@"
-	        fi
-	        return 1
-	    fi
-	    if ! functerm_publish_start "$@VAR_command_id@" "$@VAR_native_directory@"; then
-	        local @VAR_publish_result@=0
-	        functerm_publish_done "$@VAR_command_id@" 1 "0ns" "$PWD" "$@VAR_native_directory@" || @VAR_publish_result@=$?
-	        functerm_restore_command_environment \
-	            "$@VAR_had_previous_command_id@" "$@VAR_previous_command_id@" \
-	            "$@VAR_had_previous_command_directory@" "$@VAR_previous_command_directory@"
-	        if [ "$@VAR_publish_result@" -ne 0 ]; then
-	            return "$@VAR_publish_result@"
-	        fi
-	        return 1
-	    fi
-	    local @VAR_command_started_at@
-	    @VAR_command_started_at@="$(functerm_command_time_millis)" || return 1
-	    local @VAR_exit_code@
-	    if [ "$@VAR_separate_output@" = 1 ]; then
-	        {{ eval "$@VAR_script@"; }} > "$@VAR_stdout_file@" 2> "$@VAR_stderr_file@"
-	        @VAR_exit_code@=$?
-	    else
-	        eval "$@VAR_script@"
-	        @VAR_exit_code@=$?
-	    fi
-	{environment_restore}
-	    local @VAR_environment_restore_result@=$?
-	    if [ "$@VAR_environment_restore_result@" -ne 0 ]; then
-	        printf '%s\n' 'failed to restore shell shim path' >> "$@VAR_stderr_file@"
-	        if [ "$@VAR_separate_output@" = 0 ]; then
-	            printf '%s\n' 'failed to restore shell shim path' >&2
-	        fi
-	        @VAR_exit_code@=1
-	    fi
-	    local @VAR_command_finished_at@
-	    @VAR_command_finished_at@="$(functerm_command_time_millis)" || return 1
-	    local @VAR_time_consumption@="$((@VAR_command_finished_at@ - @VAR_command_started_at@))ms"
-	    if [ "$@VAR_separate_output@" = 1 ] && [ -f "$@VAR_stdout_file@" ]; then
-	        cat "$@VAR_stdout_file@" || return 1
-	    fi
-	    if [ "$@VAR_separate_output@" = 1 ] && [ -f "$@VAR_stderr_file@" ]; then
-	        cat "$@VAR_stderr_file@" >&2 || return 1
-	    fi
-	    if ! functerm_publish_done "$@VAR_command_id@" "$@VAR_exit_code@" "$@VAR_time_consumption@" "$PWD" "$@VAR_native_directory@"; then
-	        functerm_restore_command_environment \
-	            "$@VAR_had_previous_command_id@" "$@VAR_previous_command_id@" \
-	            "$@VAR_had_previous_command_directory@" "$@VAR_previous_command_directory@"
-	        return 1
-	    fi
-	    functerm_restore_command_environment \
-	        "$@VAR_had_previous_command_id@" "$@VAR_previous_command_id@" \
-	        "$@VAR_had_previous_command_directory@" "$@VAR_previous_command_directory@"
-	    return "$@VAR_exit_code@"
-}}
-functerm_restore_command_environment() {{
+        r#"functerm_restore_command_environment() {{
 {emulate}    if {test_one}; then
         export {command_id_env}="$2"
     else
@@ -112,48 +17,41 @@ functerm_restore_command_environment() {{
 }}
 functerm_publish_done() {{
 {emulate}    local @VAR_command_id@="$1"
-	    local @VAR_exit_code@="$2"
-	    local @VAR_time_consumption@="$3"
-	    local @VAR_cwd@="$4"
-	    local @VAR_native_directory@="$5"
-	    local @VAR_helper@="${{{helper_env}-}}"
-	    if [ -z "$@VAR_helper@" ]; then
-	        printf '%s is not set\n' "{helper_env}" >&2
-	        return 1
-	    fi
-            @VAR_helper@="$(functerm_posix_path "$@VAR_helper@")" || return 1
-            if command -v cygpath > /dev/null 2>&1; then
-                @VAR_cwd@="$(cygpath -m "$@VAR_cwd@")" || return 1
-            fi
-            "$@VAR_helper@" internal-write-done \
-	        --command-id "$@VAR_command_id@" \
-	        --exit-code "$@VAR_exit_code@" \
-	        --time-consumption "$@VAR_time_consumption@" \
-	        --cwd "$@VAR_cwd@" \
-	        --directory "$@VAR_native_directory@"
+    local @VAR_exit_code@="$2"
+    local @VAR_time_consumption@="$3"
+    local @VAR_cwd@="$4"
+    local @VAR_native_directory@="$5"
+    local @VAR_helper@="${{{helper_env}-}}"
+    if [ -z "$@VAR_helper@" ]; then
+        printf '%s is not set\n' "{helper_env}" >&2
+        return 1
+    fi
+    @VAR_helper@="$(functerm_posix_path "$@VAR_helper@")" || return 1
+    if command -v cygpath > /dev/null 2>&1; then
+        @VAR_cwd@="$(cygpath -m "$@VAR_cwd@")" || return 1
+    fi
+    "$@VAR_helper@" internal-write-done \
+        --command-id "$@VAR_command_id@" \
+        --exit-code "$@VAR_exit_code@" \
+        --time-consumption "$@VAR_time_consumption@" \
+        --cwd "$@VAR_cwd@" \
+        --directory "$@VAR_native_directory@"
 }}
 {publish_start}
 functerm_command_time_millis() {{
 {emulate}    local @VAR_helper@="${{{helper_env}-}}"
-	    if [ -z "$@VAR_helper@" ]; then
-	        printf '%s is not set\n' "{helper_env}" >&2
-	        return 1
-	    fi
-	    @VAR_helper@="$(functerm_posix_path "$@VAR_helper@")" || return 1
-	    "$@VAR_helper@" internal-time-millis
-}}"#,
-        name = POSIX_COMMAND_FUNCTION,
+    if [ -z "$@VAR_helper@" ]; then
+        printf '%s is not set\n' "{helper_env}" >&2
+        return 1
+    fi
+    @VAR_helper@="$(functerm_posix_path "$@VAR_helper@")" || return 1
+    "$@VAR_helper@" internal-time-millis
+}}
+functerm_restore_status() {{ return "$1"; }}"#,
         emulate = dialect.emulate(),
-        stdout = STDOUT_FILE,
-        stderr = STDERR_FILE,
-        command_file = COMMAND_FILE,
         helper_env = HELPER_EXECUTABLE_ENV,
         command_id_env = COMMAND_ID_ENV,
         command_dir_env = COMMAND_DIRECTORY_ENV,
-        previous_flags = dialect.previous_flags(),
-        environment_snapshot = variables::posix_environment_snapshot(),
-        environment_restore = variables::posix_environment_restore(),
-        cd = dialect.cd(),
         test_one = dialect.test_arg("1"),
         test_three = dialect.test_arg("3"),
         publish_start = start::posix(dialect),

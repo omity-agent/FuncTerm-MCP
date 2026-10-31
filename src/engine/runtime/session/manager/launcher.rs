@@ -1,5 +1,4 @@
-#[cfg(windows)]
-mod host_wait;
+mod process_watch;
 mod spawn_builder;
 mod startup;
 use super::process;

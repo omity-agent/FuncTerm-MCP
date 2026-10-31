@@ -42,16 +42,22 @@ fn mcp_running_command_recounts_new_output_and_can_resume_from_a_token_offset() 
     #[cfg(not(windows))]
     let command = "printf '\\033[?1049h\\033[2J\\033[HFIRST_CHUNK\\n'\nread -r line\nprintf '\\033[?1049lFIRST_CHUNK\\nSECOND_CHUNK'";
     let accepted = session.execute(&tab, command, false, 0.5);
-    let initial = command_result(&accepted);
+    let id = text(command_result(&accepted), "/command_id").to_owned();
+    let mut visible = accepted;
+    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(15);
+    while !text(command_result(&visible), "/output").contains("FIRST_CHUNK") {
+        assert!(std::time::Instant::now() < deadline, "{visible}");
+        visible = session.view(&[&id], 1, 1.0);
+    }
+    let initial = command_result(&visible);
     assert_field(initial, "/finished", false);
     let first = text(initial, "/output");
-    assert!(first.contains("FIRST_CHUNK"), "{accepted}");
+    assert!(first.contains("FIRST_CHUNK"), "{visible}");
     let tokenizer = toktok::Tokenizer::builtin("o200k_base").unwrap();
     let observed_tokens = tokenizer.count(first.as_bytes());
     let start_token = observed_tokens + 1;
     assert_field(initial, "/total_output_tokens", observed_tokens);
-    let id = text(initial, "/command_id");
-    let waiting = session.view(&[id], 2, 0.0);
+    let waiting = session.view(&[&id], 2, 0.0);
     assert_eq!(
         text(command_result(&waiting), "/output"),
         expected_suffix(&tokenizer, first, 2)
@@ -66,7 +72,7 @@ fn mcp_running_command_recounts_new_output_and_can_resume_from_a_token_offset() 
         json!({"exec": [{"tab_id": tab, "text": "\r\n"}], "wait_timeout": 0_u64}),
     );
     assert!(entries(&written).first().unwrap().get("error").is_none());
-    let completed = session.view(&[id], 1, 5.0);
+    let completed = session.view(&[&id], 1, 5.0);
     let full = command_result(&completed);
     let output = text(full, "/output");
     let total = tokenizer.count(output.as_bytes());
@@ -74,7 +80,7 @@ fn mcp_running_command_recounts_new_output_and_can_resume_from_a_token_offset() 
     assert!(total > observed_tokens);
     assert_field(full, "/total_output_tokens", total);
     assert_field(full, "/finished", true);
-    let resumed = session.view(&[id], start_token, 0.0);
+    let resumed = session.view(&[&id], start_token, 0.0);
     assert_eq!(
         text(command_result(&resumed), "/output"),
         expected_suffix(&tokenizer, output, start_token)

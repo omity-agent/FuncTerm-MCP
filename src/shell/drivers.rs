@@ -68,9 +68,10 @@ pub(crate) fn invocation(choice: ShellChoice) -> Result<Option<ShellInvocation>>
         ShellChoice::Bun => return Ok(None),
         ShellChoice::Python => "_functerm_dispatch()".to_owned(),
         ShellChoice::PowerShell => format!(". {POWERSHELL_DISPATCHER_FUNCTION}"),
-        ShellChoice::Bash | ShellChoice::NuShell | ShellChoice::Zsh | ShellChoice::Cmd => {
-            DISPATCHER_COMMAND.to_owned()
+        ShellChoice::Bash | ShellChoice::Zsh => {
+            r#"builtin eval -- "$(functerm_dispatch_source "$?")""#.to_owned()
         }
+        ShellChoice::NuShell | ShellChoice::Cmd => DISPATCHER_COMMAND.to_owned(),
     };
     ShellInvocation::new(line, invocation_terminator(choice)).map(Some)
 }

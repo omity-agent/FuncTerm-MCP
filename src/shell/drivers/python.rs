@@ -1,4 +1,5 @@
 mod bootstrap;
+mod evaluation;
 use super::{DriverStartup, StartupContext};
 use anyhow::Result;
 pub(super) fn startup(context: StartupContext<'_>) -> Result<DriverStartup> {

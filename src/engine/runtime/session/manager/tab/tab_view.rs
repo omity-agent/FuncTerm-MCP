@@ -16,6 +16,7 @@ impl Tab {
                 .checked_add(wait_timeout)
                 .ok_or_else(|| anyhow::anyhow!("wait_timeout exceeds the supported timer range"))?;
             tokio::time::sleep_until(deadline).await;
+            let _operation = self.operation.lock().await;
             let idle_tab = Arc::clone(self);
             return self.blocking.run(move || idle_tab.tab_view(&session)).await;
         };
@@ -31,6 +32,7 @@ impl Tab {
             }
         }
         let observed_tab = Arc::clone(self);
+        let _operation = self.operation.lock().await;
         self.blocking
             .run(move || observed_tab.tab_view(&session))
             .await
@@ -42,15 +44,9 @@ impl Tab {
             let snapshot = self.remember(session)?;
             Ok(snapshot.into_view(true))
         } else {
-            if let Some(command_id) = session.busy_command_id()
-                && let Some(command) = self.find_command(&command_id)
-            {
-                command.mark_exited(session.exit_code()?.ok_or_else(|| {
-                    anyhow::anyhow!("shell exit status is missing after process termination")
-                })?)?;
-                session.release(command.id());
+            if session.busy_command_id().is_some() {
+                return Ok(self.remember(session)?.into_view(false));
             }
-            session.terminate()?;
             self.close_session(session)?;
             Ok(self.snapshot_view())
         }

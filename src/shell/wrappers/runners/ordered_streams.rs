@@ -48,6 +48,10 @@ public sealed class FuncTermDiagnosticHost : PSHost {
         public override void WriteInformation(InformationRecord record) { Console.Out.WriteLine(record.MessageData); }
         public override void WriteProgress(long source, ProgressRecord record) { original.WriteProgress(source, record); }
         public override Dictionary<string, PSObject> Prompt(string caption, string message, Collection<FieldDescription> fields) {
+            if (!string.IsNullOrEmpty(caption)) Console.Out.WriteLine(caption);
+            if (!string.IsNullOrEmpty(message)) Console.Out.WriteLine(message);
+            foreach (var field in fields) Console.Out.Write(field.Name + ": ");
+            Console.Out.Flush();
             return original.Prompt(caption, message, fields);
         }
         public override int PromptForChoice(string caption, string message, Collection<ChoiceDescription> choices, int selected) {

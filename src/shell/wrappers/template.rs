@@ -1,7 +1,7 @@
 use crate::contract::{
     CLAIM_RECEIPT_FILE, COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, COMMAND_SCRIPT_FILE,
-    DONE_FILE, HELPER_EXECUTABLE_ENV, POSIX_COMMAND_FUNCTION, POWERSHELL_COMMAND_FUNCTION,
-    SESSION_STATE_DIRECTORY, STDERR_FILE, STDOUT_FILE,
+    DONE_FILE, HELPER_EXECUTABLE_ENV, POWERSHELL_COMMAND_FUNCTION, SESSION_STATE_DIRECTORY,
+    STDERR_FILE, STDOUT_FILE,
 };
 use crate::shell::shims::SESSION_ROOT_ENV;
 const COMMON: [(&str, &str); 6] = [
@@ -53,33 +53,6 @@ pub(super) fn powershell_dispatcher() -> String {
     }}
 }}")
 }
-pub(super) fn posix_dispatcher() -> String {
-    let session_root_env = SESSION_ROOT_ENV;
-    let state_directory = SESSION_STATE_DIRECTORY;
-    let receipt_file = CLAIM_RECEIPT_FILE;
-    let helper_env = HELPER_EXECUTABLE_ENV;
-    let runner = POSIX_COMMAND_FUNCTION;
-    format!(
-        r#"f() {{
-    local @VAR_helper@="${{{helper_env}}}"
-    @VAR_helper@="$(functerm_posix_path "$@VAR_helper@")" || return 1
-    local @VAR_receipt_file@="${{{session_root_env}}}/{state_directory}/{receipt_file}"
-    @VAR_receipt_file@="$(functerm_posix_path "$@VAR_receipt_file@")" || return 1
-    "$@VAR_helper@" internal-claim-command --session-root "${{{session_root_env}}}" --shell "$FUNCTERM_CURRENT_SHELL" > "$@VAR_receipt_file@" || return 1
-    local @VAR_command_id@
-    local @VAR_native_directory@
-    local @VAR_working_directory@
-    local @VAR_separate_output@
-    {{
-        IFS= read -r -d '' @VAR_command_id@ &&
-        IFS= read -r -d '' @VAR_native_directory@ &&
-        IFS= read -r -d '' @VAR_working_directory@ &&
-        IFS= read -r -d '' @VAR_separate_output@
-    }} < "$@VAR_receipt_file@" || return 1
-    {runner} "$@VAR_command_id@" "$@VAR_native_directory@" "$@VAR_working_directory@" "$@VAR_separate_output@"
-}}"#,
-    )
-}
 fn render(template: &str, extra: &[(&str, &str)]) -> String {
     let mut text = template.to_owned();
     for &(placeholder, value) in COMMON.iter().chain(extra.iter()) {
@@ -88,6 +61,7 @@ fn render(template: &str, extra: &[(&str, &str)]) -> String {
     text
 }
 const CMD_DISPATCHER: &str = r#"@echo off
+set "@VAR_previous_status@=%ERRORLEVEL%"
 set "@VAR_receipt_file@=%FUNCTERM_SESSION_ROOT%\@SESSION_STATE@\@CLAIM@"
 "%@HELPER_ENV@%" internal-claim-command --session-root "%FUNCTERM_SESSION_ROOT%" --shell cmd > "%@VAR_receipt_file@%" || exit /b 1
 set "@VAR_command_id@="
@@ -105,5 +79,5 @@ for /f "usebackq delims=" %%r in ("%@VAR_receipt_file@%") do (
         set "@VAR_separate_output@=%%r"
     )
 )
-"%~dp0cmd_run.bat" "%@VAR_command_id@%" "%@VAR_directory@%" "%@VAR_working_directory@%" "%@VAR_separate_output@%"
+"%~dp0cmd_run.bat" "%@VAR_command_id@%" "%@VAR_directory@%" "%@VAR_working_directory@%" "%@VAR_separate_output@%" "%@VAR_previous_status@%"
 "#;

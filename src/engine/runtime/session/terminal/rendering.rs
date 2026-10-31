@@ -91,7 +91,10 @@ impl CommandScreen {
                     first = false;
                     let mut text = line.columns_as_str(from..screen.physical_cols);
                     wrapped = line.last_cell_was_wrapped();
-                    let retained = if join_wrapped && wrapped {
+                    let beyond_cursor = row > cursor_row || row == cursor_row && cursor.x == 0;
+                    let retained = if beyond_cursor && text.trim_end_matches(' ').is_empty() {
+                        0
+                    } else if join_wrapped && wrapped {
                         text.len()
                     } else {
                         let cursor_text = if row == cursor_row {

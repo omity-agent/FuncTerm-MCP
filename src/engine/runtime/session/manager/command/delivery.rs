@@ -9,6 +9,12 @@ impl Tab {
         input: KeyboardInput,
         wait_timeout: Duration,
     ) -> Result<ViewResult> {
+        let active_session = self.live_session()?;
+        let expected = active_session
+            .busy_command()
+            .ok_or(KeyboardWriteFailure::IdlePrompt)?;
+        active_session.wait_for_command_start(&expected).await?;
+        let expected_id = expected.id().to_owned();
         let target_tab = Arc::clone(self);
         let (session, delivery) = self
             .blocking
@@ -22,7 +28,7 @@ impl Tab {
                     );
                 }
                 session.refresh_choice()?;
-                let delivery = session.write_keyboard_for_running_command(&input);
+                let delivery = session.write_keyboard_for_running_command(&expected_id, &input);
                 Ok((session, delivery))
             })
             .await?;

@@ -57,6 +57,14 @@ impl CaptureRegistry {
         self.captures.clear();
         self.active = None;
     }
+    pub(super) fn close_all(&mut self) -> Result<()> {
+        for capture in self.captures.values() {
+            capture.freeze()?;
+        }
+        self.captures.clear();
+        self.active = None;
+        Ok(())
+    }
     fn start(&mut self, id: &str) -> Result<()> {
         if let Some(active) = self.active.as_deref() {
             bail!("command capture {id} started while {active} is active");

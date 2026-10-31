@@ -23,14 +23,18 @@ pub(crate) fn spawn(
             &size.rows.to_string(),
             "--cols",
             &size.cols.to_string(),
+            "--starting-directory",
+            crate::text::path_text(starting_directory, "shell starting directory")?.as_str(),
             "--",
             executable,
         ])
         .args(startup.args);
-    command
-        .env_clear()
-        .envs(startup.env)
-        .current_dir(starting_directory);
+    command.env_clear().envs(startup.env).current_dir(
+        starting_directory
+            .ancestors()
+            .last()
+            .context("shell starting directory has no root")?,
+    );
     let (reader, output) = os_pipe::pipe().context("failed to create ordinary PTY output pipe")?;
     command
         .stdin(Stdio::piped())

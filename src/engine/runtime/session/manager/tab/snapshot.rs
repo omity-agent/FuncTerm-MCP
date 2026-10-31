@@ -41,7 +41,7 @@ impl TabSnapshot {
             title,
             shell_type,
             cwd,
-            idle,
+            idle: !alive || idle,
         };
         ViewResult::Tab {
             shell,
@@ -55,7 +55,7 @@ impl TabSnapshot {
             title: self.title,
             shell_type: self.shell_type,
             cwd: self.cwd,
-            idle: self.idle,
+            idle: !alive || self.idle,
         }
     }
 }

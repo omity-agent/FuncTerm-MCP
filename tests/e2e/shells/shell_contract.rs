@@ -56,7 +56,7 @@ fn cli_exit_closes_shell_and_preserves_command_result() {
         } else {
             "error make {msg: 'EXPECTED_SHELL_ERROR'}"
         };
-        let failed = parse_command_result(&send_command(&created.tab_id, failure, 5.0));
+        let failed = crate::support::complete_command(&created.tab_id, failure);
         assert!(failed.finished);
         assert_ne!(failed.exit_code, Some(0_i32));
         assert!(parse_tab_view(&run_cli(&["view", &created.tab_id])).alive);

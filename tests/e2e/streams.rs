@@ -16,16 +16,14 @@ fn redirected_python_flags_and_aliases_preserve_streams_and_exit_status() {
         let command = pipe_command(parent, script, target);
         let result = complete_command(&created.tab_id, &command);
         assert!(result.finished, "{target} did not finish: {result:?}");
-        assert_eq!(result.exit_code, Some(7_i32), "{target}: {}", result.stderr);
+        assert_eq!(result.exit_code, Some(7_i32), "{target}: {result:?}");
         assert!(
             result.stdout.contains("PIPE_STDOUT"),
-            "{target}: {}",
-            result.stdout
+            "{target}: {result:?}"
         );
         assert!(
             result.stderr.contains("PIPE_STDERR"),
-            "{target}: {}",
-            result.stderr
+            "{target}: {result:?}"
         );
         assert!(!result.stdout.contains("PIPE_STDERR"));
         assert!(!result.stderr.contains("PIPE_STDOUT"));
@@ -40,11 +38,10 @@ fn piped_bash_does_not_take_over_the_terminal() {
         let command = pipe_command(parent, "printf '%s\\n' 'BASH_PIPE_RAN'\nexit 7\n", target);
         let result = complete_command(&created.tab_id, &command);
         assert!(result.finished, "{target} did not finish: {result:?}");
-        assert_eq!(result.exit_code, Some(7_i32), "stderr: {}", result.stderr);
+        assert_eq!(result.exit_code, Some(7_i32), "{target}: {result:?}");
         assert!(
             result.stdout.contains("BASH_PIPE_RAN"),
-            "stdout: {}",
-            result.stdout
+            "{target}: {result:?}"
         );
         assert_parent(&created.tab_id, parent);
     }

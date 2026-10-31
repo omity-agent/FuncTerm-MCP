@@ -17,7 +17,6 @@ pub(in crate::engine::runtime::session::manager) struct ManagedCommand {
     pub(super) capture: Arc<CommandCapture>,
     watch: Arc<PathWatch>,
     pub(super) tokenizer: Arc<OutputTokenizer>,
-    pub(super) completion: tokio::sync::Mutex<()>,
 }
 pub(super) struct ManagedCommandState {
     pub(super) wait: CommandWait,
@@ -60,7 +59,6 @@ impl ManagedCommand {
             capture,
             watch,
             tokenizer,
-            completion: tokio::sync::Mutex::new(()),
         }
     }
     pub(in crate::engine::runtime::session::manager) fn id(&self) -> &str {
@@ -97,9 +95,6 @@ impl ManagedCommand {
             Ok(false) => Ok(CommandWait::Running),
             Err(error) => Err(error),
         }
-    }
-    pub(in crate::engine::runtime::session::manager) fn freeze_output(&self) -> Result<()> {
-        self.capture.freeze()
     }
     pub(in crate::engine::runtime::session::manager) async fn wait_started(
         &self,

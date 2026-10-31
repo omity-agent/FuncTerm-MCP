@@ -1,4 +1,5 @@
 mod batch;
+mod instrumentation;
 mod nu;
 mod ordered_streams;
 mod pwsh;

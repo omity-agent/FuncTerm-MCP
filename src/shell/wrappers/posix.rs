@@ -1,7 +1,9 @@
 mod dialect;
+mod dispatch;
 mod runner;
 use crate::shell::shims::SHIM_DIR_ENV;
 pub(super) use dialect::PosixDialect;
+pub(in crate::shell) use dispatch::script as posix_dispatch_script;
 pub(in crate::shell) fn bash_wrapper() -> String {
     let wrapper = format!(
         "set +o history
@@ -12,16 +14,14 @@ history -c
 	{path}
     {shim_path}
 		{command}
- 		{dispatcher}
         {exit_hook}
 	",
         path = path_function(false),
         shim_path = shim_path_function(false),
-        command = runner::command_function(PosixDialect::Bash),
-        dispatcher = super::template::posix_dispatcher(),
+        command = runner::helpers(PosixDialect::Bash),
         exit_hook = EXIT_HOOK,
     );
-    super::VariableNamespace::new().render(&wrapper)
+    with_dispatcher(&wrapper, false)
 }
 pub(in crate::shell) fn zsh_wrapper() -> String {
     let wrapper = format!(
@@ -36,16 +36,20 @@ pub(in crate::shell) fn zsh_wrapper() -> String {
 	{path}
 	{shim_path}
 		{command}
-		{dispatcher}
         {exit_hook}
 	",
         path = path_function(true),
         shim_path = shim_path_function(true),
-        command = runner::command_function(PosixDialect::Zsh),
-        dispatcher = super::template::posix_dispatcher(),
+        command = runner::helpers(PosixDialect::Zsh),
         exit_hook = EXIT_HOOK,
     );
-    super::VariableNamespace::new().render(&wrapper)
+    with_dispatcher(&wrapper, true)
+}
+fn with_dispatcher(wrapper: &str, zsh: bool) -> String {
+    format!(
+        "{wrapper}\nfuncterm_dispatch_source() {{ builtin printf '%s=%s\\n%s' '@VAR_previous_status@' \"$1\" {}; }}\n",
+        crate::shell::quote::posix_string(&posix_dispatch_script(zsh))
+    )
 }
 const EXIT_HOOK: &str = r#"functerm_complete_exit() {
     local @VAR_exit_code@="$1"
@@ -79,6 +83,13 @@ pub(super) fn path_function(zsh: bool) -> String {
 	            ;;
 	    esac
 	    printf '%s\n' "$@VAR_value@"
+}}
+functerm_native_cwd() {{
+    if command -v cygpath > /dev/null 2>&1; then
+        cygpath -m "$PWD"
+    else
+        printf '%s' "$PWD"
+    fi
 }}"#
     )
 }

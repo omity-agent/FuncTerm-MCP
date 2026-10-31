@@ -33,7 +33,6 @@ impl Terminal {
         .await?;
         Ok(())
     }
-    #[cfg(windows)]
     pub(in crate::engine::runtime::session) fn process_exited(&self) {
         self.state.lock().process_exited = true;
         self.changed.notify(usize::MAX);
@@ -44,16 +43,29 @@ impl Terminal {
             if let Some(message) = state.reader_failure.as_deref() {
                 bail!("terminal reader failed: {message}");
             }
-            Ok(state.reader_closed || state.process_exited)
+            Ok(state.process_exited)
+        })
+        .await?;
+        Ok(())
+    }
+    pub(in crate::engine::runtime::session) async fn wait_reader_closed(&self) -> Result<()> {
+        wait_until(&self.changed, Duration::MAX, || {
+            let state = self.state.lock();
+            if let Some(message) = state.reader_failure.as_deref() {
+                bail!("terminal reader failed: {message}");
+            }
+            Ok(state.reader_closed)
         })
         .await?;
         Ok(())
     }
     pub(in crate::engine::runtime::session) fn reader_closed(&self) {
         let mut state = self.state.lock();
-        state
-            .captures
-            .fail_all("PTY reader closed before command capture completed");
+        if let Err(error) = state.captures.close_all() {
+            let message = format!("failed to finish closed terminal capture: {error:#}");
+            state.captures.fail_all(&message);
+            state.reader_failure = Some(message);
+        }
         state.reader_closed = true;
         drop(state);
         self.changed.notify(usize::MAX);

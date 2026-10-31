@@ -46,7 +46,11 @@ fn cli_keeps_nested_launch_result_stable_after_nested_shell_exits() {
             &nested_marker_command(case.name, "PARENT_RESTORED"),
             5.0,
         ));
-        assert_eq!(restored.exit_code, Some(0_i32), "{restored:?}");
+        assert_eq!(
+            restored.exit_code,
+            Some(if case.name == "cmd" { 42_i32 } else { 0_i32 }),
+            "{restored:?}"
+        );
         assert!(restored.stdout.contains("PARENT_RESTORED"), "{restored:?}");
         let started = Instant::now();
         while directory.try_exists().unwrap() && started.elapsed() < Duration::from_secs(3) {

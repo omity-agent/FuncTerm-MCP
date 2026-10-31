@@ -30,7 +30,7 @@ pub(super) const fn parent_marker(parent: &str) -> &'static str {
     match parent.as_bytes() {
         b"powershell" => "Write-Output -InputObject 'PARENT_CONTINUED'",
         b"bash" => "printf '%s\\n' 'PARENT_CONTINUED'",
-        b"cmd" => "echo PARENT_CONTINUED",
+        b"cmd" => "ver >nul\necho PARENT_CONTINUED",
         _ => panic!("unsupported parent shell"),
     }
 }

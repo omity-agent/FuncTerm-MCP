@@ -7,7 +7,7 @@ use anyhow::{Context as _, Result};
 use base64_turbo::STANDARD;
 use clap::Parser as _;
 use std::path::Path;
-pub(crate) async fn run() -> Result<()> {
+pub(crate) async fn run() -> Result<std::process::ExitCode> {
     let args = Args::parse();
     match args.command.unwrap_or(CliCommand::Mcp {
         no_profile: false,
@@ -27,8 +27,17 @@ pub(crate) async fn run() -> Result<()> {
         CliCommand::InternalPtyHost {
             rows,
             cols,
+            starting_directory,
             command,
-        } => crate::engine::privileges::stream_host::run(rows, cols, command),
+        } => {
+            return crate::engine::privileges::stream_host::run(
+                rows,
+                cols,
+                &starting_directory,
+                command,
+            )
+            .map(crate::shim::process_exit);
+        }
         CliCommand::InternalTimeMillis => print_result(crate::app::command_state::time_millis()),
         #[cfg(windows)]
         CliCommand::InternalCmdPath { startup_directory } => print_result(
@@ -166,7 +175,8 @@ pub(crate) async fn run() -> Result<()> {
             };
             print_result(interface::execute(&settings, request).await)
         }
-    }
+    }?;
+    Ok(std::process::ExitCode::SUCCESS)
 }
 fn print_result(result: Result<String>) -> Result<()> {
     let text = line_terminated(result?);

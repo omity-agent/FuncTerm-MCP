@@ -6,6 +6,8 @@ mod fidelity;
 #[cfg(windows)]
 #[path = "integration/identity_boundary.rs"]
 mod identity_boundary;
+#[path = "integration/semantics/interactive_state.rs"]
+mod interactive_state;
 #[cfg(windows)]
 #[path = "integration/job_isolation.rs"]
 mod job_isolation;

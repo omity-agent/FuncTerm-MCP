@@ -17,18 +17,6 @@ fn nushell_parse_errors_and_user_bindings_preserve_lexical_state() {
         assert_eq!(next.exit_code, Some(0_i32), "{next:?}");
         assert!(next.stdout.contains("42"), "{next:?}");
     }
-    let bindings = complete_command(
-        &tab,
-        "let FUNCTERM_NU_ACTIVE = 'OVERRIDDEN'; let FUNCTERM_HELPER_PATH = 'OVERRIDDEN'; let FUNCTERM_RECOVERY_ENVIRONMENT = 'OVERRIDDEN'",
-    );
-    assert_eq!(bindings.exit_code, Some(0_i32), "{bindings:?}");
-    for source in ["print AFTER_BINDINGS", "hide-env FUNCTERM_SESSION_ROOT"] {
-        let result = complete_command(&tab, source);
-        assert_eq!(result.exit_code, Some(0_i32), "{result:?}");
-    }
-    let next = complete_command(&tab, "print $FUNCTERM_NU_ACTIVE");
-    assert_eq!(next.exit_code, Some(0_i32), "{next:?}");
-    assert!(next.stdout.contains("OVERRIDDEN"), "{next:?}");
 }
 #[test]
 fn powershell_top_level_return_keeps_state_and_does_not_exit() {

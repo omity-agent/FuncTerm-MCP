@@ -42,7 +42,7 @@ if builtin shopt -q expand_aliases; then @VAR_aliases_enabled@=1; fi
         ""
     };
     let script = format!(
-        "{profile}{style}{guard}{DISPATCH_ALIAS_GUARD}{initialization}\nPS1='\\[\\e]9999;FuncTerm;prompt;bash;${{PWD}}\\e\\\\\\]'\"$PS1\"\n"
+        "{profile}{style}{guard}{initialization}\nPS1='\\[\\e]9999;FuncTerm;prompt;bash;$(functerm_native_cwd)\\e\\\\\\]'\"$PS1\"\n"
     );
     fs_err::write(&init_path, VariableNamespace::new().render(&script))?;
     Ok(DriverStartup {
@@ -99,7 +99,9 @@ pub(super) fn zsh_startup(context: StartupContext<'_>) -> Result<DriverStartup> 
     let initialization = initialization_script(context, "zsh", &zsh_wrapper(), ">|", restore)?;
     fs_err::write(
         &init_path,
-        namespace.render(&format!("{guard}{DISPATCH_ALIAS_GUARD}{initialization}\nPS1=$'%{{\\e]9999;FuncTerm;prompt;zsh;%/\\e\\\\%}}'\"$PS1\"\n")),
+        namespace.render(&format!(
+            "{guard}{initialization}\nPS1=$'%{{\\e]9999;FuncTerm;prompt;zsh;%/\\e\\\\%}}'\"$PS1\"\n"
+        )),
     )?;
     Ok(DriverStartup {
         args: vec!["-i".to_owned()],
@@ -109,8 +111,6 @@ pub(super) fn zsh_startup(context: StartupContext<'_>) -> Result<DriverStartup> 
         )],
     })
 }
-const DISPATCH_ALIAS_GUARD: &str =
-    "if builtin alias f > /dev/null 2>&1; then\n    builtin unalias f\nfi\n";
 const BASH_PLAIN_STYLE: &str = "builtin export NO_COLOR=1
 builtin unset PROMPT_COMMAND
 builtin export PS0=''

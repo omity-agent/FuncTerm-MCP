@@ -132,6 +132,9 @@ impl ShellSession {
     pub(super) async fn wait_for_exit(&self) -> Result<()> {
         self.screen.wait_for_exit().await
     }
+    pub(super) async fn wait_for_terminal_drain(&self) -> Result<()> {
+        self.screen.wait_reader_closed().await
+    }
     pub(super) fn complete_interruption(&self, command: &ManagedCommand, cwd: &str) -> Result<()> {
         command.publish_interruption(cwd)?;
         self.screen.complete_at_prompt(command.id())

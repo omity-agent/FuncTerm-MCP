@@ -20,24 +20,9 @@ impl Tab {
     ) -> Result<StartedCommand> {
         let _operation = self.operation.lock().await;
         let tab = Arc::clone(self);
-        let started = self
-            .blocking
+        self.blocking
             .run(move || tab.dispatch_command(command_id, &command_text, separate_output))
-            .await?;
-        if let Err(error) = started
-            .session
-            .wait_for_command_start(&started.command)
             .await
-        {
-            let failed_tab = Arc::clone(self);
-            let command = Arc::clone(&started.command);
-            let session = Arc::clone(&started.session);
-            self.blocking
-                .run(move || failed_tab.abandon_start(&command, &session))
-                .await?;
-            return Err(error);
-        }
-        Ok(started)
     }
     fn dispatch_command(
         self: &Arc<Self>,

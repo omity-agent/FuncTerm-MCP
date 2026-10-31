@@ -13,6 +13,5 @@ pub async fn run() -> Result<std::process::ExitCode> {
     if let Some(code) = shim::run_if_requested()? {
         return Ok(shim::process_exit(code));
     }
-    cli::run().await?;
-    Ok(std::process::ExitCode::SUCCESS)
+    cli::run().await
 }

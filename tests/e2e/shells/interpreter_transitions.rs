@@ -29,7 +29,11 @@ fn interpreter_shims_restore_parent_after_python_exit_and_bun_native_exit() {
         assert_eq!(exited.exit_code, Some(code), "{exited:?}");
         let restored =
             parse_command_result(&send_command(&tab.tab_id, "echo PARENT_RESTORED", 5.0));
-        assert_eq!(restored.exit_code, Some(0_i32), "{restored:?}");
+        assert_eq!(
+            restored.exit_code,
+            Some(if parent == "cmd" { code } else { 0_i32 }),
+            "{restored:?}"
+        );
         assert!(restored.stdout.contains("PARENT_RESTORED"), "{restored:?}");
     }
 }

@@ -2,10 +2,11 @@ use super::super::{VariableNamespace, start, template, variables};
 use crate::contract::POWERSHELL_COMMAND_FUNCTION;
 pub(in crate::shell) fn wrapper() -> String {
     let script = format!(
-        "{}\n{}\n{}\n{COMMAND_TEMPLATE}\n{}",
+        "{}\n{}\n{}\n{}\n{COMMAND_TEMPLATE}\n{}",
         start::POWERSHELL,
         start::POWERSHELL_SHIMS,
         super::ordered_streams::SCRIPT,
+        super::instrumentation::SCRIPT,
         template::powershell_dispatcher()
     );
     let rendered = template::render_command_function(&script, POWERSHELL_COMMAND_FUNCTION);
@@ -15,7 +16,7 @@ pub(in crate::shell) fn wrapper() -> String {
     );
     VariableNamespace::new().render_powershell(&template::render_powershell(&protected))
 }
-const COMMAND_TEMPLATE: &str = r#"& {
+const COMMAND_TEMPLATE: &str = r"& {
     if (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue) {
         Set-PSReadLineOption -HistorySaveStyle SaveNothing
         if ((Get-Command Set-PSReadLineOption).Parameters.ContainsKey('AddToHistoryHandler')) {
@@ -23,40 +24,6 @@ const COMMAND_TEMPLATE: &str = r#"& {
         }
     }
     Clear-History
-}
-function ConvertTo-FuncTermInvocation {
-    param([string]$@VAR_source@)
-    $@VAR_tokens@ = $null
-    $@VAR_parseErrors@ = $null
-    $@VAR_ast@ = [System.Management.Automation.Language.Parser]::ParseInput($@VAR_source@, [ref]$@VAR_tokens@, [ref]$@VAR_parseErrors@)
-    if ($@VAR_parseErrors@.Count -ne 0) {
-        throw [System.Management.Automation.ParseException]::new($@VAR_parseErrors@)
-    }
-    $@VAR_headerLength@ = 0
-    foreach ($@VAR_header@ in @($@VAR_ast@.UsingStatements) + @($@VAR_ast@.ParamBlock)) {
-        if ($null -ne $@VAR_header@) {
-            $@VAR_headerLength@ = [Math]::Max($@VAR_headerLength@, $@VAR_header@.Extent.EndOffset)
-        }
-    }
-    $@VAR_instrumented@ = $@VAR_source@
-    $@VAR_finalizer@ = '
-} finally {
-$@VAR_succeeded@ = $?
-$@VAR_nativeCode@ = $global:LASTEXITCODE
-}
-'
-    if ($@VAR_ast@.EndBlock.Unnamed) {
-        $@VAR_instrumented@ = $@VAR_source@.Insert($@VAR_source@.Length, $@VAR_finalizer@).Insert($@VAR_headerLength@, "`ntry {`n")
-    } else {
-        $@VAR_blocks@ = @($@VAR_ast@.DynamicParamBlock, $@VAR_ast@.BeginBlock, $@VAR_ast@.ProcessBlock, $@VAR_ast@.EndBlock, $@VAR_ast@.CleanBlock)
-        foreach ($@VAR_block@ in $@VAR_blocks@ | Where-Object { $null -ne $_ } | Sort-Object { $_.Extent.StartOffset } -Descending) {
-            $@VAR_opening@ = $@VAR_tokens@ | Where-Object { $_.Kind -eq 'LCurly' -and $_.Extent.StartOffset -ge $@VAR_block@.Extent.StartOffset } | Select-Object -First 1
-            $@VAR_instrumented@ = $@VAR_instrumented@.Insert($@VAR_block@.Extent.EndOffset - 1, $@VAR_finalizer@).Insert($@VAR_opening@.Extent.EndOffset, "`ntry {`n")
-        }
-    }
-    return $@VAR_instrumented@.Insert($@VAR_headerLength@, "`n. {`n") + '
-}
-$@VAR_returned@ = $true'
 }
 function @FUNCTION@ {
     param(
@@ -78,6 +45,8 @@ function @FUNCTION@ {
     $@VAR_pipeline@ = $null
     $@VAR_capture@ = $null
     $@VAR_invocationSettings@ = $null
+    $@VAR_nativeVariable@ = $null
+    $@VAR_nativeWrite@ = [FuncTermNativeWrite]::new()
     $@VAR_timer@ = [Diagnostics.Stopwatch]::new()
     $env:@COMMAND_ID_ENV@ = $@VAR_CommandId@
     $env:@COMMAND_DIR_ENV@ = $@VAR_Directory@
@@ -85,14 +54,24 @@ function @FUNCTION@ {
         Set-FuncTermShimPath
         Set-Location -LiteralPath $@VAR_WorkingDirectory@
         Publish-FuncTermStart -@VAR_CommandId@ $@VAR_CommandId@ -@VAR_Directory@ $@VAR_Directory@
-        $global:LASTEXITCODE = $null
         $@VAR_succeeded@ = $false
         $@VAR_nativeCode@ = $null
         $@VAR_returned@ = $false
         $@VAR_timer@.Start()
+        $@VAR_nativeVariable@ = $ExecutionContext.SessionState.PSVariable.Get('global:LASTEXITCODE')
+        if ($null -eq $@VAR_nativeVariable@) {
+            $global:LASTEXITCODE = $null
+            $@VAR_nativeVariable@ = $ExecutionContext.SessionState.PSVariable.Get('global:LASTEXITCODE')
+        }
+        $@VAR_nativeVariable@.Attributes.Add($@VAR_nativeWrite@)
+        $@VAR_nativeWrite@.Written = $false
         $@VAR_source@ = [IO.File]::ReadAllText($@VAR_scriptFile@, [Text.Encoding]::UTF8)
+        $@VAR_userScript@ = [FuncTermScript]::Create(
+            $@VAR_source@, '$@VAR_succeeded@ = $?; $@VAR_nativeCode@ = $global:LASTEXITCODE',
+            '$@VAR_returned@ = $true'
+        )
         $@VAR_pipeline@ = [PowerShell]::Create([System.Management.Automation.RunspaceMode]::CurrentRunspace)
-        $null = $@VAR_pipeline@.AddScript((ConvertTo-FuncTermInvocation $@VAR_source@), $false)
+        $null = $@VAR_pipeline@.AddScript('. $@VAR_userScript@', $false)
         if ($@VAR_SeparateOutput@) {
             $@VAR_capture@ = [FuncTermOutputCapture]::new($@VAR_Directory@)
             $@VAR_invocationSettings@ = [System.Management.Automation.PSInvocationSettings]::new()
@@ -116,17 +95,27 @@ function @FUNCTION@ {
             exit $@VAR_exitCode@
         }
         if ($@VAR_succeeded@) { $@VAR_exitCode@ = 0 }
-        elseif ($null -ne $@VAR_nativeCode@ -and $@VAR_nativeCode@ -ne 0) {
+        elseif ($@VAR_nativeWrite@.Written -and $null -ne $@VAR_nativeCode@ -and $@VAR_nativeCode@ -ne 0) {
             $@VAR_exitCode@ = [int]$@VAR_nativeCode@
         }
         else { $@VAR_exitCode@ = 1 }
     }
     catch {
-        $@VAR_failure@ = [string]$_
+        $@VAR_originalError@ = $_
+        if ($_.Exception -is [System.Management.Automation.MethodInvocationException] -and
+            $_.Exception.InnerException -is [System.Management.Automation.RuntimeException]) {
+            $@VAR_originalError@ = $_.Exception.InnerException.ErrorRecord
+            $global:Error.Remove($_)
+            $global:Error.Insert(0, $@VAR_originalError@)
+        }
+        $@VAR_failure@ = Format-FuncTermError $@VAR_originalError@
         $@VAR_exitCode@ = 1
     }
     finally {
         $@VAR_timer@.Stop()
+        if ($null -ne $@VAR_nativeVariable@) {
+            $null = $@VAR_nativeVariable@.Attributes.Remove($@VAR_nativeWrite@)
+        }
         if ($null -ne $@VAR_capture@) {
             Complete-FuncTermOutputCapture $@VAR_capture@
         }
@@ -135,8 +124,9 @@ function @FUNCTION@ {
                 $@VAR_exitCode@ = 130
             }
             foreach ($@VAR_error@ in $@VAR_pipeline@.Streams.Error) {
-                [IO.File]::AppendAllText($@VAR_stderrFile@, [string]$@VAR_error@ + [Environment]::NewLine)
-                [Console]::Error.WriteLine($@VAR_error@)
+                $@VAR_formattedError@ = Format-FuncTermError $@VAR_error@
+                [IO.File]::AppendAllText($@VAR_stderrFile@, $@VAR_formattedError@)
+                [Console]::Error.Write($@VAR_formattedError@)
             }
             $@VAR_pipeline@.Dispose()
         }
@@ -162,4 +152,4 @@ function @FUNCTION@ {
         [Environment]::SetEnvironmentVariable('@COMMAND_DIR_ENV@', $@VAR_previousCommandDirectory@)
     }
 }
-"#;
+";

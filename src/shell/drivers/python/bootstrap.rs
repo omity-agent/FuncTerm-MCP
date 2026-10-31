@@ -25,9 +25,9 @@ if @VAR_startup_file@:
     } else {
         ""
     };
+    let evaluation = super::evaluation::SCRIPT;
     let bootstrap = format!(
         r#"import ast as @VAR_ast@
-import codeop as @VAR_codeop@
 import code as @VAR_console@
 import contextlib as @VAR_contextlib@
 import json as @VAR_json@
@@ -61,11 +61,7 @@ def @VAR_prepend_shim@():
     @VAR_path@ = @VAR_os@.environ.get("PATH", "")
     @VAR_entries@ = [@VAR_entry@ for @VAR_entry@ in @VAR_path@.split(@VAR_os@.pathsep) if @VAR_entry@ and @VAR_entry@ != @VAR_shim@]
     @VAR_os@.environ["PATH"] = @VAR_os@.pathsep.join([@VAR_shim@, *@VAR_entries@])
-@VAR_compiler@ = @VAR_codeop@.Compile()
-def @VAR_execute@(@VAR_source@, @VAR_namespace@):
-    @VAR_tree@ = @VAR_ast@.parse(@VAR_source@, "<functerm>", "exec")
-    @VAR_code@ = @VAR_compiler@(@VAR_ast@.Interactive(@VAR_tree@.body), "<functerm>", "single")
-    exec(@VAR_code@, @VAR_namespace@, @VAR_namespace@)
+{evaluation}
 @@VAR_contextlib@.contextmanager
 def @VAR_redirect_output@(@VAR_stdout_file@, @VAR_stderr_file@):
     @VAR_sys@.stdout.flush()
@@ -114,7 +110,7 @@ def _functerm_dispatch():
             if @VAR_receipt@["separate_output"]:
                 @VAR_output_context@.enter_context(@VAR_redirect_output@(@VAR_stdout_file@, @VAR_stderr_file@))
             try:
-                @VAR_execute@(@VAR_source@, globals())
+                @VAR_exit_code@ = @VAR_interpreter@.execute(@VAR_source@)
             except SystemExit as @VAR_system_exit@:
                 @VAR_system_exit_code@ = @VAR_system_exit@.code
                 if @VAR_system_exit_code@ is None:
@@ -171,7 +167,8 @@ def @VAR_readline@(@VAR_prompt@):
     if not @VAR_line@:
         raise EOFError
     return @VAR_line@.rstrip("\r\n")
-@VAR_console@.interact(banner="", readfunc=@VAR_readline@, exitmsg="", local=globals())
+@VAR_interpreter@.raw_input = @VAR_readline@
+@VAR_interpreter@.interact(banner="", exitmsg="")
 "#
     );
     let protected = bootstrap.replace(

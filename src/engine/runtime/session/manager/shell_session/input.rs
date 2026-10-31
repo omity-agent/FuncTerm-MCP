@@ -18,12 +18,16 @@ pub(in crate::engine::runtime::session::manager) enum KeyboardWriteFailure {
 impl ShellSession {
     pub(in crate::engine::runtime::session::manager) fn write_keyboard_for_running_command(
         &self,
+        command_id: &str,
         input: &KeyboardInput,
     ) -> Result<u64, KeyboardWriteFailure> {
         let busy = self.busy.lock();
         let Some(command) = busy.as_ref() else {
             return Err(KeyboardWriteFailure::IdlePrompt);
         };
+        if command.id() != command_id {
+            return Err(KeyboardWriteFailure::CommandEnded);
+        }
         let visible_revision = self.screen.visible_revision()?;
         let write_result = command.deliver_input(|| self.write_keyboard(input));
         drop(busy);
@@ -85,5 +89,10 @@ impl ShellSession {
             .lock()
             .as_ref()
             .map(|command| command.id().to_owned())
+    }
+    pub(in crate::engine::runtime::session::manager) fn busy_command(
+        &self,
+    ) -> Option<Arc<super::super::command::ManagedCommand>> {
+        self.busy.lock().clone()
     }
 }

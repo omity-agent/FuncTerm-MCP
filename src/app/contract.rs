@@ -10,7 +10,6 @@ pub(crate) const EARLY_DONE_DIRECTORY: &str = ".early-done";
 pub(crate) const HELPER_EXECUTABLE_ENV: &str = "FUNCTERM_HELPER_EXECUTABLE";
 pub(crate) const NUSHELL_SUBMISSION_FILE: &str = "submission.nu";
 pub(crate) const POWERSHELL_COMMAND_FUNCTION: &str = "Invoke-FuncTermCommand";
-pub(crate) const POSIX_COMMAND_FUNCTION: &str = "functerm_run_command";
 pub(crate) const POWERSHELL_DISPATCHER_FUNCTION: &str = "Invoke-FuncTermDispatcher";
 pub(crate) const RELEASED_FILE: &str = "released";
 pub(crate) const SESSION_EXIT_FILE: &str = "session-exit";

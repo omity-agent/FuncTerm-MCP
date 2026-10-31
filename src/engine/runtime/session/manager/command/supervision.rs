@@ -37,6 +37,10 @@ impl Tab {
         self.supervisors.spawn(async move {
             let session = Arc::clone(&reservation.session);
             let result = async {
+                tokio::select! {
+                    started = session.wait_for_command_start(&command) => started?,
+                    exited = session.wait_for_exit() => exited?,
+                }
                 let observed = tokio::select! {
                     completion = command.wait(Duration::MAX) => completion,
                     exited = session.wait_for_exit() => {
@@ -101,9 +105,27 @@ impl Tab {
         command: &Arc<ManagedCommand>,
         message: String,
     ) -> Result<()> {
+        let _operation = self.operation.lock().await;
+        if !matches!(command.state.lock().wait, CommandWait::Running) {
+            return Ok(());
+        }
+        let session = self.optional_session();
+        if let Some(active) = session.as_ref() {
+            let target = Arc::clone(active);
+            self.blocking.run(move || target.terminate()).await?;
+            active.wait_for_terminal_drain().await?;
+        }
+        let tab = Arc::clone(self);
         let managed = Arc::clone(command);
         self.blocking
-            .run(move || managed.mark_failed(message))
+            .run(move || {
+                managed.mark_failed(message)?;
+                if let Some(active) = session {
+                    active.release(managed.id());
+                    tab.close_session(&active)?;
+                }
+                Ok(())
+            })
             .await
     }
 }

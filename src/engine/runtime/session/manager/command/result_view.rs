@@ -1,4 +1,4 @@
-use super::super::{shell_session::ShellSession, tab::Tab};
+use super::super::tab::Tab;
 use super::{CommandWait, ManagedCommand};
 use crate::runtime::protocol::{CommandSnapshot, ViewResult};
 use alloc::sync::Arc;
@@ -38,67 +38,11 @@ impl Tab {
         }
         observed
     }
-    pub(in crate::engine::runtime::session::manager) async fn finish_done_command(
-        self: &Arc<Self>,
-        command: &Arc<ManagedCommand>,
-    ) -> Result<()> {
-        let _completion = command.completion.lock().await;
-        if !matches!(command.state.lock().wait, CommandWait::Running) {
-            return Ok(());
-        }
-        tracing::debug!(command_id = %command.id(), "observed command completion");
-        let title = command.capture.wait_finished().await?;
-        let tab = Arc::clone(self);
-        let managed = Arc::clone(command);
-        self.blocking
-            .run(move || tab.cache_done_command(&managed, title))
-            .await
-    }
-    fn cache_done_command(&self, command: &ManagedCommand, title: String) -> Result<()> {
-        let session = self.optional_session();
-        command.mark_finished(title, |cwd| {
-            if let Some(active_session) = session.as_ref() {
-                active_session.set_cwd(cwd);
-            }
-        })?;
-        if let Some(active_session) = session {
-            let exit_requested = command.requests_session_exit()?;
-            if exit_requested {
-                active_session.terminate()?;
-            }
-            active_session.release(command.id());
-            if exit_requested {
-                self.close_session(&active_session)?;
-            } else {
-                self.remember(&active_session)?;
-            }
-        }
-        Ok(())
-    }
-    pub(in crate::engine::runtime::session::manager) async fn abort_if_shell_dead(
-        self: &Arc<Self>,
-        session: &Arc<ShellSession>,
-        command: &Arc<ManagedCommand>,
-    ) -> Result<bool> {
-        let target = Arc::clone(self);
-        let active = Arc::clone(session);
-        let managed = Arc::clone(command);
-        self.blocking
-            .run(move || {
-                let Some(code) = active.exit_code()? else {
-                    return Ok(false);
-                };
-                managed.mark_exited(code)?;
-                active.release(managed.id());
-                target.close_session(&active)?;
-                Ok(true)
-            })
-            .await
-    }
     pub(super) async fn command_view_result(
         self: &Arc<Self>,
         command: &Arc<ManagedCommand>,
     ) -> Result<ViewResult> {
+        let _operation = self.operation.lock().await;
         let target = Arc::clone(self);
         let managed = Arc::clone(command);
         self.blocking
@@ -108,11 +52,7 @@ impl Tab {
     fn command_snapshot_result(&self, snapshot: CommandSnapshot) -> Result<ViewResult> {
         let mut shell = if let Some(session) = self.optional_session() {
             let alive = session.is_alive()?;
-            if alive {
-                self.remember(&session)?.shell_view(true)
-            } else {
-                self.snapshot_shell_view()
-            }
+            self.remember(&session)?.shell_view(alive)
         } else {
             self.snapshot_shell_view()
         };

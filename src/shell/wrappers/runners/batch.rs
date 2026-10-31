@@ -35,8 +35,7 @@ if errorlevel 1 (
     call :restore_command_environment
     exit /b 1
 )
-call :publish_start
-if not errorlevel 1 call :prepend_functerm_paths
+call :prepend_functerm_paths
 if errorlevel 1 (
     call :publish_done 1
     call :restore_command_environment
@@ -46,9 +45,9 @@ call :command_time_millis
 set "@VAR_command_started_at@=%ERRORLEVEL%"
 set > "%~dp0@VAR_environment_before_file@.txt"
 if "%~4"=="1" (
-    "%FUNCTERM_REAL_CMD%" /D /Q /V:OFF /S /C ""%~f0" --capture "%~2"" > "%~2\@STDOUT@" 2> "%~2\@STDERR@"
+    "%FUNCTERM_REAL_CMD%" /D /Q /V:OFF /S /C ""%~f0" --capture "%~2" "%~5"" > "%~2\@STDOUT@" 2> "%~2\@STDERR@"
 ) else (
-    "%FUNCTERM_REAL_CMD%" /D /Q /V:OFF /S /C ""%~f0" --capture "%~2""
+    "%FUNCTERM_REAL_CMD%" /D /Q /V:OFF /S /C ""%~f0" --capture "%~2" "%~5""
 )
 set "@VAR_exit_code@=%ERRORLEVEL%"
 set "@VAR_worker_exited@="
@@ -89,6 +88,9 @@ call :restore_command_environment
 if defined @VAR_worker_exited@ exit %@VAR_exit_code@%
 exit /b %@VAR_exit_code@%
 :capture_user_state
+call :publish_start
+if errorlevel 1 exit /b 1
+"%FUNCTERM_REAL_CMD%" /D /Q /C exit %~3
 call "%~2\@SCRIPT@"
 > "%~dp0@VAR_exit_code_file@.txt" echo %ERRORLEVEL%
 cd > "%~dp0@VAR_cwd_after_file@.txt"

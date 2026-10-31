@@ -103,6 +103,8 @@ pub(super) enum CliCommand {
         rows: u16,
         #[arg(long)]
         cols: u16,
+        #[arg(long)]
+        starting_directory: PathBuf,
         #[arg(last = true, required = true)]
         command: Vec<std::ffi::OsString>,
     },

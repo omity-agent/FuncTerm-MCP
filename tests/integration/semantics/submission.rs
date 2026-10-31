@@ -66,15 +66,7 @@ fn cmd_submission_uses_interactive_percent_and_batch_return_semantics() {
         "echo PERCENT=100%%\necho ARGUMENTS=%0_%1",
     ] {
         let result = complete_command(&tab, source);
-        assert_eq!(
-            result.exit_code,
-            Some(if source.starts_with("echo PERCENT") {
-                0_i32
-            } else {
-                23_i32
-            }),
-            "{result:?}"
-        );
+        assert_eq!(result.exit_code, Some(23_i32), "{result:?}");
         if source.starts_with("echo PERCENT") {
             assert!(result.stdout.contains("PERCENT=100%%"), "{result:?}");
             assert!(result.stdout.contains("ARGUMENTS=%0_%1"), "{result:?}");

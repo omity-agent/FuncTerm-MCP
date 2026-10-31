@@ -9,11 +9,7 @@ fn python_keeps_future_flags_and_native_standard_streams() {
     let future = complete_command(&tab, "from __future__ import annotations");
     assert_eq!(future.exit_code, Some(0_i32), "{future:?}");
     let current = parse_tab_view(&run_cli(&["view", &tab]));
-    assert!(
-        current.alive,
-        "Python ended after compiling future import: {}",
-        current.screen
-    );
+    assert!(current.alive, "{}", current.screen);
     let result = complete_command(
         &tab,
         "def f(x: Missing): pass\nimport os, subprocess, sys\nprint(f.__annotations__)\nos.write(1, b'NATIVE_OUT\\n')\nos.write(2, b'NATIVE_ERR\\n')\nsubprocess.run([sys.executable, '-c', \"print('CHILD_OUT')\"])",
@@ -61,8 +57,19 @@ fn nushell_retains_lexical_variables_and_waits_for_input() {
 fn cmd_lf_unicode_and_interactive_for_preserve_percent_cwd() {
     let _guard = super::matrix::daemon();
     let cwd = temp_dir("percent % cwd");
+    fs_err::create_dir(cwd.join("search")).unwrap();
+    fs_err::write(cwd.join("search/lookup.cmd"), "@echo SEARCH_PATH_READY").unwrap();
     let tab = create_tab(&cwd, "cmd").tab_id;
     for (source, expected) in [
+        (
+            "set \"PATH=;%CD%\\search;%PATH%;;\"\necho SEARCH_PATH_READY",
+            "SEARCH_PATH_READY",
+        ),
+        ("lookup", "SEARCH_PATH_READY"),
+        (
+            "python -c \"print('SEARCH_PATH_READY')\"",
+            "SEARCH_PATH_READY",
+        ),
         ("echo A\necho 中文", "中文"),
         ("echo A\necho é", "é"),
         ("for %i in (A B) do @echo %i", "B"),
@@ -83,6 +90,7 @@ fn interrupted_shells_return_to_a_usable_prompt() {
         ("cmd", "ping -n 30 127.0.0.1", "echo AFTER_INTERRUPT"),
     ] {
         let tab = create_tab(&temp_dir(shell), shell).tab_id;
+        let cwd = complete_command(&tab, "echo CWD_READY").cwd;
         let id = parse_command_id(&send_command(&tab, source, 0.0));
         std::thread::sleep(core::time::Duration::from_millis(600));
         let _interrupted = manual_write(&tab, &[3], 0.5);
@@ -107,6 +115,7 @@ fn interrupted_shells_return_to_a_usable_prompt() {
         let result = parse_command_result(&run_cli(&["view", &id, "--wait-timeout", "3"]));
         assert!(result.finished, "{shell}: {result:?}");
         assert_eq!(result.exit_code, Some(130_i32), "{shell}: {result:?}");
+        assert_eq!(result.cwd, cwd, "{shell}: {result:?}");
         assert!(
             !matches!(result.time_consumption.as_str(), "0ns" | "0.00ms"),
             "{shell}: {result:?}"

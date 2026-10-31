@@ -42,22 +42,26 @@ impl Tab {
         } else {
             None
         };
-        if let Some(active) = command.as_ref() {
-            active.freeze_output()?;
-        }
         let target = Arc::clone(&session);
         self.blocking.run(move || target.terminate()).await?;
-        if let Some(active) = command {
-            match active.wait(Duration::ZERO).await? {
-                CommandWait::Finished => self.finish_done_command(&active).await?,
-                CommandWait::Running => {
-                    self.fail_command(&active, "Tab was closed".to_owned())
-                        .await?;
+        session.wait_for_terminal_drain().await?;
+        let observed = match command.as_ref() {
+            Some(active) => active.wait(Duration::ZERO).await?,
+            None => CommandWait::Finished,
+        };
+        let tab = Arc::clone(self);
+        self.blocking
+            .run(move || {
+                if let Some(active) = command {
+                    match observed {
+                        CommandWait::Finished => tab.cache_done_command(&active)?,
+                        CommandWait::Running => active.mark_failed("Tab was closed")?,
+                        CommandWait::Failed => {}
+                    }
+                    session.release(active.id());
                 }
-                CommandWait::Failed => {}
-            }
-            session.release(active.id());
-        }
-        self.close_session(&session)
+                tab.close_session(&session)
+            })
+            .await
     }
 }

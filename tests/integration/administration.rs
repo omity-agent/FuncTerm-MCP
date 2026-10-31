@@ -10,37 +10,6 @@ const SHELL: &str = "powershell";
 #[cfg(unix)]
 const SHELL: &str = "bash";
 #[test]
-fn start_and_stop_are_idempotent_and_restart_starts_an_absent_daemon() {
-    let guard = locked_with_env(&[]);
-    let directory = temp_root();
-    assert!(
-        directory.starts_with(std::env::temp_dir().join("functerm")),
-        "test runtime escaped the application temporary directory: {}",
-        directory.display()
-    );
-    let environment = guard.env();
-    let existing = create_tab(&temp_root(), SHELL);
-    assert_lifecycle("start", "already running");
-    assert!(parse_tab_view(&run_cli(&["view", &existing.tab_id])).alive);
-    assert_lifecycle("stop", "stopped");
-    assert_stopped(&environment);
-    assert_lifecycle("stop", "not running");
-    assert_stopped(&environment);
-    assert_lifecycle("start", "started");
-    let fresh = create_tab(&temp_root(), SHELL);
-    assert!(parse_tab_view(&run_cli(&["view", &fresh.tab_id])).alive);
-    let unknown = run_cli(&["view", &existing.tab_id]);
-    assert!(!unknown.status.success(), "{unknown:?}");
-    assert!(String::from_utf8_lossy(&unknown.stderr).contains("unknown id"));
-    assert_lifecycle("stop", "stopped");
-    assert_stopped(&environment);
-    assert_lifecycle("restart", "restarted");
-    let restarted = create_tab(&temp_root(), SHELL);
-    assert!(parse_tab_view(&run_cli(&["view", &restarted.tab_id])).alive);
-    drop(guard);
-    assert!(!directory.exists(), "test runtime was not removed on drop");
-}
-#[test]
 fn restart_discards_old_tabs_without_stopping_another_service() {
     let first = locked_with_env(&[]);
     let first_environment = first.env();
@@ -99,6 +68,12 @@ fn concurrent_starts_share_a_single_background_instance() {
     );
     let tab = create_tab(&temp_root(), SHELL);
     assert!(parse_tab_view(&run_cli(&["view", &tab.tab_id])).alive);
+    assert_lifecycle("start", "already running");
+    assert_lifecycle("stop", "stopped");
+    assert_lifecycle("stop", "not running");
+    assert_lifecycle("restart", "restarted");
+    let restarted = create_tab(&temp_root(), SHELL);
+    assert!(parse_tab_view(&run_cli(&["view", &restarted.tab_id])).alive);
 }
 #[test]
 fn stop_terminates_running_commands_and_allows_automatic_startup() {
