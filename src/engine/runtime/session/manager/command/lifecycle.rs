@@ -23,6 +23,7 @@ pub(super) struct ManagedCommandState {
     pub(super) wait: CommandWait,
     pub(super) cached_view: Option<CommandSnapshot>,
     pub(super) input: CommandInputHistory,
+    pub(super) session_exit: bool,
 }
 #[derive(Clone, Copy)]
 pub(in crate::engine::runtime::session::manager) enum CommandWait {
@@ -54,6 +55,7 @@ impl ManagedCommand {
                 wait: CommandWait::Running,
                 cached_view: None,
                 input: CommandInputHistory::default(),
+                session_exit: false,
             }),
             capture,
             watch,
@@ -105,6 +107,16 @@ impl ManagedCommand {
     ) -> Result<bool> {
         self.capture.wait_started(limit).await
     }
+    pub(super) async fn interrupted_prompt(&self) -> Result<Option<String>> {
+        let mut revision = 0;
+        while let Some((next, cwd)) = self.capture.wait_prompt(revision).await? {
+            revision = next;
+            if self.state.lock().input.interrupted() {
+                return Ok(Some(cwd));
+            }
+        }
+        Ok(None)
+    }
     pub(super) fn wake(&self) {
         self.watch.wake();
     }
@@ -123,5 +135,18 @@ impl ManagedCommand {
     }
     pub(super) fn time_consumption(&self) -> Duration {
         self.started_at.elapsed()
+    }
+    pub(super) fn requests_session_exit(&self) -> Result<bool> {
+        let state = self.state.lock();
+        if !matches!(state.wait, CommandWait::Running) {
+            return Ok(state.session_exit);
+        }
+        drop(state);
+        self.record.session_exit.try_exists().with_context(|| {
+            format!(
+                "failed to inspect session exit marker {}",
+                self.record.session_exit.display()
+            )
+        })
     }
 }

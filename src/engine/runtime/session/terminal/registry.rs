@@ -43,6 +43,12 @@ impl CaptureRegistry {
                 self.finish(&id)
             }
             ProtocolEvent::WindowTitleAssigned => self.update(screen_title),
+            ProtocolEvent::Prompt(cwd) => {
+                if let Some(id) = self.active.as_deref() {
+                    self.require(id)?.observe_prompt(cwd);
+                }
+                Ok(())
+            }
             ProtocolEvent::Invalid(message) => bail!(message),
         }
     }
@@ -61,7 +67,7 @@ impl CaptureRegistry {
         self.active = Some(id.to_owned());
         Ok(())
     }
-    fn finish(&mut self, id: &str) -> Result<()> {
+    pub(super) fn finish(&mut self, id: &str) -> Result<()> {
         if let Some(active) = self.active.as_deref()
             && active != id
         {

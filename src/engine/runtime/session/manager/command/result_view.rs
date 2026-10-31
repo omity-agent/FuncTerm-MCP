@@ -13,7 +13,7 @@ impl Tab {
         let command = self
             .find_command(command_id)
             .with_context(|| format!("command owner is missing record: {command_id}"))?;
-        match command.wait(wait_timeout).await? {
+        match self.observe_command(&command, wait_timeout).await? {
             CommandWait::Finished => self.finish_done_command(&command).await?,
             CommandWait::Running => {
                 if let Some(session) = self.optional_session() {
@@ -23,6 +23,20 @@ impl Tab {
             CommandWait::Failed => {}
         }
         self.command_view_result(&command).await
+    }
+    pub(in crate::engine::runtime::session::manager) async fn observe_command(
+        self: &Arc<Self>,
+        command: &Arc<ManagedCommand>,
+        wait_timeout: Duration,
+    ) -> Result<CommandWait> {
+        let observed = command.wait(wait_timeout).await;
+        if !matches!(observed, Ok(CommandWait::Finished | CommandWait::Failed))
+            && let Some(session) = self.optional_session()
+            && self.abort_if_shell_dead(&session, command).await?
+        {
+            return Ok(CommandWait::Finished);
+        }
+        observed
     }
     pub(in crate::engine::runtime::session::manager) async fn finish_done_command(
         self: &Arc<Self>,
@@ -48,8 +62,16 @@ impl Tab {
             }
         })?;
         if let Some(active_session) = session {
+            let exit_requested = command.requests_session_exit()?;
+            if exit_requested {
+                active_session.terminate()?;
+            }
             active_session.release(command.id());
-            self.remember(&active_session)?;
+            if exit_requested {
+                self.close_session(&active_session)?;
+            } else {
+                self.remember(&active_session)?;
+            }
         }
         Ok(())
     }
@@ -63,10 +85,10 @@ impl Tab {
         let managed = Arc::clone(command);
         self.blocking
             .run(move || {
-                if active.is_alive()? {
+                let Some(code) = active.exit_code()? else {
                     return Ok(false);
-                }
-                managed.mark_failed("shell exited before command wrote done.json")?;
+                };
+                managed.mark_exited(code)?;
                 active.release(managed.id());
                 target.close_session(&active)?;
                 Ok(true)

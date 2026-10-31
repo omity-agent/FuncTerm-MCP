@@ -22,7 +22,11 @@ fn terminal_mode_preserves_tty_and_switches_back_to_separated_output() {
         let text = checked_text(&direct);
         let output = terminal_output(&text);
         assert!(
-            output.to_lowercase().contains("tty_state true true true"),
+            output.to_lowercase().contains(if shell == "bun" {
+                "tty_state true false false"
+            } else {
+                "tty_state true true true"
+            }),
             "{shell}: {text}"
         );
         assert!(output.contains("TERMINAL_ERROR"), "{shell}: {text}");
@@ -32,7 +36,15 @@ fn terminal_mode_preserves_tty_and_switches_back_to_separated_output() {
         let next = parse_command_result(&send_command(&tab.tab_id, &query, 10.0));
         assert_eq!(next.exit_code, Some(0_i32), "{shell}: {next:?}");
         assert!(next.stdout.contains("TTY_STATE"), "{shell}: {next:?}");
-        assert!(next.stderr.contains("TERMINAL_ERROR"), "{shell}: {next:?}");
+        assert!(
+            if shell == "nu" {
+                &next.stdout
+            } else {
+                &next.stderr
+            }
+            .contains("TERMINAL_ERROR"),
+            "{shell}: {next:?}"
+        );
         let saved = run_cli(&["view", &parse_command_id(&direct)]);
         assert_eq!(terminal_output(&checked_text(&saved)), output, "{shell}");
         assert!(

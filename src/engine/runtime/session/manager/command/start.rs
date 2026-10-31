@@ -54,6 +54,10 @@ impl Tab {
             );
         }
         session.refresh_choice()?;
+        anyhow::ensure!(
+            session.current_choice() != crate::shell::ShellChoice::NuShell || !separate_output,
+            "NuShell does not support separate_output=true; use separate_output=false"
+        );
         self.remember(&session)?;
         let record = create_record(
             session.command_root(),
@@ -98,6 +102,7 @@ impl Tab {
         })
     }
     fn abandon_start(&self, command: &ManagedCommand, session: &ShellSession) -> Result<()> {
+        session.terminate()?;
         command.mark_failed("shell failed to start command")?;
         drop(self.remove_command(command.id()));
         if let Err(error) = remove_record_directory(command.record()) {
@@ -111,7 +116,11 @@ impl StartedCommand {
         self,
         wait_timeout: Duration,
     ) -> Result<(String, EndReason, ViewResult)> {
-        let reason = match self.command.wait(wait_timeout).await? {
+        let reason = match self
+            .tab
+            .observe_command(&self.command, wait_timeout)
+            .await?
+        {
             CommandWait::Finished => {
                 self.tab.finish_done_command(&self.command).await?;
                 EndReason::CommandEnded

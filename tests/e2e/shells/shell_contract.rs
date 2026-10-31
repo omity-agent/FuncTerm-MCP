@@ -1,10 +1,5 @@
-#[cfg(windows)]
-use super::matrix::required_executable;
 use super::matrix::{assert_cwd, assert_shell_query, case_command, case_dir, shell_cases};
-#[cfg(windows)]
-use crate::support::locked_with_env;
 use crate::support::{create_tab, parse_command_result, parse_tab_view, run_cli, send_command};
-#[cfg(windows)]
 use std::fs;
 #[test]
 fn cli_runs_commands_for_every_supported_shell() {
@@ -19,7 +14,14 @@ fn cli_runs_commands_for_every_supported_shell() {
         let result = parse_command_result(&send_command(&created.tab_id, &command, 10.0));
         assert!(result.finished, "{}: {result:?}", case.name);
         assert!(result.stdout.contains("MCP_PTY_STDOUT"), "{result:?}");
-        assert!(result.stderr.contains("MCP_PTY_STDERR"), "{result:?}");
+        assert!(
+            if case.name == "nu" {
+                result.stdout.contains("MCP_PTY_STDERR")
+            } else {
+                result.stderr.contains("MCP_PTY_STDERR")
+            },
+            "{result:?}"
+        );
         assert_eq!(
             result.exit_code,
             Some(case.expected_exit_code),
@@ -30,26 +32,18 @@ fn cli_runs_commands_for_every_supported_shell() {
         let shell_after = parse_tab_view(&run_cli(&["view", &created.tab_id]));
         assert_shell_query(&shell_after, &next, case.name);
         super::state::assert_persistent_state(&created.tab_id, case.name);
+        if case.name == "nu" {
+            let marker = "MCP_PTY_NUSHELL_IMPLICIT.txt";
+            fs::write(next.join(marker), "implicit output marker").unwrap();
+            let implicit = parse_command_result(&send_command(
+                &created.tab_id,
+                &format!("ls | where name == {marker:?}"),
+                10.0,
+            ));
+            assert_eq!(implicit.exit_code, Some(0_i32), "{implicit:?}");
+            assert!(implicit.stdout.contains(marker), "{implicit:?}");
+        }
     }
-}
-#[cfg(windows)]
-#[test]
-fn cli_captures_nushell_implicit_structured_output() {
-    let case = shell_cases().iter().find(|case| case.name == "nu").unwrap();
-    let executable = required_executable(case);
-    let _guard = locked_with_env(&[(case.env_var, &executable)]);
-    let cwd = case_dir(case.name, "implicit output");
-    let marker = "MCP_PTY_NUSHELL_IMPLICIT.txt";
-    fs::write(cwd.join(marker), "implicit output marker").unwrap();
-    let created = create_tab(&cwd, case.name);
-    let result = parse_command_result(&send_command(
-        &created.tab_id,
-        &format!("ls | where name == {marker:?}"),
-        10.0,
-    ));
-    assert!(result.finished, "{result:?}");
-    assert_eq!(result.exit_code, Some(0_i32), "{result:?}");
-    assert!(result.stdout.contains(marker), "{result:?}");
 }
 #[cfg(windows)]
 #[test]

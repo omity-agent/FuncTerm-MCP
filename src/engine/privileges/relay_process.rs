@@ -4,7 +4,7 @@ use super::tree_guard::HostedChild;
 use crate::shell::ShellStartup;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
-use portable_pty::PtySize;
+use portable_pty::{ChildKiller as _, PtySize};
 use std::path::Path;
 use windows_spawn::{Command, CreationFlags, Job, ParentProcess, SpawnOptions, Stdio};
 pub(crate) fn spawn(
@@ -50,11 +50,14 @@ pub(crate) fn spawn(
         .stdin
         .take()
         .context("ordinary PTY host has no input pipe")?;
+    let hosted = HostedChild::new(child, job);
+    let tree_killer = hosted.clone_killer();
     Ok(PtyProcess {
-        child: Box::new(HostedChild::new(child, job)),
+        child: Box::new(hosted),
         reader: Box::new(reader),
         writer: Box::new(writer),
         slave: None,
         master: None,
+        tree_killer: Some(tree_killer),
     })
 }

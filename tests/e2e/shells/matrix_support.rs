@@ -1,17 +1,15 @@
-use core::sync::atomic::{AtomicU64, Ordering};
 use functerm::shell::quote;
 use std::fs;
 use std::path::{Path, PathBuf};
-static CASE_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 pub(super) struct ShellCase {
     pub(super) name: &'static str,
     pub(super) env_var: &'static str,
     pub(super) executables: &'static [&'static str],
     pub(super) expected_exit_code: i32,
 }
-#[cfg(windows)]
-pub(super) fn shell_cases() -> &'static [ShellCase] {
+pub(super) const fn shell_cases() -> &'static [ShellCase] {
     &[
+        #[cfg(windows)]
         ShellCase {
             name: "powershell",
             env_var: "FUNCTERM_POWERSHELL",
@@ -24,29 +22,21 @@ pub(super) fn shell_cases() -> &'static [ShellCase] {
             executables: &["bash", "bash.exe"],
             expected_exit_code: 1,
         },
+        #[cfg(windows)]
         ShellCase {
             name: "nu",
             env_var: "FUNCTERM_NUSHELL",
             executables: &["nu", "nu.exe"],
             expected_exit_code: 0,
         },
+        #[cfg(windows)]
         ShellCase {
             name: "cmd",
             env_var: "FUNCTERM_CMD",
             executables: &["cmd", "cmd.exe"],
             expected_exit_code: 7,
         },
-    ]
-}
-#[cfg(not(windows))]
-pub(super) fn shell_cases() -> &'static [ShellCase] {
-    &[
-        ShellCase {
-            name: "bash",
-            env_var: "FUNCTERM_BASH",
-            executables: &["bash", "bash.exe"],
-            expected_exit_code: 1,
-        },
+        #[cfg(not(windows))]
         ShellCase {
             name: "zsh",
             env_var: "FUNCTERM_ZSH",
@@ -72,10 +62,7 @@ pub(super) fn daemon() -> crate::support::TestGuard {
     crate::support::locked_with_env(&environment)
 }
 pub(super) fn case_dir(shell: &str, leaf: &str) -> PathBuf {
-    let unique = CASE_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let path = crate::support::temp_root()
-        .join("cli")
-        .join(format!("{shell}-{}-{unique}", std::process::id()))
+    let path = crate::support::temp_dir(shell)
         .join("quote ' segment")
         .join(leaf);
     fs::create_dir_all(&path).unwrap();

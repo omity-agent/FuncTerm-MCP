@@ -8,8 +8,13 @@ pub(super) fn startup(context: StartupContext<'_>) -> Result<DriverStartup> {
         &script,
         bootstrap::script(&json_path(context.cwd)?, &json_path(context.ready_file)?),
     )?;
+    let host = context.startup_directory.join("stream-router.mjs");
+    fs_err::write(&host, bootstrap::host_script())?;
     Ok(DriverStartup {
-        args: vec![crate::text::path_text(&script, "Bun REPL bootstrap path")?],
+        args: vec![
+            crate::text::path_text(&host, "Bun stream router path")?,
+            crate::text::path_text(&script, "Bun REPL bootstrap path")?,
+        ],
         env: Vec::new(),
     })
 }

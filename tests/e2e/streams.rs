@@ -1,9 +1,7 @@
 #[path = "routing/fixtures.rs"]
 mod fixtures;
-#[cfg(test)]
 #[path = "routing/redirection.rs"]
 mod redirection;
-#[cfg(test)]
 #[path = "routing/transparency.rs"]
 mod transparency;
 use crate::support::{create_tab, parse_command_result, send_command};

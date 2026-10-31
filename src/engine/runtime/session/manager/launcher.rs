@@ -127,7 +127,7 @@ impl ShellLauncher {
         let mut child = spawned.child;
         let retained_slave = spawned.slave;
         if let Err(error) = process_tree
-            .attach(child.as_ref())
+            .attach(child.as_ref(), spawned.tree_killer)
             .context("failed to guard shell process tree")
         {
             process::cleanup(child.as_mut(), "unregistered shell child");

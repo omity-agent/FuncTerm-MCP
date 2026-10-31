@@ -1,19 +1,23 @@
 mod echo_control;
-mod output_capture;
+mod transport;
 use crate::contract::{
     COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, DISPATCH_FILE, HELPER_EXECUTABLE_ENV,
-    SESSION_STATE_DIRECTORY, STDERR_FILE, STDOUT_FILE,
+    SESSION_EXIT_FILE, SESSION_STATE_DIRECTORY,
 };
+pub(super) const fn host_script() -> &'static str {
+    transport::HOST
+}
 pub(super) fn script(cwd: &str, ready: &str) -> String {
     let bootstrap = format!(
         r#"import {{ spawnSync as @VAR_spawnSync@ }} from "node:child_process";
-		import {{ existsSync as @VAR_existsSync@, readFileSync as @VAR_readFileSync@, watch as @VAR_watch@, writeFileSync as @VAR_writeFileSync@ }} from "node:fs";
+			import {{ existsSync as @VAR_existsSync@, readFileSync as @VAR_readFileSync@, watch as @VAR_watch@, writeFileSync as @VAR_writeFileSync@, writeSync as @VAR_writeSync@ }} from "node:fs";
 	import {{ join as @VAR_join@, delimiter as @VAR_delimiter@ }} from "node:path";
 	import {{ Recoverable as @VAR_Recoverable@, start as @VAR_start@ }} from "node:repl";
 	import {{ format as @VAR_format@, inspect as @VAR_inspect@ }} from "node:util";
 	process.chdir({cwd});
 	process.env.FUNCTERM_CURRENT_SHELL = "bun";
-	const @VAR_server@ = @VAR_start@({{ prompt: "> " }});
+		const @VAR_server@ = @VAR_start@({{ prompt: "> " }});
+		@VAR_server@.context.console = console;
 	const @VAR_evaluate@ = @VAR_server@.eval;
 	let @VAR_activeCommand@;
 	let @VAR_dispatching@ = false;
@@ -37,16 +41,12 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
 	}};
 	{output_capture}
 	const @VAR_restoreEnvironment@ = (@VAR_name@, @VAR_value@) => @VAR_value@ === undefined ? delete process.env[@VAR_name@] : process.env[@VAR_name@] = @VAR_value@;
-	const @VAR_finishCommand@ = () => {{
+		const @VAR_finishCommand@ = (@VAR_exitCode@ = undefined) => {{
 	    const @VAR_command@ = @VAR_activeCommand@;
-	    if (!@VAR_command@) return;
-	    @VAR_activeCommand@ = undefined;
+		    if (!@VAR_command@) return;
+		    @VAR_activeCommand@ = undefined;
+		    if (@VAR_exitCode@ !== undefined && !process.env.FUNCTERM_PARENT_SHELL) @VAR_writeFileSync@(@VAR_join@(@VAR_command@.directory, "{session_exit}"), "");
 	    @VAR_server@.writer = @VAR_command@.previousWriter;
-	    if (@VAR_command@.capture) {{
-	        @VAR_command@.capture.restore();
-	        @VAR_writeFileSync@(@VAR_join@(@VAR_command@.output, "{stdout_file}"), Buffer.concat(@VAR_command@.capture.stdout));
-	        @VAR_writeFileSync@(@VAR_join@(@VAR_command@.output, "{stderr_file}"), Buffer.concat(@VAR_command@.capture.stderr));
-	    }}
 	    const @VAR_elapsed@ = `${{Math.max(1, Math.ceil(performance.now() - @VAR_command@.started))}}ms`;
 	    const @VAR_environmentWasCleared@ = Object.keys(process.env).length === 0;
 	    for (const [@VAR_name@, @VAR_value@] of Object.entries(@VAR_command@.protectedEnvironment)) {{
@@ -55,7 +55,7 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
 		        }}
 		    }}
 		    @VAR_prependShimPath@();
-		    @VAR_runHelper@(["internal-write-done", "--command-id", @VAR_command@.id, "--exit-code", @VAR_command@.failed ? "1" : "0", "--time-consumption", @VAR_elapsed@, "--cwd", process.cwd(), "--directory", @VAR_command@.directory]);
+			    @VAR_streamBoundary@("end", @VAR_command@, {{ exitCode: @VAR_exitCode@ ?? (@VAR_command@.failed ? 1 : 0), elapsed: @VAR_elapsed@, cwd: process.cwd() }});
 	    @VAR_restoreEnvironment@("{command_id_env}", @VAR_command@.previousId);
 	    @VAR_restoreEnvironment@("{command_directory_env}", @VAR_command@.previousDirectory);
 	}};
@@ -109,10 +109,10 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
 	        @VAR_finishDeferredPrompt@();
 	    }}
 	}};
-	@VAR_server@.on("exit", () => {{
-	    @VAR_finishCommand@();
-	    @VAR_watcher@.close();
-	}});
+		@VAR_server@.on("exit", () => {{
+		    @VAR_watcher@.close();
+		}});
+		process.on("exit", @VAR_exitCode@ => @VAR_finishCommand@(@VAR_exitCode@));
 	const @VAR_stateDirectory@ = @VAR_join@(process.env.FUNCTERM_SESSION_ROOT, "{session_state}");
 	const @VAR_dispatchFile@ = @VAR_join@(@VAR_stateDirectory@, "{dispatch_file}");
 	const @VAR_dispatch@ = () => {{
@@ -140,9 +140,9 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
 	            previousId: @VAR_previousId@, previousDirectory: @VAR_previousDirectory@,
 	            protectedEnvironment: @VAR_protectedEnvironment@,
 	            previousError: @VAR_previousError@, previousWriter: @VAR_previousWriter@,
-	            started: performance.now(), failed: false, readingInput: true,
-		            capture: @VAR_receipt@.separate_output ? @VAR_captureOutput@() : undefined
-		        }};
+		            started: performance.now(), failed: false, readingInput: true,
+			        }};
+			        @VAR_streamBoundary@("start", @VAR_activeCommand@);
 		        @VAR_evaluationReturned@ = true;
 		        @VAR_server@.write(@VAR_source@.endsWith("\n") ? @VAR_source@ : `${{@VAR_source@}}\n`);
 	        @VAR_finishDeferredPrompt@();
@@ -168,13 +168,12 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
 "#,
         helper_env = HELPER_EXECUTABLE_ENV,
         session_state = SESSION_STATE_DIRECTORY,
+        session_exit = SESSION_EXIT_FILE,
         dispatch_file = DISPATCH_FILE,
         command_file = COMMAND_FILE,
         command_id_env = COMMAND_ID_ENV,
         command_directory_env = COMMAND_DIRECTORY_ENV,
-        stdout_file = STDOUT_FILE,
-        stderr_file = STDERR_FILE,
-        output_capture = output_capture::SCRIPT,
+        output_capture = transport::BOUNDARY,
         echo_control = echo_control::SCRIPT,
     );
     let protected = bootstrap.replace(

@@ -82,7 +82,7 @@ fn create_test_job() -> Result<OwnedHandle> {
         SetInformationJobObject(
             job.as_raw_handle(),
             JobObjectExtendedLimitInformation,
-            core::ptr::from_ref(&limits).cast(),
+            core::ptr::from_mut(&mut limits).cast(),
             size,
         )
     }

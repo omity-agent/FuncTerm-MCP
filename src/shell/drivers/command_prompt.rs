@@ -32,6 +32,32 @@ pub(super) fn interactive_arguments(arguments: &[std::ffi::OsString]) -> bool {
         .iter()
         .all(|value| matches!(value.as_str(), "/d" | "/q" | "/k"))
 }
+pub(super) fn normalize_batch_line(line: &str) -> String {
+    let trimmed = line.trim_start();
+    if !trimmed
+        .get(..4)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("for "))
+    {
+        return line.to_owned();
+    }
+    let characters: Vec<_> = line.chars().collect();
+    let mut normalized = String::with_capacity(line.len());
+    for (index, &character) in characters.iter().enumerate() {
+        let is_for_variable = character == '%'
+            && characters
+                .get(index + 1)
+                .is_some_and(char::is_ascii_alphabetic)
+            && (index == 0 || characters.get(index - 1) != Some(&'%'))
+            && characters.get(index + 2).is_none_or(|following| {
+                following.is_whitespace() || matches!(following, ')' | '(' | ',' | ';')
+            });
+        if is_for_variable {
+            normalized.push('%');
+        }
+        normalized.push(character);
+    }
+    normalized
+}
 fn initialization_script(context: StartupContext<'_>) -> Result<String> {
     let style = if context.ignore_shell_style {
         "set \"NO_COLOR=1\"\r\nprompt $G\r\n"
@@ -39,11 +65,11 @@ fn initialization_script(context: StartupContext<'_>) -> Result<String> {
         ""
     };
     Ok(format!(
-        "@echo off\r\n{}\r\nset {CURRENT_SHELL_ENV}=cmd\r\n{}\r\nset \"PATH=%~dp0;%FUNCTERM_SHIM_DIR%;%PATH%\"\r\ndoskey /listsize=0 >nul 2>nul\r\ndoskey f=\r\ncd /d {}\r\ntype nul > {}\r\n",
+        "@echo off\r\nchcp 65001 >nul\r\n{}\r\nset {CURRENT_SHELL_ENV}=cmd\r\n{}\r\nset \"PATH=%~dp0;%FUNCTERM_SHIM_DIR%;%PATH%\"\r\ndoskey /listsize=0 >nul 2>nul\r\ndoskey f=\r\nif not defined PROMPT prompt $P$G\r\nprompt $E]9999;FuncTerm;prompt;cmd;$P$E\\%PROMPT%\r\ncd /d {}\r\ntype nul > {}\r\n",
         startup_environment(crate::shell::ShellChoice::Cmd, context.environment)?
             .replace('\n', "\r\n"),
         style,
-        quote::cmd_string(&quote::native_path(context.cwd)?),
+        quote::cmd_string(&quote::native_path(context.cwd)?.replace('%', "%%")),
         quote::cmd_string(&quote::native_path(context.ready_file)?)
     ))
 }

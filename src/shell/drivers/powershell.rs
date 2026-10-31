@@ -76,7 +76,7 @@ function prompt {{
 }
 const INPUT_GUARD: &str = r"& {
     foreach ($@VAR_reservedName@ in @(
-        'f', 'Invoke-FuncTermCommand', 'Set-FuncTermShimPath',
+        'Invoke-FuncTermDispatcher', 'Invoke-FuncTermCommand', 'Set-FuncTermShimPath',
         'Invoke-FuncTermHelper', 'Publish-FuncTermStart'
     )) {
         if (Microsoft.PowerShell.Management\Get-Item -LiteralPath ('Alias:' + $@VAR_reservedName@) -ErrorAction SilentlyContinue) {

@@ -60,6 +60,7 @@ pub(super) fn launch(
         writer,
         slave,
         master: Some(pair.master),
+        tree_killer: None,
     })
 }
 fn apply_startup(command: &mut CommandBuilder, startup: ShellStartup) {

@@ -1,5 +1,5 @@
 use super::fixtures::{assert_parent, pipe_command, start_runtime};
-use crate::support::{create_tab, parse_command_result, send_command};
+use crate::support::{complete_command, create_tab, parse_command_result, send_command};
 #[test]
 fn file_and_null_input_never_activate_a_nested_repl() {
     let (_guard, cwd, _parent) = start_runtime("redirected devices");
@@ -80,7 +80,7 @@ fn cmd_preserves_custom_search_paths_and_empty_entries() {
         "lookup",
         "python -c \"print('SEARCH_PATH_READY')\"",
     ] {
-        let result = parse_command_result(&send_command(&tab.tab_id, command, 10.0));
+        let result = complete_command(&tab.tab_id, command);
         assert!(result.finished, "{result:?}");
         assert_eq!(result.exit_code, Some(0_i32), "{result:?}");
         assert!(result.stdout.contains("SEARCH_PATH_READY"), "{result:?}");

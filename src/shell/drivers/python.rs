@@ -6,7 +6,6 @@ pub(super) fn startup(context: StartupContext<'_>) -> Result<DriverStartup> {
     fs_err::write(&script, bootstrap::script(context)?)?;
     Ok(DriverStartup {
         args: vec![
-            "-i".to_owned(),
             "-u".to_owned(),
             crate::text::path_text(&script, "Python REPL bootstrap path")?,
         ],

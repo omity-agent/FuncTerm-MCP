@@ -75,6 +75,9 @@ impl Terminal {
     pub(super) fn model_title(&self) -> String {
         self.model_title.clone()
     }
+    pub(super) fn complete_at_prompt(&self, id: &str) -> Result<()> {
+        self.state.lock().captures.finish(id)
+    }
     pub(super) fn process(&self, chunk: &[u8], host: &HostProfile) -> Result<Vec<Vec<u8>>> {
         let mut state = self.state.lock();
         let processed = (|| {

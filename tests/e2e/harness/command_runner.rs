@@ -1,13 +1,21 @@
 use super::daemon;
-use super::parse::{TabCreated, parse_tab_created};
+use super::parse::{
+    CommandResult, TabCreated, parse_command_id, parse_command_result, parse_tab_created,
+};
 use super::process::read_pipe;
 use super::process::wait_for_status;
 use base64_turbo::STANDARD;
+use core::cell::RefCell;
 use core::time::Duration;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
+use std::time::Instant;
 pub(crate) const CLI_COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
 const PIPE_CLOSE_TIMEOUT: Duration = Duration::from_secs(5);
+thread_local! {
+    static TAB_SEPARATE_OUTPUT: RefCell<HashMap<String, bool>> = RefCell::new(HashMap::new());
+}
 pub(crate) fn exe() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_functerm"))
 }
@@ -32,7 +40,7 @@ pub(crate) fn create_tab(cwd: &Path, shell: &str) -> TabCreated {
     create_tab_with_env(cwd, shell, &daemon::active_env())
 }
 pub(crate) fn create_tab_with_env(cwd: &Path, shell: &str, env: &[(String, String)]) -> TabCreated {
-    parse_tab_created(&run_cli_with_env(
+    let created = parse_tab_created(&run_cli_with_env(
         &[
             "new-tab",
             "--no-profile",
@@ -42,19 +50,44 @@ pub(crate) fn create_tab_with_env(cwd: &Path, shell: &str, env: &[(String, Strin
             shell,
         ],
         env,
-    ))
+    ));
+    TAB_SEPARATE_OUTPUT.with(|tabs| {
+        tabs.borrow_mut()
+            .insert(created.tab_id.clone(), shell != "nu");
+    });
+    created
 }
 pub(crate) fn send_command(tab_id: &str, command: &str, wait_timeout: f64) -> Output {
+    let separate_output = TAB_SEPARATE_OUTPUT
+        .with(|tabs| tabs.borrow().get(tab_id).copied().unwrap_or(true))
+        .to_string();
     run_cli(&[
         "send-command",
         tab_id,
         "--command",
         command,
         "--separate-output",
-        "true",
+        &separate_output,
         "--wait-timeout",
         &wait_timeout.to_string(),
     ])
+}
+pub(crate) fn complete_command(tab_id: &str, command: &str) -> CommandResult {
+    wait_for_completion(&send_command(tab_id, command, 0.0))
+}
+pub(crate) fn wait_for_completion(accepted: &Output) -> CommandResult {
+    let id = parse_command_id(accepted);
+    let deadline = Instant::now() + CLI_COMMAND_TIMEOUT;
+    loop {
+        let observed = parse_command_result(&run_cli(&["view", &id, "--wait-timeout", "1"]));
+        if observed.finished {
+            return observed;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "command {id} did not finish within {CLI_COMMAND_TIMEOUT:?}: {observed:?}"
+        );
+    }
 }
 pub(crate) fn manual_write(tab_id: &str, bytes: &[u8], wait_timeout: f64) -> Output {
     let encoded = STANDARD.encode(bytes);

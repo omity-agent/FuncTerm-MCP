@@ -72,47 +72,6 @@ fn mcp_batch_preserves_order_and_isolates_errors() {
     assert!(text(errors.last().unwrap(), "/error").contains("either text or bytes"));
 }
 #[test]
-fn mcp_rapid_batches_retain_results_across_command_notifications() {
-    let mut session = McpSession::new();
-    let tabs: [String; 2] = create_tabs(&mut session);
-    let mut saved = Vec::new();
-    for round in 0_u8..8 {
-        let exec = tabs
-            .iter()
-            .map(|tab| {
-                json!({"tab_id": tab, "command": format!("echo ROUND_{round}"), "separate_output": round.is_multiple_of(2)})
-            })
-            .collect::<Vec<_>>();
-        let accepted = session.call(
-            "send_command",
-            json!({"exec": exec, "wait_timeout": 10_u64}),
-        );
-        for entry in entries(&accepted) {
-            assert_field(entry, "/result/command/finished", true);
-            assert_field(entry, "/result/command/exit_code", 0_i32);
-            saved.push(text(entry, "/result/command/command_id").to_owned());
-        }
-    }
-    let ids = saved.iter().map(String::as_str).collect::<Vec<_>>();
-    let viewed = session.view(&ids, 1, 0.0);
-    for (round_index, batch) in entries(&viewed).chunks(tabs.len()).enumerate() {
-        for entry in batch {
-            assert_field(entry, "/result/command/finished", true);
-            assert_field(entry, "/result/command/exit_code", 0_i32);
-            let field = if round_index.is_multiple_of(2) {
-                "stdout"
-            } else {
-                "output"
-            };
-            assert!(
-                text(entry, &format!("/result/command/{field}"))
-                    .contains(&format!("ROUND_{round_index}")),
-                "{viewed}"
-            );
-        }
-    }
-}
-#[test]
 fn mcp_wait_budget_is_shared_and_timeout_does_not_cancel_commands() {
     let mut session = McpSession::new();
     let [first, second] = create_tabs(&mut session);

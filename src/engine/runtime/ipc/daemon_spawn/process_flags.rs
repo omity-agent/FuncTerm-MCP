@@ -61,8 +61,7 @@ fn current_job_state() -> JobState {
         JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
         JobObjectExtendedLimitInformation, QueryInformationJobObject,
     };
-    use windows::core::BOOL;
-    let mut in_job = BOOL::default();
+    let mut in_job = 0_i32;
     let process = unsafe { GetCurrentProcess() };
     if unsafe { IsProcessInJob(process, None, &raw mut in_job) }
         .ok()
@@ -70,7 +69,7 @@ fn current_job_state() -> JobState {
     {
         return JobState::Unknown;
     }
-    if !in_job.as_bool() {
+    if in_job == 0_i32 {
         return JobState::NotInJob;
     }
     let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();

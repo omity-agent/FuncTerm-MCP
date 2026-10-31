@@ -14,6 +14,8 @@ struct CaptureState {
     phase: CapturePhase,
     title: String,
     output: Option<RenderedOutput>,
+    prompt_cwd: Option<String>,
+    prompt_revision: u64,
 }
 #[derive(Clone, PartialEq, Eq)]
 enum CapturePhase {
@@ -33,6 +35,8 @@ impl CommandCapture {
                 phase: CapturePhase::Pending,
                 title: initial,
                 output: (!separate_output).then(|| RenderedOutput::new(screen)),
+                prompt_cwd: None,
+                prompt_revision: 0,
             }),
             changed: Event::new(),
         }
@@ -110,6 +114,33 @@ impl CommandCapture {
         if state.phase == CapturePhase::Active {
             title.clone_into(&mut state.title);
         }
+    }
+    pub(super) fn observe_prompt(&self, cwd: String) {
+        let mut state = self.state.lock();
+        state.prompt_cwd = Some(cwd);
+        state.prompt_revision = state
+            .prompt_revision
+            .checked_add(1)
+            .unwrap_or_else(|| panic!("terminal prompt revision overflowed"));
+        drop(state);
+        self.changed.notify(usize::MAX);
+    }
+    pub(in crate::engine::runtime::session) async fn wait_prompt(
+        &self,
+        after: u64,
+    ) -> Result<Option<(u64, String)>> {
+        wait_until(&self.changed, Duration::MAX, || {
+            let state = self.state.lock();
+            Ok(state.prompt_revision > after
+                || !matches!(state.phase, CapturePhase::Pending | CapturePhase::Active))
+        })
+        .await?;
+        let state = self.state.lock();
+        Ok(state
+            .prompt_cwd
+            .as_ref()
+            .filter(|_| state.prompt_revision > after)
+            .map(|cwd| (state.prompt_revision, cwd.clone())))
     }
     pub(super) fn fail(&self, message: &str) {
         let mut state = self.state.lock();

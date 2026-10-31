@@ -1,4 +1,6 @@
 mod cleanup;
+#[cfg(windows)]
+mod containment;
 mod input;
 pub(super) mod process;
 use super::command::ManagedCommand;
@@ -24,6 +26,8 @@ pub(super) struct ShellSession {
     screen: Arc<Terminal>,
     #[builder(skip)]
     busy: Mutex<Option<Arc<ManagedCommand>>>,
+    #[builder(skip)]
+    terminated: Mutex<bool>,
     command_root: PathBuf,
     command_watch: Arc<PathWatch>,
     dispatch_file: PathBuf,
@@ -76,6 +80,14 @@ impl ShellSession {
     pub(super) fn is_alive(&self) -> Result<bool> {
         process::is_alive(self.child.lock().as_mut())
     }
+    pub(super) fn exit_code(&self) -> Result<Option<i32>> {
+        Ok(self
+            .child
+            .lock()
+            .try_wait()
+            .context("failed to inspect shell exit status")?
+            .map(|status| status.exit_code().cast_signed()))
+    }
     pub(super) fn write_invocation(
         &self,
         command_id: &str,
@@ -83,8 +95,9 @@ impl ShellSession {
         record: &CommandRecord,
         separate_output: bool,
     ) -> Result<()> {
-        fs_err::write(&record.source, command)?;
         let choice = self.current_choice();
+        let command_source = choice.command_source(command);
+        fs_err::write(&record.source, command_source)?;
         let cwd = crate::text::path_text(&self.cwd(), "command working directory")?;
         let dispatch = sonic_rs::to_vec(&crate::contract::CommandDispatch {
             command_id,
@@ -94,7 +107,7 @@ impl ShellSession {
         .context("failed to encode command dispatch")?;
         crate::publication::write_replace(&self.dispatch_file, dispatch)
             .context("failed to publish command dispatch")?;
-        let Some(invocation) = choice.invocation()? else {
+        let Some(invocation) = choice.invocation_for(&record.directory, separate_output)? else {
             return Ok(());
         };
         let invocation_bytes = invocation.into_bytes();
@@ -118,5 +131,9 @@ impl ShellSession {
     }
     pub(super) async fn wait_for_exit(&self) -> Result<()> {
         self.screen.wait_for_exit().await
+    }
+    pub(super) fn complete_interruption(&self, command: &ManagedCommand, cwd: &str) -> Result<()> {
+        command.publish_interruption(cwd)?;
+        self.screen.complete_at_prompt(command.id())
     }
 }

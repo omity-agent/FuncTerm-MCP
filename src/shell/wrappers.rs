@@ -4,7 +4,6 @@ mod start;
 mod template;
 mod variables;
 pub(super) use posix::{bash_wrapper, zsh_wrapper};
-pub(in crate::shell) use runners::prepare_nushell_command;
 pub(super) use runners::{cmd_wrapper, nushell_wrapper, powershell_wrapper};
 pub(super) use template::cmd_dispatcher;
 pub(in crate::shell) use variables::{

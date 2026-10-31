@@ -40,7 +40,8 @@ pub(in crate::shell) fn cmd_dispatcher() -> String {
 pub(super) fn powershell_dispatcher() -> String {
     let session_root_env = SESSION_ROOT_ENV;
     let runner = POWERSHELL_COMMAND_FUNCTION;
-    format ! ("function f {{
+    let dispatcher = crate::contract::POWERSHELL_DISPATCHER_FUNCTION;
+    format ! ("function {dispatcher} {{
     try {{
         $@VAR_receipt@ = Invoke-FuncTermHelper -@VAR_Arguments@ @(
             'internal-claim-command', '--session-root', $env:{session_root_env}, '--shell', 'powershell'
@@ -79,14 +80,6 @@ pub(super) fn posix_dispatcher() -> String {
 }}"#,
     )
 }
-pub(super) fn nushell_dispatcher() -> String {
-    let session_root_env = SESSION_ROOT_ENV;
-    let helper_env = HELPER_EXECUTABLE_ENV;
-    let runner = POSIX_COMMAND_FUNCTION;
-    format!(
-        "def --env f [] {{\n    let @VAR_helper@ = $env.{helper_env}\n    let @VAR_result@ = (^$@VAR_helper@ internal-claim-command --session-root $env.{session_root_env} --shell nu | complete)\n    if $@VAR_result@.exit_code != 0 {{\n        print --stderr $@VAR_result@.stderr\n        return\n    }}\n    let @VAR_receipt@ = ($@VAR_result@.stdout | from json)\n    {runner} $@VAR_receipt@.command_id $@VAR_receipt@.directory $@VAR_receipt@.working_directory $@VAR_receipt@.separate_output\n}}",
-    )
-}
 fn render(template: &str, extra: &[(&str, &str)]) -> String {
     let mut text = template.to_owned();
     for &(placeholder, value) in COMMON.iter().chain(extra.iter()) {
@@ -112,6 +105,5 @@ for /f "usebackq delims=" %%r in ("%@VAR_receipt_file@%") do (
         set "@VAR_separate_output@=%%r"
     )
 )
-call "%~dp0cmd_run.bat" "%@VAR_command_id@%" "%@VAR_directory@%" "%@VAR_working_directory@%" "%@VAR_separate_output@%"
-exit /b %ERRORLEVEL%
+"%~dp0cmd_run.bat" "%@VAR_command_id@%" "%@VAR_directory@%" "%@VAR_working_directory@%" "%@VAR_separate_output@%"
 "#;

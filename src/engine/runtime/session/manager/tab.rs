@@ -142,6 +142,7 @@ impl Tab {
         Ok(self.store_snapshot(TabSnapshot::from_session(session)?, false))
     }
     pub(super) fn close_session(&self, session: &ShellSession) -> Result<()> {
+        session.terminate()?;
         self.store_snapshot(TabSnapshot::from_session(session)?, true);
         Ok(())
     }

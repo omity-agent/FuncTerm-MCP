@@ -1,8 +1,11 @@
 use super::{DriverStartup, StartupContext, os_strings_lower};
+use crate::contract::NUSHELL_SUBMISSION_FILE;
+use crate::shell::ShellChoice;
 use crate::shell::quote;
 use crate::shell::shims::CURRENT_SHELL_ENV;
 use crate::shell::wrappers::{nushell_wrapper, startup_environment};
-use anyhow::Result;
+use anyhow::{Result, ensure};
+use std::path::Path;
 pub(super) fn startup(context: StartupContext<'_>) -> Result<DriverStartup> {
     let bootstrap = context.startup_directory.join("nu_bootstrap.nu");
     fs_err::write(&bootstrap, initialization_script(context)?)?;
@@ -49,16 +52,29 @@ $env.config.shell_integration = { osc2: false, osc7: false, osc8: false, osc9_9:
     } else {
         ""
     };
-    Ok(format!(
-        "{}\n$env.{CURRENT_SHELL_ENV} = 'nu'\n{}\n{}\ncd {}\nensure_nushell_shims\nsave_nushell_state {} {} {} {}\n'' | save --force --raw {}\n",
+    let initialization = format!(
+        "{}\n$env.{CURRENT_SHELL_ENV} = 'nu'\nlet @VAR_active_command@ = {}\nlet @VAR_helper_path@ = $env.FUNCTERM_HELPER_EXECUTABLE\n{}\nlet @VAR_recovery_environment@ = $env\n{}\ncd {}\nensure_nushell_shims\n$env.config.hooks.pre_execution = ($env.config.hooks.pre_execution | append {{ functerm_begin }})\n$env.config.hooks.pre_prompt = ($env.config.hooks.pre_prompt | append {{ functerm_finish }})\n'' | save --force --raw {}\n",
         startup_environment(crate::shell::ShellChoice::NuShell, context.environment)?,
-        nushell_wrapper(),
+        quote::nushell_path(&context.ready_file.with_file_name("active-command.nuon"))?,
         style,
+        nushell_wrapper(),
         quote::nushell_path(context.cwd)?,
-        quote::nushell_path(&context.startup_directory.join("initial-directory.txt"))?,
-        quote::nushell_path(&context.ready_file.with_file_name("nushell-env.nuon"))?,
-        quote::nushell_path(&context.ready_file.with_file_name("nushell-config.nuon"))?,
-        quote::nushell_path(&context.ready_file.with_file_name("nushell-declarations.nu"))?,
         quote::nushell_path(context.ready_file)?
-    ))
+    );
+    Ok(crate::shell::wrappers::VariableNamespace::new().render(&initialization))
+}
+pub(super) fn invocation(
+    directory: &Path,
+    separate_output: bool,
+) -> Result<super::ShellInvocation> {
+    ensure!(
+        !separate_output,
+        "NuShell does not support separate_output=true; use separate_output=false"
+    );
+    let submission = directory.join(NUSHELL_SUBMISSION_FILE);
+    let submission_path = quote::nushell_path(&submission)?;
+    // The execution hook fills this file after the line editor validates the invocation.
+    fs_err::write(&submission, b"")?;
+    let line = format!("source {submission_path}");
+    super::ShellInvocation::new(line, super::invocation_terminator(ShellChoice::NuShell))
 }

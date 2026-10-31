@@ -1,27 +1,19 @@
-#[cfg(test)]
 #[path = "mcp/presentation/cli_cursor.rs"]
 mod cli_cursor;
-#[cfg(test)]
 #[path = "mcp/wire/coexistence.rs"]
 mod coexistence;
-#[cfg(test)]
 #[path = "mcp/execution.rs"]
 mod execution;
 #[path = "mcp/wire/http_peer.rs"]
 mod http_peer;
-#[cfg(test)]
 #[path = "mcp/input_delivery.rs"]
 mod input_delivery;
-#[cfg(test)]
 #[path = "mcp/presentation/input_schema.rs"]
 mod input_schema;
-#[cfg(test)]
 #[path = "mcp/inspection.rs"]
 mod inspection;
-#[cfg(test)]
 #[path = "mcp/presentation/live_output.rs"]
 mod live_output;
-#[cfg(test)]
 #[path = "mcp/presentation/pagination.rs"]
 mod pagination;
 #[path = "mcp/presentation/policy_matrix.rs"]

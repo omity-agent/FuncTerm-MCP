@@ -92,8 +92,12 @@ impl ShellChoice {
             ready_file,
         })
     }
-    pub(crate) fn invocation(self) -> Result<Option<drivers::ShellInvocation>> {
-        drivers::invocation(self)
+    pub(crate) fn invocation_for(
+        self,
+        directory: &Path,
+        separate_output: bool,
+    ) -> Result<Option<drivers::ShellInvocation>> {
+        drivers::invocation_for(self, directory, separate_output)
     }
     pub(crate) const fn source_file(self) -> &'static str {
         match self {
@@ -111,6 +115,9 @@ impl ShellChoice {
     }
     pub(crate) fn keyboard_bytes(self, bytes: &[u8]) -> Cow<'_, [u8]> {
         drivers::keyboard_bytes(self, bytes)
+    }
+    pub(crate) fn command_source(self, source: &str) -> String {
+        drivers::command_source(self, source)
     }
     pub(crate) fn from_canonical_name(value: &str) -> Result<Self> {
         let parsed = value

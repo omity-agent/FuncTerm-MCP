@@ -9,6 +9,9 @@ enum CommandTermination {
     Interrupted,
 }
 impl CommandInputHistory {
+    pub(super) const fn interrupted(&self) -> bool {
+        self.interrupt_delivered
+    }
     pub(super) const fn observe(&mut self, delivery: InputDelivery) {
         self.interrupt_delivered |= delivery.interrupted();
     }

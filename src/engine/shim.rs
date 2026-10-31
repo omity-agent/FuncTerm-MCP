@@ -1,11 +1,14 @@
 mod invocation;
 mod routing;
+mod spawning;
 mod stdio;
 pub(crate) use self::stdio::terminal_output;
-use crate::shell::{ShellChoice, ShellStartup, shims};
+use crate::shell::{ShellChoice, shims};
 use anyhow::{Context as _, Result};
 use core::time::Duration;
 use routing::LaunchRoute;
+use spawning::spawn_shell;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 use std::time::Instant;
@@ -68,12 +71,20 @@ fn run_interactive(choice: ShellChoice, arguments: &[std::ffi::OsString]) -> Res
     let session_root = nested_session_root(choice)?;
     fs_err::create_dir_all(&session_root)?;
     let cwd = std::env::current_dir().context("failed to read current directory")?;
+    let mut variables = crate::runtime::protocol::EnvironmentSnapshot::capture().variables();
+    variables.retain(|pair| {
+        !crate::runtime::protocol::environment_name_equals(&pair.0, shims::PARENT_SHELL_ENV)
+    });
+    variables.push((
+        OsString::from(shims::PARENT_SHELL_ENV),
+        OsString::from(parent_shell.canonical_name()),
+    ));
     let startup = choice.startup(
         &cwd,
         &session_root,
         routing::load_profile(arguments)?,
         routing::ignore_shell_style()?,
-        &crate::runtime::protocol::EnvironmentSnapshot::capture(),
+        &crate::runtime::protocol::EnvironmentSnapshot::from_variables(variables),
     )?;
     let ready_file = startup.ready_file.clone();
     let child = spawn_shell(choice, startup)?;
@@ -84,17 +95,6 @@ fn run_interactive(choice: ShellChoice, arguments: &[std::ffi::OsString]) -> Res
         Ok(())
     })?;
     Ok(exit_code(status))
-}
-fn spawn_shell(choice: ShellChoice, startup: ShellStartup) -> Result<std::process::Child> {
-    let mut command = Command::new(real_executable(choice)?);
-    command.args(startup.args);
-    for (name, value) in startup.env {
-        command.env(name, value);
-    }
-    stdio::attach_session_stdio(&mut command)?;
-    command
-        .spawn()
-        .with_context(|| format!("failed to spawn {}", choice.canonical_name()))
 }
 fn complete_active_command(cwd: &Path, time_consumption: Duration) -> Result<()> {
     let Some(directory) = std::env::var_os(shims::COMMAND_DIRECTORY_ENV) else {

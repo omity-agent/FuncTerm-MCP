@@ -36,7 +36,32 @@ impl Tab {
         let tab = Arc::clone(self);
         self.supervisors.spawn(async move {
             let session = Arc::clone(&reservation.session);
-            let result = async { let observed = tokio :: select ! { completion = command . wait (Duration :: MAX) => completion ?, exited = reservation . session . wait_for_exit () => { exited ?; command . wait (Duration :: ZERO) . await ? } } ; match observed { CommandWait :: Finished => tab . finish_done_command (& command) . await , CommandWait :: Running => { tab . fail_command (& command , "shell exited before command wrote done.json" . to_owned ()) . await ? ; let closed_tab = Arc :: clone (& tab) ; let stopped_session = Arc :: clone (& reservation . session) ; tab . blocking . run (move | | closed_tab . close_session (& stopped_session)) . await } CommandWait :: Failed => Ok (()) , } } . await ;
+            let result = async {
+                let observed = tokio::select! {
+                    completion = command.wait(Duration::MAX) => completion,
+                    exited = session.wait_for_exit() => {
+                        exited?;
+                        command.wait(Duration::ZERO).await
+                    }
+                    prompted = command.interrupted_prompt() => {
+                        if let Some(cwd) = prompted? {
+                            let target = Arc::clone(&session);
+                            let managed = Arc::clone(&command);
+                            tab.blocking.run(move || target.complete_interruption(&managed, &cwd)).await?;
+                        }
+                        command.wait(Duration::ZERO).await
+                    }
+                };
+                match observed {
+                    Ok(CommandWait::Finished) => tab.finish_done_command(&command).await,
+                    Ok(CommandWait::Failed) => Ok(()),
+                    result => {
+                        if tab.abort_if_shell_dead(&session, &command).await? { return Ok(()); }
+                        result?;
+                        anyhow::bail!("terminal ended command observation while shell was still running")
+                    }
+                }
+            }.await;
             if let Err(error) = result {
                 tracing :: error ! (command_id = % command . id () , error = % error , "command supervision failed");
                 if let Err(failure) = tab

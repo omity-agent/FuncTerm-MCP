@@ -1,11 +1,15 @@
 use anyhow::{Context as _, Result};
+#[cfg(unix)]
 use kill_tree::{Config, blocking::kill_tree_with_config};
 use parking_lot::Mutex;
-use portable_pty::Child;
+use portable_pty::{Child, ChildKiller};
 use std::thread::JoinHandle;
 #[derive(Default)]
 pub(in crate::engine::runtime::session::manager) struct ProcessTree {
+    #[cfg(unix)]
     process_id: Mutex<Option<u32>>,
+    #[cfg(windows)]
+    job: Mutex<Option<super::containment::ProcessGuard>>,
 }
 impl ProcessTree {
     pub(in crate::engine::runtime::session::manager) fn new() -> Self {
@@ -14,13 +18,37 @@ impl ProcessTree {
     pub(in crate::engine::runtime::session::manager) fn attach(
         &self,
         child: &dyn Child,
+        tree_killer: Option<Box<dyn ChildKiller + Send + Sync>>,
     ) -> Result<()> {
-        let process_id = child
-            .process_id()
-            .context("shell child does not expose a process id")?;
-        *self.process_id.lock() = Some(process_id);
+        #[cfg(windows)]
+        {
+            *self.job.lock() = Some(super::containment::assign(child, tree_killer)?);
+        }
+        #[cfg(unix)]
+        {
+            anyhow::ensure!(
+                tree_killer.is_none(),
+                "an external process guard is not supported for Unix PTYs"
+            );
+            let process_id = child
+                .process_id()
+                .context("shell child does not expose a process id")?;
+            *self.process_id.lock() = Some(process_id);
+        }
         Ok(())
     }
+    #[cfg(windows)]
+    pub(in crate::engine::runtime::session::manager) fn terminate(&self) -> Result<()> {
+        let mut stored_job = self.job.lock();
+        if let Some(job) = stored_job.as_mut() {
+            job.terminate()
+                .context("failed to terminate shell containment Job")?;
+            *stored_job = None;
+        }
+        drop(stored_job);
+        Ok(())
+    }
+    #[cfg(unix)]
     pub(in crate::engine::runtime::session::manager) fn terminate(&self) -> Result<()> {
         let mut stored_process_id = self.process_id.lock();
         let Some(process_id) = *stored_process_id else {

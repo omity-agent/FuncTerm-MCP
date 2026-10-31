@@ -20,7 +20,7 @@ impl Tab {
             return self.blocking.run(move || idle_tab.tab_view(&session)).await;
         };
         if let Some(command) = self.find_command(&command_id) {
-            match command.wait(wait_timeout).await? {
+            match self.observe_command(&command, wait_timeout).await? {
                 super::super::command::CommandWait::Finished => {
                     self.finish_done_command(&command).await?;
                 }
@@ -45,9 +45,12 @@ impl Tab {
             if let Some(command_id) = session.busy_command_id()
                 && let Some(command) = self.find_command(&command_id)
             {
-                command.mark_failed("shell exited before command wrote done.json")?;
+                command.mark_exited(session.exit_code()?.ok_or_else(|| {
+                    anyhow::anyhow!("shell exit status is missing after process termination")
+                })?)?;
                 session.release(command.id());
             }
+            session.terminate()?;
             self.close_session(session)?;
             Ok(self.snapshot_view())
         }

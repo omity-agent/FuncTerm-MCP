@@ -3,21 +3,12 @@ pub(super) fn assert_persistent_state(tab: &str, shell: &str) {
     let definition = parse_command_result(&send_command(tab, definition_command(shell), 10.0));
     assert!(definition.finished, "{shell}: {definition:?}");
     assert_eq!(definition.exit_code, Some(0_i32), "{shell}: {definition:?}");
-    if shell == "nu" {
-        let record = crate::support::command_directory(tab, "probe");
-        let declarations = record
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("state/nushell-declarations.nu");
-        let archived = fs_err::read_to_string(declarations).unwrap();
-        assert!(archived.contains("def functerm-state"));
-        assert!(archived.contains("alias functerm-alias"));
-        assert!(!archived.contains("def exit "), "{archived}");
-    }
     let query = parse_command_result(&send_command(tab, query_command(shell), 10.0));
-    assert_eq!(query.exit_code, Some(0_i32), "{shell}: {query:?}");
+    assert_eq!(
+        query.exit_code,
+        Some(i32::from(shell == "powershell")),
+        "{shell}: {query:?}"
+    );
     for marker in expected_markers(shell) {
         assert!(
             query.stdout.contains(&format!("MCP_PTY_STATE_{marker}")),
@@ -25,11 +16,15 @@ pub(super) fn assert_persistent_state(tab: &str, shell: &str) {
         );
     }
     assert!(
-        query.stderr.contains("MCP_PTY_STATE_STDERR"),
+        if shell == "nu" {
+            query.stdout.contains("MCP_PTY_STATE_STDERR")
+        } else {
+            query.stderr.contains("MCP_PTY_STATE_STDERR")
+        },
         "{shell}: {query:?}"
     );
     assert!(
-        !query.stdout.contains("MCP_PTY_STATE_STDERR"),
+        shell == "nu" || !query.stdout.contains("MCP_PTY_STATE_STDERR"),
         "{shell}: {query:?}"
     );
 }

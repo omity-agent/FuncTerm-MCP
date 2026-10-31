@@ -3,6 +3,10 @@ use crate::runtime::session::manager::process;
 use anyhow::{Context as _, Result};
 impl ShellSession {
     pub(in crate::engine::runtime::session::manager) fn terminate(&self) -> Result<()> {
+        let mut terminated = self.terminated.lock();
+        if *terminated {
+            return Ok(());
+        }
         let mut child = self.child.lock();
         self.process_tree.terminate()?;
         tracing::debug!("waiting for closed shell process");
@@ -10,6 +14,8 @@ impl ShellSession {
         tracing::debug!("closed shell process exited");
         drop(child);
         drop(self.slave.lock().take());
+        *terminated = true;
+        drop(terminated);
         Ok(())
     }
 }

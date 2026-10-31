@@ -25,7 +25,9 @@ impl TabDirectory {
     }
 }
 impl Tab {
-    pub(super) async fn close(self: &Arc<Self>) -> Result<()> {
+    pub(in crate::engine::runtime::session::manager) async fn close(
+        self: &Arc<Self>,
+    ) -> Result<()> {
         tracing::debug!(tab_id = %self.id(), "waiting for tab operation before close");
         let _operation = self.operation.lock().await;
         tracing::debug!(tab_id = %self.id(), "closing tab session");

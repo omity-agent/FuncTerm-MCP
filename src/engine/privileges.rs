@@ -21,7 +21,7 @@ use anyhow::{Context as _, Result};
 use clap::ValueEnum;
 #[cfg(unix)]
 use portable_pty::CommandBuilder;
-use portable_pty::{Child, MasterPty, SlavePty};
+use portable_pty::{Child, ChildKiller, MasterPty, SlavePty};
 #[cfg(windows)]
 pub(crate) use relay_process::spawn as spawn_normal_host;
 #[cfg(unix)]
@@ -48,6 +48,7 @@ pub(crate) struct PtyProcess {
     pub(crate) writer: Box<dyn Write + Send>,
     pub(crate) slave: Option<Box<dyn SlavePty + Send>>,
     pub(crate) master: Option<Box<dyn MasterPty + Send>>,
+    pub(crate) tree_killer: Option<Box<dyn ChildKiller + Send + Sync>>,
 }
 #[cfg(unix)]
 impl ShellIdentity {

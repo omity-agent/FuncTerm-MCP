@@ -116,7 +116,6 @@ futures-util = { version = "*", features = ["sink"] }
 humantime = "*"
 interprocess = { version = "*", features = ["tokio"] }
 itertools = "*"
-kill_tree = "*"
 named-lock = "*"
 nanoid = "*"
 notify = "*"
@@ -159,6 +158,7 @@ vte = { git = "https://github.com/alacritty/vte" }
 which = "*"
 
 [dev-dependencies]
+kill_tree = "*"
 reqwest = { version = "*", default-features = false, features = ["blocking"] }
 rmp-serde = "*"
 wait-timeout = "*"
@@ -167,6 +167,7 @@ wait-timeout = "*"
 anyhow = { git = "https://github.com/dtolnay/anyhow" }
 
 [target.'cfg(unix)'.dependencies]
+kill_tree = "*"
 exacl = "*"
 nix = { version = "*", features = ["user"] }
 privdrop = "*"

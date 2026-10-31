@@ -5,7 +5,7 @@ mod powershell;
 mod python;
 mod unix_shell;
 use super::ShellChoice;
-use crate::contract::DISPATCHER_COMMAND;
+use crate::contract::{DISPATCHER_COMMAND, POWERSHELL_DISPATCHER_FUNCTION};
 use alloc::borrow::Cow;
 use anyhow::{Context as _, Result, bail};
 use std::ffi::OsString;
@@ -27,7 +27,6 @@ pub(crate) struct ShellInvocation {
 pub(crate) enum InvocationTerminator {
     CarriageReturn,
     LineFeed,
-    CarriageReturnLineFeed,
 }
 pub(crate) struct DriverStartup {
     pub(crate) args: Vec<String>,
@@ -50,7 +49,6 @@ impl InvocationTerminator {
         match self {
             Self::CarriageReturn => "\r",
             Self::LineFeed => "\n",
-            Self::CarriageReturnLineFeed => "\r\n",
         }
     }
 }
@@ -69,17 +67,27 @@ pub(crate) fn invocation(choice: ShellChoice) -> Result<Option<ShellInvocation>>
     let line = match choice {
         ShellChoice::Bun => return Ok(None),
         ShellChoice::Python => "_functerm_dispatch()".to_owned(),
-        ShellChoice::PowerShell => format!(". {DISPATCHER_COMMAND}"),
+        ShellChoice::PowerShell => format!(". {POWERSHELL_DISPATCHER_FUNCTION}"),
         ShellChoice::Bash | ShellChoice::NuShell | ShellChoice::Zsh | ShellChoice::Cmd => {
             DISPATCHER_COMMAND.to_owned()
         }
     };
     ShellInvocation::new(line, invocation_terminator(choice)).map(Some)
 }
+pub(crate) fn invocation_for(
+    choice: ShellChoice,
+    directory: &Path,
+    separate_output: bool,
+) -> Result<Option<ShellInvocation>> {
+    if choice == ShellChoice::NuShell {
+        return nushell::invocation(directory, separate_output).map(Some);
+    }
+    invocation(choice)
+}
 pub(crate) fn prepare_command(
     choice: ShellChoice,
     directory: &Path,
-    session_root: &Path,
+    _session_root: &Path,
 ) -> Result<()> {
     let source = directory.join(choice.source_file());
     let metadata = fs_err::metadata(&source).with_context(|| {
@@ -93,9 +101,6 @@ pub(crate) fn prepare_command(
         "command input is not a regular file: {}",
         source.display()
     );
-    if choice == ShellChoice::NuShell {
-        crate::shell::wrappers::prepare_nushell_command(directory, session_root)?;
-    }
     Ok(())
 }
 pub(crate) fn keyboard_bytes(choice: ShellChoice, bytes: &[u8]) -> Cow<'_, [u8]> {
@@ -107,6 +112,23 @@ pub(crate) fn keyboard_bytes(choice: ShellChoice, bytes: &[u8]) -> Cow<'_, [u8]>
         | ShellChoice::Cmd
         | ShellChoice::Bun
         | ShellChoice::Python => Cow::Borrowed(bytes),
+    }
+}
+pub(crate) fn command_source(choice: ShellChoice, source: &str) -> String {
+    let normalized = source.replace("\r\n", "\n");
+    let text = if choice == ShellChoice::Cmd {
+        normalized
+            .split('\n')
+            .map(command_prompt::normalize_batch_line)
+            .collect::<Vec<_>>()
+            .join("\n")
+    } else {
+        normalized
+    };
+    if choice == ShellChoice::Cmd {
+        text.replace('\n', "\r\n")
+    } else {
+        text
     }
 }
 pub(crate) fn interactive_arguments(choice: ShellChoice, arguments: &[OsString]) -> bool {
@@ -123,10 +145,8 @@ pub(crate) fn interactive_arguments(choice: ShellChoice, arguments: &[OsString])
 }
 const fn invocation_terminator(choice: ShellChoice) -> InvocationTerminator {
     match choice {
-        ShellChoice::PowerShell => InvocationTerminator::CarriageReturn,
-        ShellChoice::Python => platform_carriage_return(),
-        ShellChoice::NuShell => platform_line_ending(),
-        ShellChoice::Cmd => InvocationTerminator::CarriageReturnLineFeed,
+        ShellChoice::PowerShell | ShellChoice::Cmd => InvocationTerminator::CarriageReturn,
+        ShellChoice::Python | ShellChoice::NuShell => platform_carriage_return(),
         ShellChoice::Bash | ShellChoice::Zsh | ShellChoice::Bun => InvocationTerminator::LineFeed,
     }
 }
@@ -136,14 +156,6 @@ const fn platform_carriage_return() -> InvocationTerminator {
 }
 #[cfg(not(windows))]
 const fn platform_carriage_return() -> InvocationTerminator {
-    InvocationTerminator::LineFeed
-}
-#[cfg(windows)]
-const fn platform_line_ending() -> InvocationTerminator {
-    InvocationTerminator::CarriageReturnLineFeed
-}
-#[cfg(not(windows))]
-const fn platform_line_ending() -> InvocationTerminator {
     InvocationTerminator::LineFeed
 }
 pub(crate) fn from_shim_name(value: &str) -> Option<ShellChoice> {

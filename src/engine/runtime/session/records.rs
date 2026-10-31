@@ -14,6 +14,7 @@ pub(super) struct CommandRecord {
     pub(super) source: PathBuf,
     pub(super) done: PathBuf,
     pub(super) released: PathBuf,
+    pub(super) session_exit: PathBuf,
 }
 pub(super) type DoneFile = crate::contract::CommandCompletion<String>;
 pub(super) fn lifecycle_event(event: &notify::Event) -> bool {
@@ -35,6 +36,7 @@ pub(super) fn create_record(
         source: command_dir.join(choice.source_file()),
         done: command_dir.join(DONE_FILE),
         released: command_dir.join(RELEASED_FILE),
+        session_exit: command_dir.join(crate::contract::SESSION_EXIT_FILE),
         directory: command_dir,
     })
 }

@@ -1,139 +1,77 @@
-mod capture_state;
-mod instrumentation;
-mod worker_setup;
-pub(in crate::shell) use worker_setup::prepare_nushell_command;
+use super::super::{template, variables};
+use crate::contract::{DISPATCH_FILE, NUSHELL_SUBMISSION_FILE, SESSION_STATE_DIRECTORY};
 pub(in crate::shell) fn wrapper() -> String {
-    instrumentation::render(TEMPLATE)
+    let protected = TEMPLATE
+        .replace(
+            "@NUSHELL_PROTECTED_ENVIRONMENT@",
+            &variables::nushell_protected_environment_names(),
+        )
+        .replace("@DISPATCH@", DISPATCH_FILE)
+        .replace("@SUBMISSION@", NUSHELL_SUBMISSION_FILE)
+        .replace("@STATE_DIRECTORY@", SESSION_STATE_DIRECTORY);
+    template::render_command_function(&protected, "functerm_finish")
 }
-const TEMPLATE : & str = "def --env @FUNCTION@ [@VAR_command_id@: string, @VAR_directory@: path, @VAR_working_directory@: path, @VAR_separate_output@: bool] {
-		let @VAR_stdout_file@ = ($@VAR_directory@ | path join '@STDOUT@')
-		let @VAR_stderr_file@ = ($@VAR_directory@ | path join '@STDERR@')
-	    let @VAR_session_state_dir@ = ($env.FUNCTERM_SESSION_ROOT | path join 'state')
-	    let @VAR_env_state_file@ = ($@VAR_session_state_dir@ | path join 'nushell-env.nuon')
-	    let @VAR_config_state_file@ = ($@VAR_session_state_dir@ | path join 'nushell-config.nuon')
-	    let @VAR_previous_env_names@ = if ($@VAR_env_state_file@ | path exists) {
-	        open --raw $@VAR_env_state_file@ | from nuon | columns
-	    } else {
-	        []
-	    }
-		let @VAR_cwd_file@ = ($@VAR_directory@ | path join 'nushell-cwd.txt')
-		let @VAR_exit_file@ = ($@VAR_directory@ | path join '@NUSHELL_EXIT_REQUEST@')
-		let @VAR_config_file@ = ($@VAR_directory@ | path join 'functerm-config.nu')
-		let @VAR_env_config_file@ = ($@VAR_directory@ | path join 'functerm-env.nu')
-		let @VAR_launch_file@ = ($@VAR_directory@ | path join 'nushell-launch.txt')
-	    let @VAR_previous_command_id@ = $env.@COMMAND_ID_ENV@?
-	    let @VAR_previous_command_directory@ = $env.@COMMAND_DIR_ENV@?
-	    $env.@COMMAND_ID_ENV@ = $@VAR_command_id@
-	    $env.@COMMAND_DIR_ENV@ = ($@VAR_directory@ | path expand)
-	    let @VAR_state@ = try {
-	        let @VAR_shim_dir@ = $env.FUNCTERM_SHIM_DIR
-	        $env.PATH = ($env.PATH | where {|@VAR_entry@| $@VAR_entry@ != $@VAR_shim_dir@ } | prepend $@VAR_shim_dir@)
-	        let @VAR_command@ = (open --raw $@VAR_launch_file@)
-	        let @VAR_nushell@ = $env.FUNCTERM_REAL_NUSHELL?
-	        if ($@VAR_nushell@ | is-empty) {
-	            error make {msg: 'FUNCTERM_REAL_NUSHELL is not set'}
-	        }
-	        let @VAR_helper@ = $env.@HELPER_ENV@?
-	        if ($@VAR_helper@ | is-empty) {
-	            error make {msg: '@HELPER_ENV@ is not set'}
-	        }
-	        ^$@VAR_helper@ internal-write-start --command-id $@VAR_command_id@ --directory $@VAR_directory@
-	        if $env.LAST_EXIT_CODE != 0 {
-	            error make {msg: 'failed to publish command start'}
-	        }
-	        let @VAR_command_started_at@ = date now
-	        mut @VAR_exit_code@ = 0
-	        if $@VAR_separate_output@ {
-	            let @VAR_result@ = (^$@VAR_nushell@ --no-history --config $@VAR_config_file@ --env-config $@VAR_env_config_file@ --commands $@VAR_command@ | complete)
-	            $@VAR_exit_code@ = $@VAR_result@.exit_code
-	            $@VAR_result@.stdout | save --force --raw $@VAR_stdout_file@
-	            $@VAR_result@.stderr | save --force --raw $@VAR_stderr_file@
-	            print --raw --no-newline (open --raw $@VAR_stdout_file@)
-	            print --raw --no-newline --stderr (open --raw $@VAR_stderr_file@)
-	        } else {
-	            let @VAR_native_exit_code@ = try {
-	                ^$@VAR_nushell@ --no-history --config $@VAR_config_file@ --env-config $@VAR_env_config_file@ --commands $@VAR_command@
-	                0
-	            } catch {|@VAR_native_error@|
-	                if $@VAR_native_error@.exit_code? == null {
-	                    error make $@VAR_native_error@
-	                } else {
-	                    $@VAR_native_error@.exit_code
-	                }
-	            }
-	            $@VAR_exit_code@ = $@VAR_native_exit_code@
-	        }
-	        let @VAR_time_consumption@ = ((date now) - $@VAR_command_started_at@) | into string
-	        let @VAR_command_cwd@ = if ($@VAR_cwd_file@ | path exists) {
-	            open --raw $@VAR_cwd_file@
-	        } else {
-	            $@VAR_working_directory@ | path expand
-	        }
-	        restore_nushell_environment $@VAR_env_state_file@ $@VAR_config_state_file@ $@VAR_previous_env_names@
-	        { cwd: $@VAR_command_cwd@, exit_code: $@VAR_exit_code@, time_consumption: $@VAR_time_consumption@ }
-	    } catch {|@VAR_error@|
-	        $@VAR_error@.msg | save --append --raw $@VAR_stderr_file@
-	        print --stderr $@VAR_error@.msg
-	        { cwd: ($@VAR_working_directory@ | path expand), exit_code: 1, time_consumption: '0ns' }
-	    }
-		    let @VAR_exit_request@ = if ($@VAR_exit_file@ | path exists) {
-		        open --raw $@VAR_exit_file@ | from nuon
-		    } else {
-		        null
-		    }
-	    let @VAR_helper@ = $env.@HELPER_ENV@?
-	    if ($@VAR_helper@ | is-empty) {
-	        print --stderr '@HELPER_ENV@ is not set'
-	        return 1
-	    }
-		    ^$@VAR_helper@ internal-write-done --command-id $@VAR_command_id@ --exit-code $@VAR_state@.exit_code --time-consumption $@VAR_state@.time_consumption --cwd $@VAR_state@.cwd --directory $@VAR_directory@
-		    if $env.LAST_EXIT_CODE != 0 {
-		        error make {msg: 'failed to publish command completion'}
-		    }
-	    if ($@VAR_previous_command_id@ | is-empty) {
-	        hide-env @COMMAND_ID_ENV@
-	    } else {
-	        $env.@COMMAND_ID_ENV@ = $@VAR_previous_command_id@
-	    }
-	    if ($@VAR_previous_command_directory@ | is-empty) {
-	        hide-env @COMMAND_DIR_ENV@
-		    } else {
-		        $env.@COMMAND_DIR_ENV@ = $@VAR_previous_command_directory@
-		    }
-		    if $@VAR_exit_request@ != null {
-		        %exit $@VAR_exit_request@.exit_code --abort=$@VAR_exit_request@.abort
-		    }
-	}
-	def --env ensure_nushell_shims [] {
-	    let @VAR_shim_dir@ = $env.FUNCTERM_SHIM_DIR?
-	    if not ($@VAR_shim_dir@ | is-empty) {
-	        let @VAR_helper@ = $env.@HELPER_ENV@?
-	        if ($@VAR_helper@ | is-empty) {
-	            error make {msg: '@HELPER_ENV@ is not set'}
-	        }
-	        ^$@VAR_helper@ internal-ensure-shims --directory $@VAR_shim_dir@
-        if $env.LAST_EXIT_CODE != 0 {
-            error make {msg: 'failed to ensure FuncTerm shell shims'}
-        }
-	        $env.PATH = ($env.PATH | where {|@VAR_entry@| $@VAR_entry@ != $@VAR_shim_dir@ } | prepend $@VAR_shim_dir@)
+const TEMPLATE: &str = "def --wrapped functerm_helper [...@VAR_arguments@] {
+    let @VAR_result@ = (^$@VAR_helper_path@ ...$@VAR_arguments@ | complete)
+    if $@VAR_result@.exit_code != 0 {
+        error make {msg: $@VAR_result@.stderr}
     }
-	}
-	def --env restore_nushell_environment [
-	    @VAR_env_state_file@: path,
-	    @VAR_config_state_file@: path,
-	    @VAR_previous_env_names@: list<string>,
-	] {
-	    if ($@VAR_env_state_file@ | path exists) {
-	        let @VAR_saved_env@ = open --raw $@VAR_env_state_file@ | from nuon
-	        if not ($@VAR_saved_env@ | is-empty) {
-	            for @VAR_name@ in ($@VAR_previous_env_names@ | where {|@VAR_name@| not ($@VAR_name@ in ($@VAR_saved_env@ | columns)) }) {
-	                hide-env $@VAR_name@
-	            }
-	        }
-	        load-env $@VAR_saved_env@
-	    }
-	    if ($@VAR_config_state_file@ | path exists) {
-	        $env.config = ($env.config | merge (open --raw $@VAR_config_state_file@ | from nuon))
-	    }
-	}
-	" ;
+    if ($@VAR_result@.stderr | is-not-empty) { print --stderr $@VAR_result@.stderr }
+    $@VAR_result@.stdout
+}
+def --env functerm_begin [] {
+    let @VAR_dispatch@ = $env.FUNCTERM_SESSION_ROOT | path join '@STATE_DIRECTORY@' '@DISPATCH@'
+    if not ($@VAR_dispatch@ | path exists) { return }
+    let @VAR_receipt@ = functerm_helper internal-claim-command --session-root $env.FUNCTERM_SESSION_ROOT --shell nu | from json
+    let @VAR_directory@ = $@VAR_receipt@.directory | path expand
+    {
+        id: $@VAR_receipt@.command_id, directory: $@VAR_directory@,
+        previous_id: $env.@COMMAND_ID_ENV@?, previous_directory: $env.@COMMAND_DIR_ENV@?,
+        started: (date now)
+    } | to nuon | save --force --raw $@VAR_active_command@
+    $env.@COMMAND_ID_ENV@ = $@VAR_receipt@.command_id
+    $env.@COMMAND_DIR_ENV@ = $@VAR_directory@
+    ensure_nushell_shims
+    cd $@VAR_receipt@.working_directory
+    functerm_helper internal-write-start --command-id $@VAR_receipt@.command_id --directory $@VAR_directory@ | ignore
+    cp --force ($@VAR_directory@ | path join '@COMMAND@') ($@VAR_directory@ | path join '@SUBMISSION@')
+}
+def --env functerm_finish [@VAR_requested_exit@: int = -1] {
+    let @VAR_status@ = $env.LAST_EXIT_CODE? | default 0
+    let @VAR_state_file@ = $@VAR_active_command@
+    if not ($@VAR_state_file@ | path exists) { return }
+    let @VAR_state@ = open --raw $@VAR_state_file@ | from nuon
+    let @VAR_exit_code@ = if $@VAR_requested_exit@ >= 0 { $@VAR_requested_exit@ } else { $@VAR_status@ }
+    let @VAR_elapsed@ = ((date now) - $@VAR_state@.started) | into string
+    let @VAR_cwd@ = $env.PWD
+    if ($env.FUNCTERM_SESSION_ROOT? | is-empty) {
+        load-env ($@VAR_recovery_environment@ | reject --optional PWD FILE_PWD CURRENT_FILE config)
+        $env.config = $@VAR_recovery_environment@.config
+        $env.config.hooks.pre_execution = ($env.config.hooks.pre_execution | append { functerm_begin })
+        $env.config.hooks.pre_prompt = ($env.config.hooks.pre_prompt | append { functerm_finish })
+    } else {
+        load-env ($@VAR_recovery_environment@ | select --optional @NUSHELL_PROTECTED_ENVIRONMENT@)
+    }
+    rm $@VAR_state_file@
+    if ($@VAR_state@.previous_id | is-empty) {
+        hide-env --ignore-errors @COMMAND_ID_ENV@
+    } else {
+        $env.@COMMAND_ID_ENV@ = $@VAR_state@.previous_id
+    }
+    if ($@VAR_state@.previous_directory | is-empty) {
+        hide-env --ignore-errors @COMMAND_DIR_ENV@
+    } else {
+        $env.@COMMAND_DIR_ENV@ = $@VAR_state@.previous_directory
+    }
+    ensure_nushell_shims
+    functerm_helper internal-write-done --command-id $@VAR_state@.id --exit-code $@VAR_exit_code@ --time-consumption $@VAR_elapsed@ --cwd $@VAR_cwd@ --directory $@VAR_state@.directory | ignore
+}
+def --env ensure_nushell_shims [] {
+    let @VAR_shim@ = $env.FUNCTERM_SHIM_DIR
+    $env.PATH = ($env.PATH | where {|@VAR_entry@| $@VAR_entry@ != $@VAR_shim@ } | prepend $@VAR_shim@)
+}
+def exit [@VAR_code@: int = 0, --abort] {
+    functerm_finish $@VAR_code@
+    %exit $@VAR_code@ --abort=$abort
+}
+";

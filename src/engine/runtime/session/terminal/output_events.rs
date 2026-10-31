@@ -28,6 +28,7 @@ pub(super) enum OutputEvent {
 pub(super) enum ProtocolEvent {
     Start(String),
     End(String),
+    Prompt(String),
     WindowTitleAssigned,
     Invalid(String),
 }
@@ -51,6 +52,21 @@ impl Perform for Detector {
     fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
         if matches ! (params . first () , Some (code) if matches ! (* code , b"0" | b"2")) {
             self.event = Some(OutputEvent::Capture(ProtocolEvent::WindowTitleAssigned));
+            return;
+        }
+        if let Some((&[code, name, b"prompt", shell], cwd)) = params.split_first_chunk::<4>()
+            && code == TERMINAL_MARKER_CODE
+            && name == TERMINAL_MARKER_NAME
+            && matches!(shell, b"cmd" | b"bash" | b"zsh")
+        {
+            self.event = Some(OutputEvent::Capture(
+                match String::from_utf8(cwd.join(b";".as_slice())) {
+                    Ok(path) => ProtocolEvent::Prompt(path),
+                    Err(error) => {
+                        ProtocolEvent::Invalid(format!("prompt cwd is not UTF-8: {error}"))
+                    }
+                },
+            ));
             return;
         }
         let &[code, name, phase, raw_id] = params else {
