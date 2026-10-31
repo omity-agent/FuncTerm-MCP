@@ -1,8 +1,10 @@
-use super::outcome::CommandInputHistory;
-use crate::runtime::protocol::{CommandSnapshot, OutputTokenizer};
+mod buffering;
+mod history;
+use self::{buffering::SeparatedOutput, history::CommandInputHistory};
+use crate::runtime::protocol::{CommandOutput, CommandSnapshot, OutputTokenizer};
 use crate::runtime::session::keyboard::InputDelivery;
 use crate::runtime::session::observation::PathWatch;
-use crate::runtime::session::records::CommandRecord;
+use crate::runtime::session::records::{CommandRecord, DoneFile, read_command_result};
 use crate::runtime::session::terminal::CommandCapture;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
@@ -23,6 +25,14 @@ pub(super) struct ManagedCommandState {
     pub(super) cached_view: Option<CommandSnapshot>,
     pub(super) input: CommandInputHistory,
     pub(super) session_exit: bool,
+    separated: Option<SeparatedOutput>,
+}
+impl ManagedCommandState {
+    pub(super) fn finish(&mut self, view: CommandSnapshot, wait: CommandWait) {
+        self.cached_view = Some(view);
+        self.wait = wait;
+        self.separated = None;
+    }
 }
 #[derive(Clone, Copy)]
 pub(in crate::engine::runtime::session::manager) enum CommandWait {
@@ -55,6 +65,7 @@ impl ManagedCommand {
                 cached_view: None,
                 input: CommandInputHistory::default(),
                 session_exit: false,
+                separated: None,
             }),
             capture,
             watch,
@@ -130,6 +141,25 @@ impl ManagedCommand {
     }
     pub(super) fn time_consumption(&self) -> Duration {
         self.started_at.elapsed()
+    }
+    pub(super) fn snapshot(
+        &self,
+        state: &mut ManagedCommandState,
+        title: String,
+        done: Option<&DoneFile>,
+        finished: bool,
+    ) -> Result<CommandSnapshot> {
+        let (output, tokens) = if let Some(output) = self.capture.output()? {
+            let captured = CommandOutput::Terminal { output };
+            let count = self.tokenizer.count(&captured)?;
+            (captured, count)
+        } else {
+            state
+                .separated
+                .get_or_insert_default()
+                .read(&self.record, &self.tokenizer, finished)?
+        };
+        read_command_result(self.time_consumption(), title, output, tokens, done)
     }
     pub(super) fn requests_session_exit(&self) -> Result<bool> {
         let state = self.state.lock();

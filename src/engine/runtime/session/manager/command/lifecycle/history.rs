@@ -1,7 +1,7 @@
 use crate::runtime::protocol::CommandSnapshot;
 use crate::runtime::session::keyboard::InputDelivery;
 #[derive(Default)]
-pub(super) struct CommandInputHistory {
+pub(in crate::engine::runtime::session::manager::command) struct CommandInputHistory {
     interrupt_delivered: bool,
 }
 enum CommandTermination {
@@ -9,19 +9,25 @@ enum CommandTermination {
     Interrupted,
 }
 impl CommandInputHistory {
-    pub(super) const fn interrupted(&self) -> bool {
+    pub(in crate::engine::runtime::session::manager::command) const fn interrupted(&self) -> bool {
         self.interrupt_delivered
     }
-    pub(super) const fn observe(&mut self, delivery: InputDelivery) {
+    pub(in crate::engine::runtime::session::manager::command) const fn observe(
+        &mut self,
+        delivery: InputDelivery,
+    ) {
         self.interrupt_delivered |= delivery.interrupted();
     }
-    pub(super) const fn normalize(&self, snapshot: &mut CommandSnapshot) {
+    pub(in crate::engine::runtime::session::manager::command) const fn normalize(
+        &self,
+        snapshot: &mut CommandSnapshot,
+    ) {
         let Some(reported_code) = snapshot.command.exit_code else {
             return;
         };
         snapshot.command.exit_code = Some(self.normalized_exit_code(reported_code));
     }
-    pub(super) const fn normalized_exit_code(&self, reported_code: i32) -> i32 {
+    const fn normalized_exit_code(&self, reported_code: i32) -> i32 {
         CommandTermination::classify(reported_code, self.interrupt_delivered).exit_code()
     }
 }

@@ -1,37 +1,65 @@
 use super::{
     execution::create_tabs,
     pagination::expected_suffix,
-    wire::{McpSession, assert_field, assert_saved, command_result, entries, text},
+    wire::{McpSession, assert_field, command_result, entries, text},
 };
 use rmcp::serde_json::json;
 #[test]
 fn mcp_separated_output_counts_both_streams_and_rejects_skipping_tokens() {
     let mut session = McpSession::new();
-    let [tab] = create_tabs(&mut session);
-    #[cfg(windows)]
-    let command =
-        "Write-Output 'hello world'\nWrite-Error -Message '你好 🧠' -ErrorAction Continue";
-    #[cfg(not(windows))]
-    let command = "printf 'hello world'\nprintf '你好 🧠' >&2";
-    let accepted = session.execute(&tab, command, true, 5.0);
+    let created = session.call("new_tab", json!({"exec": [{"starting_shell": "python"}]}));
+    let tab = text(super::wire::result(&created), "/tab_id").to_owned();
+    let command = r"import sys
+_ = input()
+_ = sys.stdout.buffer.write(b'hello world \xe4')
+sys.stdout.flush()
+_ = sys.stderr.buffer.write(b'\xe4')
+sys.stderr.flush()
+_ = input()
+_ = sys.stdout.buffer.write(b'\xbd\xa0\xe5\xa5\xbd \xf0\x9f\xa7\xa0')
+_ = sys.stderr.buffer.write(b'\xbd\xa0\xe5\xa5\xbd \xf0\x9f\xa7\xa0')
+";
+    let started = session.execute(&tab, command, true, 0.5);
+    let id = text(command_result(&started), "/command_id").to_owned();
+    let input = json!({"exec": [{"tab_id": tab, "text": "\r"}], "wait_timeout": 0_u64});
+    session.call("manual_write", input.clone());
+    let tokenizer = toktok::Tokenizer::builtin("o200k_base").unwrap();
+    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(15);
+    loop {
+        let partial = session.view(&[&id], 1, 0.1);
+        let snapshot = command_result(&partial);
+        assert_field(snapshot, "/finished", false);
+        if text(snapshot, "/stdout") == "hello world " {
+            assert_field(snapshot, "/stderr", "");
+            assert_field(
+                snapshot,
+                "/total_output_tokens",
+                tokenizer.count(b"hello world "),
+            );
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "{partial}");
+    }
+    session.call("manual_write", input);
+    let accepted = session.view(&[&id], 1, 5.0);
     let result = command_result(&accepted);
+    assert_field(result, "/finished", true);
+    assert_field(result, "/exit_code", 0_i32);
     let stdout = text(result, "/stdout");
     let stderr = text(result, "/stderr");
-    assert_eq!(stdout.trim_end(), "hello world");
+    assert_eq!(stdout, "hello world 你好 🧠");
     assert!(stderr.contains("你好 🧠"), "{accepted}");
-    let tokenizer = toktok::Tokenizer::builtin("o200k_base").unwrap();
     assert_field(
         result,
         "/total_output_tokens",
         tokenizer.count(stdout.as_bytes()) + tokenizer.count(stderr.as_bytes()),
     );
-    let id = text(result, "/command_id");
-    let rejected = session.view(&[id, &tab], 2, 0.0);
+    let rejected = session.view(&[&id, &tab], 2, 0.0);
     let results = entries(&rejected);
     assert!(text(results.first().unwrap(), "/error").contains("start_token must be 1"));
     assert!(results.last().unwrap().pointer("/result/screen").is_some());
-    let unchanged = session.view(&[id], 1, 0.0);
-    assert_saved(&accepted, &unchanged);
+    let unchanged = session.view(&[&id], 1, 0.0);
+    assert_eq!(result, command_result(&unchanged));
 }
 #[test]
 fn mcp_running_command_recounts_new_output_and_can_resume_from_a_token_offset() {

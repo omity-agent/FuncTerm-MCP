@@ -1,6 +1,6 @@
 use super::lifecycle::{CommandWait, ManagedCommand};
 use crate::runtime::protocol::CommandSnapshot;
-use crate::runtime::session::records::{command_note, read_command_result, read_done};
+use crate::runtime::session::records::{command_note, read_done};
 use anyhow::{Context as _, Result};
 use std::path::PathBuf;
 impl ManagedCommand {
@@ -13,21 +13,18 @@ impl ManagedCommand {
             return Ok(());
         }
         let title = self.capture.cancel()?;
-        let mut view = read_command_result(
-            &self.record,
-            self.time_consumption(),
+        let mut view = self.snapshot(
+            &mut state,
             title,
-            self.capture.output()?,
-            &self.tokenizer,
             read_done(&self.record.done)?.as_ref(),
+            true,
         )?;
         if !view.command.finished {
             view.command.finished = true;
             view.command.exit_code = Some(code);
         }
         state.input.normalize(&mut view);
-        state.cached_view = Some(view);
-        state.wait = CommandWait::Finished;
+        state.finish(view, CommandWait::Finished);
         drop(state);
         self.wake();
         Ok(())
@@ -55,18 +52,11 @@ impl ManagedCommand {
         Ok(())
     }
     pub(super) fn view(&self) -> Result<CommandSnapshot> {
-        let state = self.state.lock();
+        let mut state = self.state.lock();
         let result = if let Some(view) = state.cached_view.as_ref() {
             Ok(view.clone())
         } else {
-            read_command_result(
-                &self.record,
-                self.time_consumption(),
-                self.capture.current()?,
-                self.capture.output()?,
-                &self.tokenizer,
-                None,
-            )
+            self.snapshot(&mut state, self.capture.current()?, None, false)
         };
         drop(state);
         result
@@ -82,19 +72,11 @@ impl ManagedCommand {
         }
         let done =
             read_done(&self.record.done)?.context("completed command is missing done file")?;
-        let mut view = read_command_result(
-            &self.record,
-            self.time_consumption(),
-            title,
-            self.capture.output()?,
-            &self.tokenizer,
-            Some(&done),
-        )?;
+        let mut view = self.snapshot(&mut state, title, Some(&done), true)?;
         state.input.normalize(&mut view);
         update_cwd(PathBuf::from(done.cwd));
         state.session_exit = self.record.session_exit.try_exists()?;
-        state.cached_view = Some(view);
-        state.wait = CommandWait::Finished;
+        state.finish(view, CommandWait::Finished);
         drop(state);
         self.wake();
         Ok(())
@@ -109,19 +91,16 @@ impl ManagedCommand {
             return Ok(());
         }
         let title = self.capture.cancel()?;
-        let mut view = read_command_result(
-            &self.record,
-            self.time_consumption(),
+        let mut view = self.snapshot(
+            &mut state,
             title,
-            self.capture.output()?,
-            &self.tokenizer,
             read_done(&self.record.done)?.as_ref(),
+            true,
         )?;
         view.command.finished = true;
         view.command.exit_code = Some(1_i32);
         view.note = command_note(&view.command.output, &failure_message);
-        state.cached_view = Some(view);
-        state.wait = CommandWait::Failed;
+        state.finish(view, CommandWait::Failed);
         drop(state);
         self.wake();
         Ok(())

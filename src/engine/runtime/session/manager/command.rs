@@ -1,5 +1,4 @@
 mod lifecycle;
-mod outcome;
 mod result_view;
 mod settlement;
 mod start;

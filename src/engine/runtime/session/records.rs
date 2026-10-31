@@ -1,8 +1,7 @@
 use crate::contract::{DONE_FILE, RELEASED_FILE, STDERR_FILE, STDOUT_FILE};
-use crate::runtime::protocol::{CommandOutput, CommandSnapshot, CommandView, OutputTokenizer};
+use crate::runtime::protocol::{CommandOutput, CommandSnapshot, CommandView};
 use crate::shell::ShellChoice;
 use anyhow::{Context as _, Result, bail};
-use bytestring::ByteString;
 use core::time::Duration;
 use fs_err as fs;
 use std::path::{Path, PathBuf};
@@ -41,20 +40,12 @@ pub(super) fn create_record(
     })
 }
 pub(super) fn read_command_result(
-    record: &CommandRecord,
     observed_time_consumption: Duration,
     title: String,
-    terminal_output: Option<ByteString>,
-    tokenizer: &OutputTokenizer,
+    output: CommandOutput,
+    total_output_tokens: usize,
     done: Option<&DoneFile>,
 ) -> Result<CommandSnapshot> {
-    let output = match terminal_output {
-        Some(output) => CommandOutput::Terminal { output },
-        None => CommandOutput::Separated {
-            stdout: read_plain_output(&record.stdout)?,
-            stderr: read_plain_output(&record.stderr)?,
-        },
-    };
     let exit_code = done.map(|file| file.exit_code);
     let finished = done.is_some();
     let measured_time_consumption = done.map_or(Ok(observed_time_consumption), |file| {
@@ -65,7 +56,7 @@ pub(super) fn read_command_result(
     Ok(CommandSnapshot {
         title,
         command: CommandView {
-            total_output_tokens: tokenizer.count(&output)?,
+            total_output_tokens,
             output,
             exit_code,
             time_consumption: measured_time_consumption,
@@ -99,16 +90,6 @@ pub(super) fn command_note(output: &CommandOutput, extra: &str) -> String {
         );
     }
     lines.join("\n")
-}
-fn read_plain_output(path: &Path) -> Result<ByteString> {
-    let Some(bytes) = read_if_present(path, "file")? else {
-        return Ok(ByteString::new());
-    };
-    let text =
-        decode_text(&bytes).with_context(|| format!("failed to decode {}", path.display()))?;
-    Ok(fast_strip_ansi::strip_ansi_string(&text)
-        .into_owned()
-        .into())
 }
 fn decode_text(bytes: &[u8]) -> Result<String> {
     let encoding = encoding_rs::Encoding::for_bom(bytes)
