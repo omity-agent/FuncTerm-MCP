@@ -182,6 +182,7 @@ windows = { git = "https://github.com/microsoft/windows-rs", features = [
     "consoleapi2",
     "jobapi",
     "jobapi2",
+    "processenv",
     "processthreadsapi",
     "sddl",
     "securitybaseapi",

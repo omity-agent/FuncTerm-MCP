@@ -3,12 +3,12 @@ use super::{DriverStartup, StartupContext};
 use anyhow::{Context as _, Result};
 use std::path::Path;
 pub(super) fn startup(context: StartupContext<'_>) -> Result<DriverStartup> {
-    let script = context.startup_directory.join("bun_repl.mjs");
+    let script = context.startup_directory.join("repl-bootstrap.ts");
     fs_err::write(
         &script,
         bootstrap::script(&json_path(context.cwd)?, &json_path(context.ready_file)?),
     )?;
-    let host = context.startup_directory.join("stream-router.mjs");
+    let host = context.startup_directory.join("stream-router.ts");
     fs_err::write(&host, bootstrap::host_script())?;
     Ok(DriverStartup {
         args: vec![

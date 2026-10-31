@@ -119,7 +119,7 @@ pub(crate) fn command_source(choice: ShellChoice, source: &str) -> String {
     let text = if choice == ShellChoice::Cmd {
         normalized
             .split('\n')
-            .map(command_prompt::normalize_batch_line)
+            .map(command_prompt::encode_interactive_line)
             .collect::<Vec<_>>()
             .join("\n")
     } else {

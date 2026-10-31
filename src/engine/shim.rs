@@ -1,4 +1,5 @@
 mod invocation;
+mod process_contract;
 mod routing;
 mod spawning;
 mod stdio;
@@ -6,11 +7,12 @@ pub(crate) use self::stdio::terminal_output;
 use crate::shell::{ShellChoice, shims};
 use anyhow::{Context as _, Result};
 use core::time::Duration;
+pub(crate) use process_contract::process_exit;
 use routing::LaunchRoute;
 use spawning::spawn_shell;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus};
+use std::process::ExitStatus;
 use std::time::Instant;
 pub(crate) fn run_if_requested() -> Result<Option<i32>> {
     let Some(choice) = requested_shell() else {
@@ -22,7 +24,7 @@ pub(crate) fn run_if_requested() -> Result<Option<i32>> {
     let arguments = std::env::args_os().skip(1).collect::<Vec<_>>();
     match LaunchRoute::detect(choice, &arguments) {
         LaunchRoute::ManagedSession => run_interactive(choice, &arguments).map(Some),
-        LaunchRoute::NativeProcess => run_passthrough(choice, arguments).map(Some),
+        LaunchRoute::NativeProcess => run_passthrough(choice, &arguments).map(Some),
     }
 }
 fn requested_shell() -> Option<ShellChoice> {
@@ -57,9 +59,8 @@ fn is_shim_invocation() -> Result<bool> {
             std::env::current_exe().context("failed to resolve shim executable")?,
         )?)
 }
-fn run_passthrough(choice: ShellChoice, arguments: Vec<std::ffi::OsString>) -> Result<i32> {
-    let status = Command::new(real_executable(choice)?)
-        .args(arguments)
+fn run_passthrough(choice: ShellChoice, arguments: &[std::ffi::OsString]) -> Result<i32> {
+    let status = process_contract::command(&real_executable(choice)?, arguments)
         .status()
         .with_context(|| format!("failed to run {}", choice.canonical_name()))?;
     Ok(exit_code(status))

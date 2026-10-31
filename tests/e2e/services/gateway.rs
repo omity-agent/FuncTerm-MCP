@@ -1,5 +1,3 @@
-#[path = "mcp/presentation/cli_cursor.rs"]
-mod cli_cursor;
 #[path = "mcp/wire/coexistence.rs"]
 mod coexistence;
 #[path = "mcp/execution.rs"]
@@ -8,8 +6,6 @@ mod execution;
 mod http_peer;
 #[path = "mcp/input_delivery.rs"]
 mod input_delivery;
-#[path = "mcp/presentation/input_schema.rs"]
-mod input_schema;
 #[path = "mcp/inspection.rs"]
 mod inspection;
 #[path = "mcp/presentation/live_output.rs"]

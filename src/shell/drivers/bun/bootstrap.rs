@@ -144,7 +144,12 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
 			        }};
 			        @VAR_streamBoundary@("start", @VAR_activeCommand@);
 		        @VAR_evaluationReturned@ = true;
-		        @VAR_server@.write(@VAR_source@.endsWith("\n") ? @VAR_source@ : `${{@VAR_source@}}\n`);
+                    @VAR_inputDepth@ += 1;
+                    try {{
+                        @VAR_server@.emit("line", @VAR_source@);
+                    }} finally {{
+                        @VAR_inputDepth@ -= 1;
+                    }}
 	        @VAR_finishDeferredPrompt@();
 	        @VAR_server@.resume();
 	    }} catch (@VAR_error@) {{

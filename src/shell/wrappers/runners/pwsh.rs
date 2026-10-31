@@ -77,6 +77,7 @@ function @FUNCTION@ {
     $@VAR_failure@ = $null
     $@VAR_pipeline@ = $null
     $@VAR_capture@ = $null
+    $@VAR_invocationSettings@ = $null
     $@VAR_timer@ = [Diagnostics.Stopwatch]::new()
     $env:@COMMAND_ID_ENV@ = $@VAR_CommandId@
     $env:@COMMAND_DIR_ENV@ = $@VAR_Directory@
@@ -94,6 +95,8 @@ function @FUNCTION@ {
         $null = $@VAR_pipeline@.AddScript((ConvertTo-FuncTermInvocation $@VAR_source@), $false)
         if ($@VAR_SeparateOutput@) {
             $@VAR_capture@ = [FuncTermOutputCapture]::new($@VAR_Directory@)
+            $@VAR_invocationSettings@ = [System.Management.Automation.PSInvocationSettings]::new()
+            $@VAR_invocationSettings@.Host = [FuncTermDiagnosticHost]::new($Host)
             $@VAR_pipeline@.Commands.Commands[0].MergeMyResults(
                 [System.Management.Automation.Runspaces.PipelineResultTypes]::Information,
                 [System.Management.Automation.Runspaces.PipelineResultTypes]::Output
@@ -107,7 +110,7 @@ function @FUNCTION@ {
                 [System.Management.Automation.Runspaces.PipelineResultTypes]::Output
             )
         }
-        $null = $@VAR_pipeline@.Invoke()
+        $null = $@VAR_pipeline@.Invoke($null, $@VAR_invocationSettings@)
         if (-not $@VAR_returned@) {
             $@VAR_exitCode@ = [int]$global:LASTEXITCODE
             exit $@VAR_exitCode@

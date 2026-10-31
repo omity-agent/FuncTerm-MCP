@@ -120,30 +120,6 @@ fn terminal_mode_accepts_input_and_honors_user_redirection() {
             .contains("FILE_ONLY")
     );
 }
-#[test]
-fn terminal_mode_preserves_external_exit_codes() {
-    let _guard = locked_with_env(&[]);
-    let directory = temp_dir("terminal-exit-status");
-    #[cfg(windows)]
-    let shells = ["powershell", "cmd", "bash", "nu"];
-    #[cfg(unix)]
-    let shells = ["bash", "zsh"];
-    for shell in shells {
-        let tab = create_tab(&directory, shell);
-        let result = run_terminal(
-            &tab.tab_id,
-            "python -c \"import sys; print('NONZERO_TERMINAL', flush=True); sys.exit(7)\"",
-            "10",
-        );
-        let text = checked_text(&result);
-        assert!(
-            terminal_output(&text).contains("NONZERO_TERMINAL"),
-            "{shell}: {text}"
-        );
-        assert_eq!(tagged_content(&text, "EXIT_CODE"), Some("\n7\n"));
-        assert_eq!(tagged_content(&text, "FINISHED"), Some("\ntrue\n"));
-    }
-}
 fn run_terminal(tab_id: &str, command: &str, wait_timeout: &str) -> Output {
     run_cli(&[
         "send-command",

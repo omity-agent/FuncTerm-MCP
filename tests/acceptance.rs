@@ -1,6 +1,8 @@
 #![cfg_attr(windows, feature(windows_process_extensions_raw_attribute))]
 #[path = "integration/administration.rs"]
 mod administration;
+#[path = "integration/semantics/fidelity.rs"]
+mod fidelity;
 #[cfg(windows)]
 #[path = "integration/identity_boundary.rs"]
 mod identity_boundary;
@@ -18,5 +20,7 @@ mod shells;
 #[cfg(unix)]
 #[path = "integration/startup_files.rs"]
 mod startup_files;
+#[path = "integration/semantics/submission.rs"]
+mod submission;
 #[path = "e2e/harness.rs"]
 mod support;

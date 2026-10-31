@@ -22,7 +22,7 @@ fn schema_and_rejections_cover_every_privilege_and_output_policy_combination() {
                 .unwrap();
             assert_eq!(tools.len(), 4, "{response}");
             for tool in tools {
-                super::input_schema::assert_references(tool);
+                assert_references(tool);
             }
             for (name, property, fixed) in [
                 ("new_tab", "elevated", privilege.is_some()),
@@ -55,6 +55,18 @@ fn schema_and_rejections_cover_every_privilege_and_output_policy_combination() {
                     }
                 }
             }
+        }
+    }
+}
+fn assert_references(value: &Value) {
+    if let Some(object) = value.as_object() {
+        assert!(!object.contains_key("$ref") || object.len() == 1, "{value}");
+        for child in object.values() {
+            assert_references(child);
+        }
+    } else if let Some(array) = value.as_array() {
+        for child in array {
+            assert_references(child);
         }
     }
 }

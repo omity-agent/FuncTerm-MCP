@@ -46,6 +46,7 @@ fn mcp_batch_preserves_order_and_isolates_errors() {
         }),
     );
     let results = entries(&response);
+    assert_field(&response, "/result/isError", true);
     assert_eq!(results.len(), 3);
     let documents = super::wire::text_documents(&response);
     assert!(documents.iter().all(|block| !block.starts_with("exec[")));

@@ -32,31 +32,67 @@ pub(super) fn interactive_arguments(arguments: &[std::ffi::OsString]) -> bool {
         .iter()
         .all(|value| matches!(value.as_str(), "/d" | "/q" | "/k"))
 }
-pub(super) fn normalize_batch_line(line: &str) -> String {
-    let trimmed = line.trim_start();
-    if !trimmed
-        .get(..4)
-        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("for "))
-    {
-        return line.to_owned();
-    }
-    let characters: Vec<_> = line.chars().collect();
+pub(super) fn encode_interactive_line(line: &str) -> String {
+    let command = line.trim_start().trim_start_matches('@');
+    let for_command = command
+        .split_ascii_whitespace()
+        .next()
+        .is_some_and(|word| word.eq_ignore_ascii_case("for"));
+    let binding = if for_command {
+        loop_binding(command)
+    } else {
+        None
+    };
     let mut normalized = String::with_capacity(line.len());
-    for (index, &character) in characters.iter().enumerate() {
-        let is_for_variable = character == '%'
-            && characters
-                .get(index + 1)
-                .is_some_and(char::is_ascii_alphabetic)
-            && (index == 0 || characters.get(index - 1) != Some(&'%'))
-            && characters.get(index + 2).is_none_or(|following| {
-                following.is_whitespace() || matches!(following, ')' | '(' | ',' | ';')
-            });
-        if is_for_variable {
-            normalized.push('%');
+    let mut remaining = line;
+    while let Some((prefix, tail)) = remaining.split_once('%') {
+        normalized.push_str(prefix);
+        if binding.is_some()
+            && let Some(doubled_tail) = tail.strip_prefix('%')
+            && doubled_tail
+                .chars()
+                .next()
+                .is_some_and(|value| value.is_ascii_alphabetic())
+        {
+            normalized.push_str("%%");
+            remaining = doubled_tail;
+            continue;
         }
-        normalized.push(character);
+        let variable = tail.chars().next();
+        let for_variable = binding.is_some() && variable == binding;
+        let positional =
+            variable.is_some_and(|value| value.is_ascii_digit() || matches!(value, '*' | '~'));
+        if !for_variable
+            && !positional
+            && let Some((name, after_variable)) = tail.split_once('%')
+            && !name.is_empty()
+        {
+            normalized.push('%');
+            normalized.push_str(name);
+            normalized.push('%');
+            remaining = after_variable;
+        } else {
+            normalized.push_str("%%");
+            remaining = tail;
+        }
     }
+    normalized.push_str(remaining);
     normalized
+}
+fn loop_binding(line: &str) -> Option<char> {
+    let mut candidate = None;
+    for word in line.split_ascii_whitespace().skip(1) {
+        if word.eq_ignore_ascii_case("in") || word.to_ascii_lowercase().starts_with("in(") {
+            return candidate;
+        }
+        candidate = match word.as_bytes() {
+            &[b'%', name] | &[b'%', b'%', name] if name.is_ascii_alphabetic() => {
+                Some(char::from(name))
+            }
+            _ => None,
+        };
+    }
+    None
 }
 fn initialization_script(context: StartupContext<'_>) -> Result<String> {
     let style = if context.ignore_shell_style {

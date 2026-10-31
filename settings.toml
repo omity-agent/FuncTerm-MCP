@@ -100,7 +100,7 @@ max_request_body_bytes = 67108864
 
 # MCP 工具及其参数的描述；描述设为空字符串时不向 MCP 客户端提供该描述。
 [mcp.new_tab]
-description = "打开一个新的终端标签页。返回 tab_id"
+description = "打开新的终端标签页。返回 tab_id。Tab 是有状态的持久会话。"
 
 [mcp.new_tab.parameters]
 exec = ""

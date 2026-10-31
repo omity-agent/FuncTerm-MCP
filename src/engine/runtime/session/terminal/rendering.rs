@@ -1,10 +1,11 @@
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result, ensure};
 use bytestring::ByteString;
+use itertools::Itertools as _;
 use parking_lot::Mutex;
 use tastty_core::{
     AbsolutePosition, Parser, PlainOptions, Position, ScreenEvent, TerminalMode, TerminalSize,
-    screen::SelectionMode,
+    screen::LogicalLineOptions,
 };
 pub(super) struct CommandScreen {
     pub(super) parser: Parser,
@@ -64,18 +65,41 @@ impl CommandScreen {
             options.include_scrollback = true;
             return Ok(screen.contents_plain(options));
         }
-        let size = screen.size();
         let oldest = AbsolutePosition::new(screen.scrollback_origin_row(), 0);
         let start = initial.max(oldest);
-        let end = screen
-            .visible_to_absolute(Position::new(size.rows - 1, size.cols - 1))
-            .context("terminal output has no final row")?;
-        screen.selection_start(start, SelectionMode::Linear);
-        screen.selection_extend(end);
-        let selected = screen.selected_text();
-        screen.selection_clear();
-        let mut output = selected.context("terminal output region is unavailable")?;
-        output.truncate(output.trim_end_matches('\n').len());
+        let options = LogicalLineOptions {
+            join_wrapped: true,
+            include_scrollback: true,
+            trim_trailing_blanks: true,
+        };
+        let mut output = String::new();
+        for (index, line) in screen
+            .logical_lines(options)
+            .filter(|line| line.end.row >= start.row)
+            .enumerate()
+        {
+            if index > 0 {
+                output.push('\n');
+            }
+            for (_, cells) in &line.cells().chunk_by(|cell| cell.0.row) {
+                let mut physical_row = String::new();
+                let mut populated = 0;
+                for (position, cell) in cells {
+                    if position >= start {
+                        if cell.contents().is_empty() {
+                            physical_row.push(' ');
+                        } else {
+                            physical_row.push_str(cell.contents());
+                        }
+                        if cell.has_contents() {
+                            populated = physical_row.len();
+                        }
+                    }
+                }
+                physical_row.truncate(populated);
+                output.push_str(&physical_row);
+            }
+        }
         Ok(output)
     }
     fn finish(&mut self) -> Result<String> {

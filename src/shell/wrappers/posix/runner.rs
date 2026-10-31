@@ -121,8 +121,11 @@ functerm_publish_done() {{
 	        printf '%s is not set\n' "{helper_env}" >&2
 	        return 1
 	    fi
-	    @VAR_helper@="$(functerm_posix_path "$@VAR_helper@")" || return 1
-	    "$@VAR_helper@" internal-write-done \
+            @VAR_helper@="$(functerm_posix_path "$@VAR_helper@")" || return 1
+            if command -v cygpath > /dev/null 2>&1; then
+                @VAR_cwd@="$(cygpath -m "$@VAR_cwd@")" || return 1
+            fi
+            "$@VAR_helper@" internal-write-done \
 	        --command-id "$@VAR_command_id@" \
 	        --exit-code "$@VAR_exit_code@" \
 	        --time-consumption "$@VAR_time_consumption@" \

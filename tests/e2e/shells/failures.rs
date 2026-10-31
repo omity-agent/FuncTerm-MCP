@@ -99,19 +99,26 @@ fn background_interpreter_exit_cleans_descendants_without_observation() {
             let encoded = sonic_rs::to_string(child).unwrap();
             let source = if shell == "python" {
                 format!(
-                    "import subprocess, sys, time; subprocess.Popen([sys.executable, '-c', {encoded}], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); time.sleep(0.5); sys.exit({code})"
+                    "import subprocess, sys, time\nfrom pathlib import Path\nsubprocess.Popen([sys.executable, '-c', {encoded}], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\ndeadline = time.monotonic() + 10\nwhile not Path('ready').exists():\n    if time.monotonic() >= deadline: raise TimeoutError('child startup')\n    time.sleep(0.01)\nsys.exit({code})"
                 )
             } else {
                 format!(
-                    "(await import('node:child_process')).spawn(process.execPath, ['-e', {encoded}], {{stdio:'ignore'}}); await Bun.sleep(500); process.exit({code})"
+                    "(await import('node:child_process')).spawn(process.execPath, ['-e', {encoded}], {{stdio:'ignore'}}); var deadline = Date.now() + 10000; while (!await Bun.file('ready').exists()) {{ if (Date.now() >= deadline) throw new Error('child startup'); await Bun.sleep(10); }} process.exit({code})"
                 )
             };
             let tab = create_tab(&cwd, shell).tab_id;
             let accepted = send_command(&tab, &source, 0.0);
             assert!(!parse_command_result(&accepted).finished, "{accepted:?}");
             let command_id = parse_command_id(&accepted);
+            let deadline = std::time::Instant::now() + Duration::from_secs(10);
+            while !cwd.join("ready").exists() {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "{shell}: child did not start"
+                );
+                std::thread::sleep(Duration::from_millis(10));
+            }
             std::thread::sleep(Duration::from_secs(3));
-            assert!(cwd.join("ready").exists(), "{shell}: child did not start");
             assert!(
                 !cwd.join("survived").exists(),
                 "{shell}: descendant outlived the interpreter"

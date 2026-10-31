@@ -109,7 +109,7 @@ if "%@HELPER_ENV@%"=="" (
     echo @HELPER_ENV@ is not set 1>&2
     exit /b 1
 )
-"%@HELPER_ENV@%" internal-write-done --command-id "%@VAR_command_id@%" --exit-code "%~1" --time-consumption "%@VAR_time_consumption@%" --cwd "%CD%" --directory "%@VAR_directory@%"
+"%@HELPER_ENV@%" internal-write-done --command-id "%@VAR_command_id@%" --exit-code "%~1" --time-consumption "%@VAR_time_consumption@%" --cwd "%CD:\=/%" --directory "%@VAR_directory@%"
 exit /b %ERRORLEVEL%
 :publish_start
 if "%@HELPER_ENV@%"=="" (
