@@ -68,6 +68,9 @@ impl ShellSession {
     ) -> Result<Arc<CommandCapture>> {
         self.screen.capture_command(command_id, separate_output)
     }
+    pub(super) fn discard_capture(&self, command_id: &str) -> Result<()> {
+        self.screen.discard_capture(command_id)
+    }
     pub(super) fn current_choice(&self) -> ShellChoice {
         *self.choice.lock()
     }

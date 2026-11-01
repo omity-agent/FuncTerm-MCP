@@ -86,6 +86,9 @@ impl Terminal {
     pub(super) fn complete_at_prompt(&self, id: &str) -> Result<()> {
         self.state.lock().captures.finish(id)
     }
+    pub(super) fn discard_capture(&self, id: &str) -> Result<()> {
+        self.state.lock().captures.discard(id)
+    }
     pub(super) fn process(&self, chunk: &[u8]) -> Result<()> {
         let mut state = self.state.lock();
         let processed = state.process(chunk);

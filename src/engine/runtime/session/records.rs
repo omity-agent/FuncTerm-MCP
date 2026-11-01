@@ -72,6 +72,12 @@ pub(super) fn remove_record_directory(record: &CommandRecord) -> Result<()> {
         Err(error) => Err(error.into()),
     }
 }
+pub(super) fn discard_record(record: &CommandRecord) {
+    if let Err(error) = remove_record_directory(record) {
+        tracing::error!("failed to remove abandoned command record");
+        tracing::debug!(error = %error, "abandoned command record cleanup failed");
+    }
+}
 pub(super) fn command_note(output: &CommandOutput, extra: &str) -> String {
     let mut lines = Vec::new();
     if !extra.is_empty() {

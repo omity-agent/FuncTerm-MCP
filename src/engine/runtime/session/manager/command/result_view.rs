@@ -29,14 +29,21 @@ impl Tab {
         command: &Arc<ManagedCommand>,
         wait_timeout: Duration,
     ) -> Result<CommandWait> {
-        let observed = command.wait(wait_timeout).await;
-        if !matches!(observed, Ok(CommandWait::Finished | CommandWait::Failed))
+        let observed = match command.wait(wait_timeout).await {
+            Ok(state) => state,
+            Err(error) => {
+                self.fail_command(command, format!("command observation failed: {error:#}"))
+                    .await?;
+                return Ok(CommandWait::Failed);
+            }
+        };
+        if matches!(observed, CommandWait::Running)
             && let Some(session) = self.optional_session()
             && self.abort_if_shell_dead(&session, command).await?
         {
             return Ok(CommandWait::Finished);
         }
-        observed
+        Ok(observed)
     }
     pub(super) async fn command_view_result(
         self: &Arc<Self>,

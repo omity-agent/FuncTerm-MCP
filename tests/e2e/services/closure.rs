@@ -7,7 +7,7 @@ const SHELL: &str = "powershell";
 #[cfg(unix)]
 const SHELL: &str = "bash";
 #[test]
-fn close_idle_tab_preserves_history_and_other_tabs() {
+fn close_and_reader_failure_preserve_history_and_other_tabs() {
     let _guard = locked_with_env(&[]);
     let target = create_tab(&temp_root(), SHELL);
     let other = create_tab(&temp_root(), SHELL);
@@ -36,6 +36,20 @@ fn close_idle_tab_preserves_history_and_other_tabs() {
             .status
             .success()
     );
+    let failing = create_tab(&temp_root(), "bun").tab_id;
+    let submitted = send_command(
+        &failing,
+        "console.log('BEFORE_READER_FAILURE\\x1b]9999;FuncTerm;start;missing\\x1b\\\\'); await Bun.sleep(30000)",
+        0.0,
+    );
+    let failed = wait_for_completion(&submitted);
+    assert_eq!(failed.exit_code, Some(1_i32), "{failed:?}");
+    assert!(
+        failed.stdout.contains("BEFORE_READER_FAILURE"),
+        "{failed:?}"
+    );
+    assert!(!parse_tab_view(&run_cli(&["view", &failing])).alive);
+    assert!(parse_tab_view(&run_cli(&["view", &other.tab_id])).alive);
 }
 #[test]
 fn close_current_from_nested_shell_targets_its_own_tab() {

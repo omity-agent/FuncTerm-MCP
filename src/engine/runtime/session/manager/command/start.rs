@@ -2,7 +2,7 @@ use super::super::{shell_session::ShellSession, tab::Tab};
 use super::supervision::ShellReservation;
 use super::{CommandWait, ManagedCommand};
 use crate::runtime::protocol::{EndReason, ViewResult};
-use crate::runtime::session::records::{create_record, remove_record_directory};
+use crate::runtime::session::records::{create_record, discard_record};
 use alloc::sync::Arc;
 use anyhow::Result;
 use core::time::Duration;
@@ -49,23 +49,23 @@ impl Tab {
             &command_id,
             session.current_choice(),
         )?;
-        let capture = session.capture_command(&command_id, separate_output)?;
+        let capture = session
+            .capture_command(&command_id, separate_output)
+            .inspect_err(|_error| discard_record(&record))?;
         let managed = Arc::new(ManagedCommand::new(
             command_id,
             record,
-            Arc::clone(&capture),
+            capture,
             session.command_watch(),
             Arc::clone(&self.tokenizer),
         ));
         let reservation = match ShellReservation::new(&session, self.id(), Arc::clone(&managed)) {
             Ok(reservation) => reservation,
             Err(error) => {
-                if let Err(capture_error) = capture.cancel() {
-                    eprintln!("failed to cancel command capture: {capture_error:#}");
+                if let Err(capture_error) = session.discard_capture(managed.id()) {
+                    eprintln!("failed to discard command capture: {capture_error:#}");
                 }
-                if let Err(remove_error) = remove_record_directory(managed.record()) {
-                    eprintln!("{remove_error:#}");
-                }
+                discard_record(managed.record());
                 return Err(error);
             }
         };
@@ -90,9 +90,7 @@ impl Tab {
         session.terminate()?;
         command.mark_failed("shell failed to start command")?;
         drop(self.remove_command(command.id()));
-        if let Err(error) = remove_record_directory(command.record()) {
-            eprintln!("{error:#}");
-        }
+        discard_record(command.record());
         self.close_session(session)
     }
 }

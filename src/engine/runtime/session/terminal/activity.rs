@@ -40,9 +40,6 @@ impl Terminal {
     pub(in crate::engine::runtime::session) async fn wait_for_exit(&self) -> Result<()> {
         wait_until(&self.changed, Duration::MAX, || {
             let state = self.state.lock();
-            if let Some(message) = state.reader_failure.as_deref() {
-                bail!("terminal reader failed: {message}");
-            }
             Ok(state.process_exited)
         })
         .await?;
@@ -51,9 +48,6 @@ impl Terminal {
     pub(in crate::engine::runtime::session) async fn wait_reader_closed(&self) -> Result<()> {
         wait_until(&self.changed, Duration::MAX, || {
             let state = self.state.lock();
-            if let Some(message) = state.reader_failure.as_deref() {
-                bail!("terminal reader failed: {message}");
-            }
             Ok(state.reader_closed)
         })
         .await?;

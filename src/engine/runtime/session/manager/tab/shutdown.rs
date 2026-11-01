@@ -46,17 +46,20 @@ impl Tab {
         self.blocking.run(move || target.terminate()).await?;
         session.wait_for_terminal_drain().await?;
         let observed = match command.as_ref() {
-            Some(active) => active.wait(Duration::ZERO).await?,
-            None => CommandWait::Finished,
+            Some(active) => active.wait(Duration::ZERO).await,
+            None => Ok(CommandWait::Finished),
         };
         let tab = Arc::clone(self);
         self.blocking
             .run(move || {
                 if let Some(active) = command {
                     match observed {
-                        CommandWait::Finished => tab.cache_done_command(&active)?,
-                        CommandWait::Running => active.mark_failed("Tab was closed")?,
-                        CommandWait::Failed => {}
+                        Ok(CommandWait::Finished) => tab.cache_done_command(&active)?,
+                        Ok(CommandWait::Running) => active.mark_failed("Tab was closed")?,
+                        Ok(CommandWait::Failed) => {}
+                        Err(error) => active.mark_failed(format!(
+                            "Tab was closed after command observation failed: {error:#}"
+                        ))?,
                     }
                     session.release(active.id());
                 }

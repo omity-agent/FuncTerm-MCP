@@ -71,7 +71,12 @@ impl CommandCapture {
             ))
         })
         .await?;
-        Ok(ended && self.state.lock().phase == CapturePhase::Finished)
+        let phase = self.state.lock().phase.clone();
+        match phase {
+            CapturePhase::Finished => Ok(ended),
+            CapturePhase::Pending | CapturePhase::Active => Ok(false),
+            CapturePhase::Failed(message) => bail!("{message}"),
+        }
     }
     pub(in crate::engine::runtime::session) async fn wait_started(
         &self,

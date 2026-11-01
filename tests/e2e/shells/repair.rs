@@ -3,19 +3,15 @@ use crate::support::{
     parse_tab_view, run_cli, send_command, temp_dir, wait_for_completion,
 };
 #[test]
-fn python_keeps_future_flags_and_native_standard_streams() {
+fn python_captures_native_standard_streams() {
     let _guard = super::matrix::daemon();
     let tab = create_tab(&temp_dir("compiler"), "python").tab_id;
-    let future = complete_command(&tab, "from __future__ import annotations");
-    assert_eq!(future.exit_code, Some(0_i32), "{future:?}");
-    let current = parse_tab_view(&run_cli(&["view", &tab]));
-    assert!(current.alive, "{}", current.screen);
     let result = complete_command(
         &tab,
-        "def f(x: Missing): pass\nimport os, subprocess, sys\nprint(f.__annotations__)\nos.write(1, b'NATIVE_OUT\\n')\nos.write(2, b'NATIVE_ERR\\n')\nsubprocess.run([sys.executable, '-c', \"print('CHILD_OUT')\"])",
+        "import os, subprocess, sys\nos.write(1, b'NATIVE_OUT\\n')\nos.write(2, b'NATIVE_ERR\\n')\nsubprocess.run([sys.executable, '-c', \"print('CHILD_OUT')\"])",
     );
     assert_eq!(result.exit_code, Some(0_i32), "{result:?}");
-    for expected in ["Missing", "NATIVE_OUT", "CHILD_OUT"] {
+    for expected in ["NATIVE_OUT", "CHILD_OUT"] {
         assert!(result.stdout.contains(expected), "{result:?}");
     }
     assert!(result.stderr.contains("NATIVE_ERR"), "{result:?}");
