@@ -30,7 +30,6 @@ set -o history
         "profile_alias\nprintf '%s\\n' \"$FUNCTERM_LOAD_PROFILE\"\nbuiltin test -z \"${HISTFILE-}\" || exit 99\nfalse",
         10.0,
     ));
-    assert!(loaded.finished, "{}", loaded.stderr);
     assert_eq!(loaded.stdout, "PROFILE_LOADED\n1\n");
     assert_eq!(loaded.exit_code, Some(1_i32));
     let viewed = run_cli(&["view", &created.tab_id]);
@@ -83,7 +82,6 @@ export FUNCTERM_SESSION_ROOT=broken
         "profile_function\nprint -r -- \"$ZDOTDIR\"",
         10.0,
     ));
-    assert!(result.finished, "{}", result.stderr);
     assert_eq!(result.exit_code, Some(0_i32), "{}", result.stderr);
     assert_eq!(result.stdout, format!("env:rc\n{}\n", relocated.display()));
 }

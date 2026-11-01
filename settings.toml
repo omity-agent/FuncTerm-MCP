@@ -11,7 +11,7 @@ terminal_rows = 30
 # Shell PTY 的默认列数。
 terminal_cols = 120
 
-# 对外展示并在每条命令开始前恢复的模型标题。
+# 初始终端标题。
 terminal_model_title = ""
 
 # Shell 启动注入脚本写入 ready 文件前最多等待的秒数。

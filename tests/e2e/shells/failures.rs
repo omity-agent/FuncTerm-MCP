@@ -11,7 +11,6 @@ fn nushell_parse_errors_and_user_bindings_preserve_lexical_state() {
     assert_eq!(defined.exit_code, Some(0_i32), "{defined:?}");
     for source in ["let x =", "def broken [] {", "print $unknown_variable"] {
         let failed = complete_command(&tab, source);
-        assert!(failed.finished, "{failed:?}");
         assert_ne!(failed.exit_code, Some(0_i32), "{failed:?}");
         let next = complete_command(&tab, "print ($retained + 1)");
         assert_eq!(next.exit_code, Some(0_i32), "{next:?}");

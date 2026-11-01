@@ -14,7 +14,10 @@ pub(in crate::shell) fn script(zsh: bool) -> String {
         r#"functerm_prepare_command() {{
     @VAR_helper@="$(functerm_posix_path "${{{helper_env}}}")" || return 1
     @VAR_receipt_file@="$(functerm_posix_path "$FUNCTERM_SESSION_ROOT/{state}/{receipt}")" || return 1
-    "$@VAR_helper@" internal-claim-command --session-root "$FUNCTERM_SESSION_ROOT" --shell "$FUNCTERM_CURRENT_SHELL" > "$@VAR_receipt_file@" || return 1
+    @VAR_claim_error@="$("$@VAR_helper@" internal-claim-command --session-root "$FUNCTERM_SESSION_ROOT" --shell "$FUNCTERM_CURRENT_SHELL" --output-file "$FUNCTERM_SESSION_ROOT/{state}/{receipt}" < /dev/null 2>&1)" || {{
+        builtin printf '%s\n' "$@VAR_claim_error@" >&2
+        return 1
+    }}
     {{
         IFS= read -r -d '' @VAR_command_id@ &&
         IFS= read -r -d '' @VAR_native_directory@ &&
@@ -32,7 +35,7 @@ pub(in crate::shell) fn script(zsh: bool) -> String {
     export {command_id_env}="$@VAR_command_id@"
     export {command_dir_env}="$@VAR_directory@"
     functerm_ensure_shim_path || return 1
-    @VAR_script@="$(cat "$@VAR_directory@/{source}")" || return 1
+    @VAR_script@="$(< "$@VAR_directory@/{source}")" || return 1
     {cd} "$@VAR_working_directory@" || return 1
     @VAR_command_started_at@="$(functerm_command_time_millis)" || return 1
     functerm_publish_start "$@VAR_command_id@" "$@VAR_native_directory@"
@@ -45,10 +48,6 @@ functerm_finish_command() {{
     fi
     @VAR_command_finished_at@="$(functerm_command_time_millis)" || return 1
     @VAR_time_consumption@="$((@VAR_command_finished_at@ - @VAR_command_started_at@))ms"
-    if [ "$@VAR_separate_output@" = 1 ]; then
-        cat "$@VAR_stdout_file@" || return 1
-        cat "$@VAR_stderr_file@" >&2 || return 1
-    fi
     functerm_publish_done "$@VAR_command_id@" "$@VAR_exit_code@" "$@VAR_time_consumption@" "$PWD" "$@VAR_native_directory@" || return 1
     functerm_restore_command_environment \
         "$@VAR_had_previous_command_id@" "$@VAR_previous_command_id@" \
@@ -61,7 +60,7 @@ if functerm_prepare_command; then
         {{
             functerm_restore_status "$@VAR_previous_status@"
             builtin eval -- "$@VAR_script@"
-        }} > "$@VAR_stdout_file@" 2> "$@VAR_stderr_file@"
+        }} >| "$@VAR_stdout_file@" 2>| "$@VAR_stderr_file@"
         @VAR_exit_code@=$?
     else
         functerm_restore_status "$@VAR_previous_status@"

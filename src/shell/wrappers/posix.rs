@@ -64,29 +64,41 @@ const EXIT_HOOK: &str = r#"functerm_complete_exit() {
 trap 'functerm_complete_exit "$?"' EXIT
 "#;
 pub(super) fn path_function(zsh: bool) -> String {
+    let executable = if zsh {
+        "builtin whence -p"
+    } else {
+        "builtin type -P"
+    };
     let local_options = if zsh {
         "\n    emulate -L zsh\n    setopt sh_word_split"
     } else {
         ""
     };
     format!(
-        r#"functerm_posix_path() {{{local_options}
-	    local @VAR_value@="$1"
-	    if command -v cygpath > /dev/null 2>&1; then
-	        cygpath -u "$@VAR_value@"
+        r#"@VAR_cygpath@="$({executable} cygpath)" || @VAR_cygpath@=''
+readonly @VAR_cygpath@
+@VAR_cat@="$({executable} cat)" || {{
+    builtin printf '%s\n' 'FuncTerm: terminal stream forwarder is unavailable' >&2
+    return 1
+}}
+readonly @VAR_cat@
+functerm_posix_path() {{{local_options}
+            local @VAR_value@="$1"
+            if [ -n "$@VAR_cygpath@" ]; then
+                "$@VAR_cygpath@" -u "$@VAR_value@"
 	        return $?
 	    fi
 	    case "$@VAR_value@" in
 	        [A-Za-z]:\\*|[A-Za-z]:/*)
-	            printf 'cygpath is required to convert Windows path: %s\n' "$@VAR_value@" >&2
+                    printf '%s\n' 'FuncTerm: Windows path conversion is unavailable' >&2
 	            return 1
 	            ;;
 	    esac
 	    printf '%s\n' "$@VAR_value@"
 }}
 functerm_native_cwd() {{
-    if command -v cygpath > /dev/null 2>&1; then
-        cygpath -m "$PWD"
+    if [ -n "$@VAR_cygpath@" ]; then
+        "$@VAR_cygpath@" -m "$PWD"
     else
         printf '%s' "$PWD"
     fi

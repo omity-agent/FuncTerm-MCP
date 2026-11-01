@@ -17,6 +17,7 @@ pub(crate) const SESSION_COMMANDS_DIRECTORY: &str = "commands";
 pub(crate) const SESSION_STATE_DIRECTORY: &str = "state";
 pub(crate) const STDERR_FILE: &str = "stderr.txt";
 pub(crate) const STDOUT_FILE: &str = "stdout.txt";
+pub(crate) const TITLE_FILE: &str = "title";
 pub(crate) const TERMINAL_MARKER_CODE: &[u8] = b"9999";
 pub(crate) const TERMINAL_MARKER_END: &[u8] = b"end";
 pub(crate) const TERMINAL_MARKER_NAME: &[u8] = b"FuncTerm";

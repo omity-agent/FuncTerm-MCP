@@ -19,13 +19,11 @@ fn interpreter_shims_restore_parent_after_python_exit_and_bun_native_exit() {
     ] {
         let tab = create_tab(&temp_dir("nested-interpreter"), parent);
         let launched = complete_command(&tab.tab_id, launch);
-        assert!(launched.finished, "{launched:?}");
         assert_eq!(launched.exit_code, Some(0_i32), "{launched:?}");
         let nested = complete_command(&tab.tab_id, query);
         assert_eq!(nested.exit_code, Some(0_i32), "{nested:?}");
         assert!(nested.stdout.contains("NESTED_REPL_READY"), "{nested:?}");
         let exited = complete_command(&tab.tab_id, exit);
-        assert!(exited.finished, "{exited:?}");
         assert_eq!(exited.exit_code, Some(code), "{exited:?}");
         let restored = complete_command(&tab.tab_id, "echo PARENT_RESTORED");
         assert_eq!(

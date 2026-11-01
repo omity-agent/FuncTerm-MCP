@@ -6,14 +6,27 @@ use crate::contract::{
 use crate::shell::ShellChoice;
 use anyhow::{Context as _, Result, ensure};
 use std::path::Path;
-pub(crate) fn claim_command(session_root: &Path, shell: ShellChoice) -> Result<String> {
+pub(crate) fn claim_command(
+    session_root: &Path,
+    shell: ShellChoice,
+    output_file: Option<&Path>,
+) -> Result<String> {
     let dispatch = consume_dispatch(session_root)?;
     let command_id = &dispatch.command_id;
     validate_command_id(command_id)?;
     let directory = session_root
         .join(SESSION_COMMANDS_DIRECTORY)
         .join(command_id);
-    let prepared = (|| prepare(&dispatch, &directory, session_root, shell)?.encode(shell))();
+    let prepared = (|| {
+        let receipt = prepare(&dispatch, &directory, session_root, shell)?.encode(shell)?;
+        if let Some(path) = output_file {
+            crate::publication::write_replace(path, &receipt).map_err(|error| {
+                tracing::debug!(?error, "command receipt publication failed");
+                anyhow::anyhow!("failed to publish command receipt")
+            })?;
+        }
+        Ok(receipt)
+    })();
     match prepared {
         Ok(receipt) => Ok(receipt),
         Err(error) => {

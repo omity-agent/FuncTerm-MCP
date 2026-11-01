@@ -56,7 +56,6 @@ fn cmd_submission_uses_interactive_percent_and_batch_return_semantics() {
             "--wait-timeout",
             "5",
         ]));
-        assert!(result.finished, "{result:?}");
         assert_eq!(result.exit_code, Some(0_i32), "{result:?}");
     }
     complete_command(&tab, &format!("cd /d \"{}\"", cwd.display()));

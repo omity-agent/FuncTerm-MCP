@@ -13,6 +13,8 @@ mod interactive_state;
 mod job_isolation;
 #[path = "integration/permission_policy.rs"]
 mod permission_policy;
+#[path = "integration/semantics/resilience.rs"]
+mod resilience;
 #[path = "e2e/streams.rs"]
 mod routing;
 #[path = "e2e/services.rs"]

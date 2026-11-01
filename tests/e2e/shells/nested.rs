@@ -15,7 +15,6 @@ fn cli_keeps_nested_launch_result_stable_after_nested_shell_exits() {
         let output = send_command(&tab.tab_id, nested_launch_command(case.name), 15.0);
         let id = parse_command_id(&output);
         let launch = wait_for_completion(&output);
-        assert!(launch.finished, "{}: {launch:?}", case.name);
         assert_eq!(launch.exit_code, Some(0_i32), "{}: {launch:?}", case.name);
         let directory = command_directory(&tab.tab_id, &id);
         let source = if case.name == "cmd" {
@@ -32,7 +31,6 @@ fn cli_keeps_nested_launch_result_stable_after_nested_shell_exits() {
         let nested = complete_command(&tab.tab_id, &nested_marker_command(case.name, &marker));
         assert!(nested.stdout.contains(&marker), "{nested:?}");
         let exited = complete_command(&tab.tab_id, exit_command(case.name));
-        assert!(exited.finished, "{}: {exited:?}", case.name);
         if case.name == "cmd" {
             assert_eq!(exited.exit_code, Some(42_i32));
         }

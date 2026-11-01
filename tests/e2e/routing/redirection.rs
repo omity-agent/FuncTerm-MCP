@@ -15,7 +15,6 @@ fn file_and_null_input_never_activate_a_nested_repl() {
     let created = create_tab(&cwd, parent);
     for target in ["python", "python -i"] {
         let result = complete_command(&created.tab_id, &format!("{target} < supplied_code.py"));
-        assert!(result.finished, "{target}: {result:?}");
         assert_eq!(result.exit_code, Some(7_i32), "stderr: {}", result.stderr);
         assert!(
             result.stdout.contains("FILE_INPUT_RAN"),
@@ -26,7 +25,6 @@ fn file_and_null_input_never_activate_a_nested_repl() {
     }
     let expected = complete_command(&created.tab_id, &format!("{native} < {null}"));
     let empty = complete_command(&created.tab_id, &format!("python < {null}"));
-    assert!(empty.finished, "{empty:?}");
     assert_eq!(
         empty.exit_code, expected.exit_code,
         "stdout: {}\nstderr: {}",

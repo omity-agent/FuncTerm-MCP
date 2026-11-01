@@ -18,9 +18,8 @@ use event_listener::Event;
 use parking_lot::Mutex;
 use portable_pty::PtySize;
 use std::io::Write;
-use wezterm_escape_parser::{Action, parser::Parser};
+use wezterm_escape_parser::{Action, osc::OperatingSystemCommand, parser::Parser};
 pub(super) struct Terminal {
-    model_title: String,
     state: Mutex<TerminalState>,
     changed: Event,
 }
@@ -48,7 +47,6 @@ impl Terminal {
             screen.model.advance_bytes(initial_title.as_bytes());
             let visible_contents = screen.visible_contents().into();
             Self {
-                model_title: model_title.to_owned(),
                 state: Mutex::new(TerminalState {
                     screen: Arc::new(Mutex::new(screen)),
                     screen_title: model_title.to_owned(),
@@ -82,8 +80,8 @@ impl Terminal {
     pub(super) fn contents(&self) -> ByteString {
         self.state.lock().visible_contents.clone()
     }
-    pub(super) fn model_title(&self) -> String {
-        self.model_title.clone()
+    pub(super) fn title(&self) -> String {
+        self.state.lock().captures.title().to_owned()
     }
     pub(super) fn complete_at_prompt(&self, id: &str) -> Result<()> {
         self.state.lock().captures.finish(id)
@@ -138,9 +136,20 @@ impl TerminalState {
         if actions.is_empty() {
             return Ok(());
         }
+        let title_written = actions.iter().any(|action| {
+            matches!(
+                action,
+                Action::OperatingSystemCommand(command) if matches!(
+                    command.as_ref(),
+                    OperatingSystemCommand::SetIconNameAndWindowTitle(_)
+                        | OperatingSystemCommand::SetWindowTitle(_)
+                        | OperatingSystemCommand::SetWindowTitleSun(_)
+                )
+            )
+        });
         let mut screen = self.screen.lock();
         screen.apply(actions);
-        if self.screen_title != screen.model.get_title() {
+        if title_written || self.screen_title != screen.model.get_title() {
             screen.model.get_title().clone_into(&mut self.screen_title);
             drop(screen);
             self.captures.update(&self.screen_title)?;

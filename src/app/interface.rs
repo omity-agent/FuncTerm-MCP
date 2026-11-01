@@ -122,6 +122,8 @@ pub(super) enum CliCommand {
         session_root: PathBuf,
         # [arg (long , value_parser = ShellChoice :: from_canonical_name)]
         shell: ShellChoice,
+        #[arg(long)]
+        output_file: Option<PathBuf>,
     },
     #[command(hide = true)]
     InternalWriteDone {
@@ -135,6 +137,10 @@ pub(super) enum CliCommand {
         cwd: String,
         #[arg(long)]
         directory: PathBuf,
+        #[arg(long)]
+        replay_output: bool,
+        #[arg(long)]
+        stdio: bool,
     },
     #[command(hide = true)]
     InternalWriteStart {
@@ -142,6 +148,8 @@ pub(super) enum CliCommand {
         command_id: String,
         #[arg(long)]
         directory: PathBuf,
+        #[arg(long)]
+        stdio: bool,
     },
     #[command(hide = true)]
     InternalEnsureShims {

@@ -12,7 +12,7 @@ pub(super) fn posix_environment_snapshot() -> String {
             ))
         });
     format!(
-        "    local @VAR_complete_environment@=\"$(export -p | sed 's/^declare -x /export /')\"\n{protected}"
+        "    local @VAR_complete_environment@=\"$(export -p)\"\n    @VAR_complete_environment@=\"${{@VAR_complete_environment@/#declare -x /export }}\"\n    @VAR_complete_environment@=\"${{@VAR_complete_environment@//$'\\ndeclare -x '/$'\\nexport '}}\"\n{protected}"
     )
 }
 pub(super) fn posix_environment_restore() -> String {

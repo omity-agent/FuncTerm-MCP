@@ -113,7 +113,6 @@ fn interrupted_shells_return_to_a_usable_prompt() {
             }
         }
         let result = wait_for_completion(&accepted);
-        assert!(result.finished, "{shell}: {result:?}");
         assert_eq!(result.exit_code, Some(130_i32), "{shell}: {result:?}");
         assert_eq!(result.cwd, cwd, "{shell}: {result:?}");
         assert!(

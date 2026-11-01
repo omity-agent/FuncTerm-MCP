@@ -7,6 +7,7 @@ mod claim;
 mod receipt;
 #[cfg(windows)]
 mod search_path;
+mod title;
 pub(crate) use claim::claim_command;
 #[cfg(windows)]
 pub(crate) use search_path::cmd_search_path;
@@ -21,41 +22,48 @@ pub(crate) fn time_millis() -> Result<String> {
     Ok(rounded.to_string())
 }
 pub(crate) type DoneOutput<'value> = crate::contract::CommandCompletion<&'value str>;
-pub(crate) fn write_start(command_id: &str, directory: &Path, model_title: &str) -> Result<()> {
-    let mut terminal = crate::shim::terminal_output()?;
-    restore_model_title(&mut terminal, model_title)?;
+pub(crate) fn write_start(command_id: &str, directory: &Path, stdio: bool) -> Result<()> {
+    let mut terminal = marker_output(stdio)?;
+    title::restore(&mut terminal, directory, stdio)?;
     write_start_to(command_id, directory, &mut terminal)
-}
-#[cfg(windows)]
-fn restore_model_title(_output: &mut impl Write, title: &str) -> Result<()> {
-    use windows::Win32::SetConsoleTitleW;
-    use windows::core::PCWSTR;
-    crate::contract::validate_window_title(title)?;
-    let wide_title: Vec<u16> = title.encode_utf16().chain(core::iter::once(0)).collect();
-    unsafe { SetConsoleTitleW(PCWSTR(wide_title.as_ptr())) }
-        .ok()
-        .context("failed to restore terminal model title")
-}
-#[cfg(unix)]
-fn restore_model_title(output: &mut impl Write, title: &str) -> Result<()> {
-    output
-        .write_all(crate::contract::window_title_sequence(title)?.as_bytes())
-        .context("failed to restore terminal model title")
 }
 fn write_start_to(command_id: &str, directory: &Path, output: &mut impl Write) -> Result<()> {
     anyhow::ensure!(directory.is_dir(), "command directory is missing");
     write_marker(output, crate::contract::TERMINAL_MARKER_START, command_id)
 }
 pub(crate) fn write_done(done: &DoneOutput<'_>, directory: &Path) -> Result<()> {
+    complete(done, directory, false, false)
+}
+pub(crate) fn complete(
+    done: &DoneOutput<'_>,
+    directory: &Path,
+    replay_output: bool,
+    stdio: bool,
+) -> Result<()> {
+    let mut terminal = marker_output(stdio)?;
+    if replay_output {
+        for name in [crate::contract::STDOUT_FILE, crate::contract::STDERR_FILE] {
+            let mut stream = std::fs::File::open(directory.join(name))
+                .with_context(|| format!("failed to open captured {name}"))?;
+            std::io::copy(&mut stream, &mut terminal)
+                .with_context(|| format!("failed to replay captured {name}"))?;
+        }
+    }
     let guard = early_done_guard(done.command_id, directory)?;
     match fs_err::remove_file(guard) {
         Ok(()) => return write_released(directory),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(error) => return Err(error).context("failed to consume early completion guard"),
     }
-    let mut terminal = crate::shim::terminal_output()?;
     write_done_to(done, directory, &mut terminal)?;
     write_released(directory)
+}
+fn marker_output(stdio: bool) -> Result<Box<dyn Write>> {
+    if stdio {
+        Ok(Box::new(std::io::stdout()))
+    } else {
+        Ok(Box::new(crate::shim::terminal_output()?))
+    }
 }
 fn write_released(directory: &Path) -> Result<()> {
     let path = directory.join(crate::contract::RELEASED_FILE);

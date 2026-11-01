@@ -27,15 +27,17 @@ functerm_publish_done() {{
         return 1
     fi
     @VAR_helper@="$(functerm_posix_path "$@VAR_helper@")" || return 1
-    if command -v cygpath > /dev/null 2>&1; then
-        @VAR_cwd@="$(cygpath -m "$@VAR_cwd@")" || return 1
+    local @VAR_replay@=''
+    if [ "${{@VAR_separate_output@-0}}" = 1 ]; then
+        @VAR_replay@=--replay-output
     fi
-    "$@VAR_helper@" internal-write-done \
+    @VAR_cwd@="$(functerm_native_cwd)" || return 1
+    functerm_terminal_helper "$@VAR_helper@" internal-write-done \
         --command-id "$@VAR_command_id@" \
         --exit-code "$@VAR_exit_code@" \
         --time-consumption "$@VAR_time_consumption@" \
         --cwd "$@VAR_cwd@" \
-        --directory "$@VAR_native_directory@"
+        --directory "$@VAR_native_directory@" $@VAR_replay@
 }}
 {publish_start}
 functerm_command_time_millis() {{
@@ -45,8 +47,17 @@ functerm_command_time_millis() {{
         return 1
     fi
     @VAR_helper@="$(functerm_posix_path "$@VAR_helper@")" || return 1
-    "$@VAR_helper@" internal-time-millis
+    local @VAR_millis@
+    @VAR_millis@="$("$@VAR_helper@" internal-time-millis < /dev/null 2>&1)" || {{
+        builtin printf '%s\n' "$@VAR_millis@" >&2
+        return 1
+    }}
+    builtin printf '%s' "$@VAR_millis@"
 }}
+functerm_terminal_helper() (
+    builtin set -o pipefail
+    "$@" --stdio < /dev/null 2>&1 | "$@VAR_cat@" > /dev/tty
+)
 functerm_restore_status() {{ return "$1"; }}"#,
         emulate = dialect.emulate(),
         helper_env = HELPER_EXECUTABLE_ENV,

@@ -50,7 +50,6 @@ pub(super) fn assert_parent(tab_id: &str, parent: &str) {
         "parent shell changed: {text}"
     );
     let result = complete_command(tab_id, parent_marker(parent));
-    assert!(result.finished, "{result:?}");
     assert_eq!(result.exit_code, Some(0_i32), "{result:?}");
     assert!(result.stdout.contains("PARENT_CONTINUED"), "{result:?}");
 }

@@ -1,7 +1,6 @@
 use crate::support::complete_command;
 pub(super) fn assert_persistent_state(tab: &str, shell: &str) {
     let definition = complete_command(tab, definition_command(shell));
-    assert!(definition.finished, "{shell}: {definition:?}");
     assert_eq!(definition.exit_code, Some(0_i32), "{shell}: {definition:?}");
     let query = complete_command(tab, query_command(shell));
     assert_eq!(

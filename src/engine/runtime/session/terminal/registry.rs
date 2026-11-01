@@ -3,14 +3,14 @@ use alloc::{collections::BTreeMap, sync::Arc};
 use anyhow::{Result, bail};
 use parking_lot::Mutex;
 pub(super) struct CaptureRegistry {
-    model_title: String,
+    title: String,
     captures: BTreeMap<String, Arc<CommandCapture>>,
     active: Option<String>,
 }
 impl CaptureRegistry {
-    pub(super) const fn new(model_title: String) -> Self {
+    pub(super) const fn new(title: String) -> Self {
         Self {
-            model_title,
+            title,
             captures: BTreeMap::new(),
             active: None,
         }
@@ -25,7 +25,7 @@ impl CaptureRegistry {
             bail!("command capture already exists for {id}");
         }
         let capture = Arc::new(CommandCapture::new(
-            self.model_title.clone(),
+            self.title.clone(),
             separate_output,
             screen,
         ));
@@ -86,9 +86,13 @@ impl CaptureRegistry {
         }
         Ok(())
     }
-    pub(super) fn update(&self, title: &str) -> Result<()> {
+    pub(super) fn title(&self) -> &str {
+        &self.title
+    }
+    pub(super) fn update(&mut self, title: &str) -> Result<()> {
         if let Some(id) = self.active.as_deref() {
             self.require(id)?.update(title);
+            title.clone_into(&mut self.title);
         }
         Ok(())
     }

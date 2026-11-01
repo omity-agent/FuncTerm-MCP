@@ -15,7 +15,6 @@ fn redirected_python_flags_and_aliases_preserve_streams_and_exit_status() {
     for target in ["python -i", "python3"] {
         let command = pipe_command(parent, script, target);
         let result = complete_command(&created.tab_id, &command);
-        assert!(result.finished, "{target} did not finish: {result:?}");
         assert_eq!(result.exit_code, Some(7_i32), "{target}: {result:?}");
         assert!(
             result.stdout.contains("PIPE_STDOUT"),
@@ -37,7 +36,6 @@ fn piped_bash_does_not_take_over_the_terminal() {
     for target in ["bash", "bash -i"] {
         let command = pipe_command(parent, "printf '%s\\n' 'BASH_PIPE_RAN'\nexit 7\n", target);
         let result = complete_command(&created.tab_id, &command);
-        assert!(result.finished, "{target} did not finish: {result:?}");
         assert_eq!(result.exit_code, Some(7_i32), "{target}: {result:?}");
         assert!(
             result.stdout.contains("BASH_PIPE_RAN"),

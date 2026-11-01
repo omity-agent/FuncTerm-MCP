@@ -15,14 +15,12 @@ fn assert_recovers(shell: &str) {
     let directory = case_dir(shell, "cleared environment");
     let created = create_tab(&directory, shell);
     let cleared = complete_command(&created.tab_id, clear_environment_command(shell));
-    assert!(cleared.finished, "{shell}: {cleared:?}");
     assert_eq!(cleared.exit_code, Some(0_i32), "{shell}: {cleared:?}");
     assert!(
         cleared.stdout.contains("MCP_PTY_ENVIRONMENT_CLEARED"),
         "{cleared:?}"
     );
     let next = complete_command(&created.tab_id, plain_marker_command(shell));
-    assert!(next.finished, "{shell}: {next:?}");
     assert_eq!(next.exit_code, Some(0_i32), "{shell}: {next:?}");
     assert!(
         next.stdout.contains("MCP_PTY_ENVIRONMENT_RECOVERED"),

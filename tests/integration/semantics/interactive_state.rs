@@ -53,20 +53,19 @@ fn python_exception_cache_and_future_parser_match_interactive_execution() {
     assert_eq!(rejected.exit_code, Some(1_i32), "{rejected:?}");
 }
 #[test]
-fn abrupt_process_exit_preserves_codes_and_consistent_idle_state() {
+fn process_exit_preserves_codes_and_consistent_idle_state() {
     let _guard = locked_with_env(&[]);
-    for shell in [
-        "python",
+    for (shell, template) in [
+        ("python", "import os; os._exit(EXIT_CODE)"),
         #[cfg(windows)]
-        "powershell",
+        ("powershell", "[Environment]::Exit(EXIT_CODE)"),
+        #[cfg(windows)]
+        ("powershell", "exit EXIT_CODE"),
+        ("nu", "exit EXIT_CODE"),
     ] {
         for code in [0_i32, 28_i32] {
             let tab = create_tab(&temp_dir("abrupt-exit"), shell).tab_id;
-            let source = if shell == "python" {
-                format!("import os; os._exit({code})")
-            } else {
-                format!("[Environment]::Exit({code})")
-            };
+            let source = template.replace("EXIT_CODE", &code.to_string());
             let accepted = crate::support::send_command(&tab, &source, 0.0);
             let id = parse_command_id(&accepted);
             let finished = wait_for_completion(&accepted);

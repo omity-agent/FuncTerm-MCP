@@ -6,7 +6,6 @@ use crate::runtime::{config, service_control};
 use anyhow::{Context as _, Result};
 use base64_turbo::STANDARD;
 use clap::Parser as _;
-use std::path::Path;
 pub(crate) async fn run() -> Result<std::process::ExitCode> {
     let args = Args::parse();
     match args.command.unwrap_or(CliCommand::Mcp {
@@ -46,28 +45,43 @@ pub(crate) async fn run() -> Result<std::process::ExitCode> {
         CliCommand::InternalClaimCommand {
             session_root,
             shell,
-        } => print_result(crate::app::command_state::claim_command(
-            &session_root,
-            shell,
-        )),
+            output_file,
+        } => {
+            let receipt = crate::app::command_state::claim_command(
+                &session_root,
+                shell,
+                output_file.as_deref(),
+            )?;
+            if output_file.is_some() {
+                Ok(())
+            } else {
+                print_result(Ok(receipt))
+            }
+        }
         CliCommand::InternalWriteDone {
             command_id,
             exit_code,
             time_consumption,
             cwd,
             directory,
-        } => write_done(&command_id, exit_code, &time_consumption, &cwd, &directory),
+            replay_output,
+            stdio,
+        } => crate::app::command_state::complete(
+            &crate::app::command_state::DoneOutput {
+                command_id: &command_id,
+                exit_code,
+                time_consumption: &time_consumption,
+                cwd: &cwd,
+            },
+            &directory,
+            replay_output,
+            stdio,
+        ),
         CliCommand::InternalWriteStart {
             command_id,
             directory,
-        } => {
-            let settings = config::load()?;
-            crate::app::command_state::write_start(
-                &command_id,
-                &directory,
-                &settings.terminal_model_title,
-            )
-        }
+            stdio,
+        } => crate::app::command_state::write_start(&command_id, &directory, stdio),
         CliCommand::Mcp {
             no_profile,
             privilege_mode,
@@ -182,21 +196,4 @@ fn print_result(result: Result<String>) -> Result<()> {
     let text = line_terminated(result?);
     print!("{text}");
     Ok(())
-}
-fn write_done(
-    command_id: &str,
-    exit_code: i32,
-    time_consumption: &str,
-    cwd: &str,
-    directory: &Path,
-) -> Result<()> {
-    crate::app::command_state::write_done(
-        &crate::app::command_state::DoneOutput {
-            command_id,
-            exit_code,
-            time_consumption,
-            cwd,
-        },
-        directory,
-    )
 }

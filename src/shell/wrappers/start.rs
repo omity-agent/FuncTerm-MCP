@@ -74,7 +74,7 @@ pub(super) fn posix(dialect: PosixDialect) -> String {
 	        return 1
 	    fi
 	    @VAR_helper@="$(functerm_posix_path "$@VAR_helper@")" || return 1
-	    "$@VAR_helper@" internal-write-start \
+            functerm_terminal_helper "$@VAR_helper@" internal-write-start \
 	        --command-id "$@VAR_command_id@" \
 	        --directory "$@VAR_native_directory@"
 	}}"#,

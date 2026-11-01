@@ -58,8 +58,8 @@ impl ShellSession {
     pub(super) fn screen_contents(&self) -> bytestring::ByteString {
         self.screen.contents()
     }
-    pub(super) fn model_title(&self) -> String {
-        self.screen.model_title()
+    pub(super) fn title(&self) -> String {
+        self.screen.title()
     }
     pub(super) fn capture_command(
         &self,
@@ -98,6 +98,11 @@ impl ShellSession {
         let choice = self.current_choice();
         let command_source = choice.command_source(command);
         fs_err::write(&record.source, command_source)?;
+        fs_err::write(
+            record.directory.join(crate::contract::TITLE_FILE),
+            self.title(),
+        )
+        .context("failed to write command title")?;
         let cwd = crate::text::path_text(&self.cwd(), "command working directory")?;
         let dispatch = sonic_rs::to_vec(&crate::contract::CommandDispatch {
             command_id,
