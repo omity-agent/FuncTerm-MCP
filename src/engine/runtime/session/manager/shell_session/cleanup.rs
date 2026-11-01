@@ -22,7 +22,7 @@ impl ShellSession {
 impl Drop for ShellSession {
     fn drop(&mut self) {
         if let Err(error) = self.process_tree.terminate() {
-            eprintln!("failed to terminate shell process tree during cleanup: {error}");
+            tracing::error!(%error, "failed to terminate shell process tree during cleanup");
         }
         let child = self.child.get_mut();
         process::cleanup(child.as_mut(), "shell child during cleanup");

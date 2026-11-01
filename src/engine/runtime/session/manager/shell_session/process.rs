@@ -81,13 +81,13 @@ pub(in crate::engine::runtime::session::manager) fn cleanup(
         Ok(Some(_)) => {}
         Ok(None) => {
             if let Err(error) = child.kill() {
-                eprintln!("failed to terminate {description}: {error}");
+                tracing::error!(%error, description, "failed to terminate process");
             }
             if let Err(error) = child.wait() {
-                eprintln!("failed to wait for {description}: {error}");
+                tracing::error!(%error, description, "failed to wait for process");
             }
         }
-        Err(error) => eprintln!("failed to poll {description}: {error}"),
+        Err(error) => tracing::error!(%error, description, "failed to poll process"),
     }
 }
 pub(in crate::engine::runtime::session::manager) fn join_reader(
@@ -95,6 +95,6 @@ pub(in crate::engine::runtime::session::manager) fn join_reader(
     description: &str,
 ) {
     if reader.join().is_err() {
-        eprintln!("{description} panicked during shell cleanup");
+        tracing::error!(description, "thread panicked during shell cleanup");
     }
 }

@@ -61,7 +61,7 @@ async fn run_inner(settings: Settings, startup_reporter: &mut StartupReporter) -
                     ));
                 }
                 Err(error) if recoverable_accept_error(&error) => {
-                    eprintln!("recoverable IPC accept error: {error}");
+                    tracing::warn!(%error, "recoverable IPC accept error");
                 }
                 Err(error) => break Err(error).context("failed to accept IPC request"),
             },
@@ -99,9 +99,9 @@ async fn run_inner(settings: Settings, startup_reporter: &mut StartupReporter) -
 fn report_worker(result: Result<Result<()>, tokio::task::JoinError>) {
     match result {
         Ok(Ok(())) => {}
-        Ok(Err(error)) => eprintln!("IPC connection failed: {error:#}"),
+        Ok(Err(error)) => tracing::error!(error = format!("{error:#}"), "IPC connection failed"),
         Err(error) if error.is_cancelled() => {}
-        Err(error) => eprintln!("IPC connection task failed: {error}"),
+        Err(error) => tracing::error!(%error, "IPC connection task failed"),
     }
 }
 fn response_from<E>(result: Result<Payload, E>, processing: Option<ProcessingTime>) -> Response

@@ -7,7 +7,7 @@ mod unix_shell;
 use super::ShellChoice;
 use crate::contract::{DISPATCHER_COMMAND, POWERSHELL_DISPATCHER_FUNCTION};
 use alloc::borrow::Cow;
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Result, bail};
 use std::ffi::OsString;
 use std::path::Path;
 #[derive(Clone, Copy)]
@@ -91,17 +91,11 @@ pub(crate) fn prepare_command(
     _session_root: &Path,
 ) -> Result<()> {
     let source = directory.join(choice.source_file());
-    let metadata = fs_err::metadata(&source).with_context(|| {
-        format!(
-            "command input is missing or inaccessible: {}",
-            source.display()
-        )
+    let metadata = std::fs::metadata(&source).map_err(|error| {
+        tracing::debug!(%error, source = %source.display(), "command input inspection failed");
+        anyhow::anyhow!("command input is missing or inaccessible")
     })?;
-    anyhow::ensure!(
-        metadata.is_file(),
-        "command input is not a regular file: {}",
-        source.display()
-    );
+    anyhow::ensure!(metadata.is_file(), "command input is not a regular file");
     Ok(())
 }
 pub(crate) fn keyboard_bytes(choice: ShellChoice, bytes: &[u8]) -> Cow<'_, [u8]> {

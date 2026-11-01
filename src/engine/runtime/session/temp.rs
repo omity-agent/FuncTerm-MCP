@@ -33,7 +33,10 @@ pub(crate) fn tab_state_directory(tab_root: &std::path::Path) -> PathBuf {
 }
 pub(crate) fn remove_stale_service_runtime(root: &std::path::Path, service_name: &str) {
     if let Err(error) = remove_directory_if_present(&service_root(root, service_name)) {
-        eprintln!("{error:#}");
+        tracing::error!(
+            error = format!("{error:#}"),
+            "failed to remove stale service runtime"
+        );
     }
 }
 fn service_root(root: &std::path::Path, service_name: &str) -> PathBuf {

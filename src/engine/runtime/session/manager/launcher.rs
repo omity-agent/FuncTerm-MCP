@@ -151,12 +151,12 @@ impl ShellLauncher {
             .wait(&mut child, &ready_file, &screen, startup_timeout)
             .with_context(|| {
                 format!(
-                    "failed to initialize {} at {executable} with shim directory {}",
+                    "failed to initialize {} at {executable}",
                     starting_shell.canonical_name(),
-                    shim_dir.display(),
                 )
             });
         if let Err(error) = initialized {
+            tracing::debug!(shim_dir = %shim_dir.display(), "shell initialization failed");
             process::cleanup(child.as_mut(), "unregistered shell child");
             drop(retained_slave);
             drop(spawned.master);

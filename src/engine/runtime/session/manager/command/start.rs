@@ -63,7 +63,10 @@ impl Tab {
             Ok(reservation) => reservation,
             Err(error) => {
                 if let Err(capture_error) = session.discard_capture(managed.id()) {
-                    eprintln!("failed to discard command capture: {capture_error:#}");
+                    tracing::error!(
+                        error = format!("{capture_error:#}"),
+                        "failed to discard command capture"
+                    );
                 }
                 discard_record(managed.record());
                 return Err(error);

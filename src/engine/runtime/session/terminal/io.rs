@@ -24,19 +24,19 @@ fn read_pty(terminal: &Terminal, owned_reader: &mut dyn Read) {
             }
             Ok(length) => length,
             Err(error) => {
+                tracing::error!(%error, "failed to read PTY output");
                 terminal.reader_failed(&format!("failed to read PTY output: {error}"));
-                eprintln!("failed to read PTY output: {error}");
                 return;
             }
         };
         let Some(chunk) = buffer.get(..read_len) else {
             terminal.reader_failed("PTY reader returned an invalid byte count");
-            eprintln!("PTY reader returned an invalid byte count: {read_len}");
+            tracing::error!(read_len, "PTY reader returned an invalid byte count");
             return;
         };
         tracing::trace!(output = ?String::from_utf8_lossy(chunk), "terminal PTY output");
         if let Err(error) = terminal.process(chunk) {
-            eprintln!("failed to process PTY output: {error:#}");
+            tracing::error!(error = format!("{error:#}"), "failed to process PTY output");
             return;
         }
     }

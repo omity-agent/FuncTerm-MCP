@@ -13,10 +13,22 @@ pub(super) enum StartupProcess {
     Daemon,
 }
 pub(crate) fn spawn_daemon(service_name: &str, timeout: Duration) -> Result<()> {
-    let startup_file = startup_file();
+    let startup_file = startup_file()?;
     let mut launcher = spawn_launcher_process(service_name, &startup_file)
         .context("failed to spawn daemon launcher")?;
-    wait_for_startup_file(&startup_file, &mut launcher, timeout)
+    let reported = wait_for_startup_file(&startup_file, &mut launcher, timeout);
+    match (reported, remove_startup_file(&startup_file)) {
+        (Ok(()), removed) => removed,
+        (Err(error), Ok(())) => Err(error),
+        (Err(error), Err(cleanup)) => Err(error.context(format!("{cleanup:#}"))),
+    }
+}
+fn remove_startup_file(path: &std::path::Path) -> Result<()> {
+    match fs_err::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).context("failed to remove daemon startup report"),
+    }
 }
 pub(crate) fn run_launcher(service_name: &str) -> Result<()> {
     let mut startup_reporter = StartupReporter::from_env();
@@ -36,11 +48,10 @@ fn spawn_daemon_child(service_name: &str) -> Result<()> {
     let _daemon = spawn_daemon_process(service_name).context("failed to spawn detached daemon")?;
     Ok(())
 }
-fn startup_file() -> std::path::PathBuf {
-    std::env::temp_dir()
-        .join("functerm")
+fn startup_file() -> Result<std::path::PathBuf> {
+    Ok(crate::runtime::temp::daemon_root()?
         .join("daemon-startup")
-        .join(format!("{}-{}.json", std::process::id(), nanoid::nanoid!()))
+        .join(format!("{}-{}.json", std::process::id(), nanoid::nanoid!())))
 }
 fn spawn_launcher_process(
     service_name: &str,
