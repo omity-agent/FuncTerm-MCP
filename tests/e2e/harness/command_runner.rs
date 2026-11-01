@@ -77,6 +77,10 @@ pub(crate) fn complete_command(tab_id: &str, command: &str) -> CommandResult {
 }
 pub(crate) fn wait_for_completion(accepted: &Output) -> CommandResult {
     let id = parse_command_id(accepted);
+    let initial = parse_command_result(accepted);
+    if initial.finished {
+        return initial;
+    }
     let deadline = Instant::now() + CLI_COMMAND_TIMEOUT;
     loop {
         let observed = parse_command_result(&run_cli(&["view", &id, "--wait-timeout", "1"]));

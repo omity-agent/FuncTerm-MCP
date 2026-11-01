@@ -1,10 +1,10 @@
 use super::{DriverStartup, StartupContext, os_strings_lower};
-use crate::contract::NUSHELL_SUBMISSION_FILE;
+use crate::contract::{NUSHELL_SUBMISSION_FILE, SESSION_COMMANDS_DIRECTORY};
 use crate::shell::ShellChoice;
 use crate::shell::quote;
-use crate::shell::shims::CURRENT_SHELL_ENV;
+use crate::shell::shims::{CURRENT_SHELL_ENV, SESSION_ROOT_ENV};
 use crate::shell::wrappers::{nushell_wrapper, startup_environment};
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 use std::path::Path;
 pub(super) fn startup(context: StartupContext<'_>) -> Result<DriverStartup> {
     let bootstrap = context.startup_directory.join("nu_bootstrap.nu");
@@ -34,6 +34,12 @@ pub(super) fn interactive_arguments(arguments: &[std::ffi::OsString]) -> bool {
     })
 }
 fn initialization_script(context: StartupContext<'_>) -> Result<String> {
+    let session_root = context
+        .environment
+        .value(SESSION_ROOT_ENV)
+        .context("missing NuShell session root")?;
+    let commands = Path::new(&session_root).join(SESSION_COMMANDS_DIRECTORY);
+    let command_root = source_constant(&commands);
     let style = if context.ignore_shell_style {
         "$env.NO_COLOR = '1'
 $env.config.use_ansi_coloring = false
@@ -53,8 +59,9 @@ $env.config.shell_integration = { osc2: false, osc7: false, osc8: false, osc9_9:
         ""
     };
     let initialization = format!(
-        "{}\n$env.{CURRENT_SHELL_ENV} = 'nu'\nlet @VAR_active_command@ = {}\nlet @VAR_helper_path@ = $env.FUNCTERM_HELPER_EXECUTABLE\n{}\nlet @VAR_recovery_environment@ = $env\n{}\ncd {}\nensure_nushell_shims\n$env.config.hooks.pre_execution = ($env.config.hooks.pre_execution | append {{ functerm_begin }})\n$env.config.hooks.pre_prompt = ($env.config.hooks.pre_prompt | append {{ functerm_finish }})\n'' | save --force --raw {}\n",
+        "{}\n$env.{CURRENT_SHELL_ENV} = 'nu'\nconst {command_root} = {}\nlet @VAR_active_command@ = {}\nlet @VAR_helper_path@ = $env.FUNCTERM_HELPER_EXECUTABLE\n{}\nlet @VAR_recovery_environment@ = $env\n{}\ncd {}\nensure_nushell_shims\n$env.config.hooks.pre_execution = ($env.config.hooks.pre_execution | append {{ functerm_begin }})\n$env.config.hooks.pre_prompt = ($env.config.hooks.pre_prompt | append {{ functerm_finish }})\n'' | save --force --raw {}\n",
         startup_environment(crate::shell::ShellChoice::NuShell, context.environment)?,
+        quote::nushell_path(&commands)?,
         quote::nushell_path(&context.ready_file.with_file_name("active-command.nuon"))?,
         style,
         nushell_wrapper(),
@@ -72,9 +79,24 @@ pub(super) fn invocation(
         "NuShell does not support separate_output=true; use separate_output=false"
     );
     let submission = directory.join(NUSHELL_SUBMISSION_FILE);
-    let submission_path = quote::nushell_path(&submission)?;
+    let commands = directory
+        .parent()
+        .context("NuShell command directory has no parent")?;
+    let command_id = directory
+        .file_name()
+        .and_then(std::ffi::OsStr::to_str)
+        .context("NuShell command id is not valid UTF-8")?;
+    let command_root = source_constant(commands);
     // The execution hook fills this file after the line editor validates the invocation.
     fs_err::write(&submission, b"")?;
-    let line = format!("source {submission_path}");
+    let line =
+        format!("source (${command_root} | path join '{command_id}' '{NUSHELL_SUBMISSION_FILE}')");
     super::ShellInvocation::new(line, super::invocation_terminator(ShellChoice::NuShell))
+}
+fn source_constant(commands: &Path) -> String {
+    let mut suffix = blake3::hash(commands.as_os_str().as_encoded_bytes())
+        .to_hex()
+        .to_string();
+    suffix.truncate(12);
+    format!("commands_{suffix}")
 }

@@ -1,5 +1,5 @@
 use super::matrix::{case_dir, shell_cases};
-use crate::support::{create_tab, parse_command_result, send_command};
+use crate::support::{complete_command, create_tab};
 #[test]
 fn cli_recovers_after_shell_environment_is_cleared() {
     let _guard = super::matrix::daemon();
@@ -14,22 +14,14 @@ fn cli_recovers_after_shell_environment_is_cleared() {
 fn assert_recovers(shell: &str) {
     let directory = case_dir(shell, "cleared environment");
     let created = create_tab(&directory, shell);
-    let cleared = parse_command_result(&send_command(
-        &created.tab_id,
-        clear_environment_command(shell),
-        10.0,
-    ));
+    let cleared = complete_command(&created.tab_id, clear_environment_command(shell));
     assert!(cleared.finished, "{shell}: {cleared:?}");
     assert_eq!(cleared.exit_code, Some(0_i32), "{shell}: {cleared:?}");
     assert!(
         cleared.stdout.contains("MCP_PTY_ENVIRONMENT_CLEARED"),
         "{cleared:?}"
     );
-    let next = parse_command_result(&send_command(
-        &created.tab_id,
-        plain_marker_command(shell),
-        10.0,
-    ));
+    let next = complete_command(&created.tab_id, plain_marker_command(shell));
     assert!(next.finished, "{shell}: {next:?}");
     assert_eq!(next.exit_code, Some(0_i32), "{shell}: {next:?}");
     assert!(

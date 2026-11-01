@@ -94,7 +94,7 @@ fn cmd_codepage_changes_do_not_fill_terminal_records_with_blanks() {
     assert!(previous.stdout.contains("PREVIOUS=28"), "{previous:?}");
     for codepage in [936_i32, 65_001_i32] {
         complete_command(&tab, &format!("chcp {codepage}"));
-        let result = parse_command_result(&run_cli(&[
+        let result = wait_for_completion(&run_cli(&[
             "send-command",
             &tab,
             "--command",

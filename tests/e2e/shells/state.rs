@@ -1,9 +1,9 @@
-use crate::support::{parse_command_result, send_command};
+use crate::support::complete_command;
 pub(super) fn assert_persistent_state(tab: &str, shell: &str) {
-    let definition = parse_command_result(&send_command(tab, definition_command(shell), 10.0));
+    let definition = complete_command(tab, definition_command(shell));
     assert!(definition.finished, "{shell}: {definition:?}");
     assert_eq!(definition.exit_code, Some(0_i32), "{shell}: {definition:?}");
-    let query = parse_command_result(&send_command(tab, query_command(shell), 10.0));
+    let query = complete_command(tab, query_command(shell));
     assert_eq!(
         query.exit_code,
         Some(i32::from(shell == "powershell")),

@@ -1,5 +1,5 @@
 use crate::support::{
-    complete_command, create_tab, locked_with_env, parse_command_result, run_cli, temp_dir,
+    complete_command, create_tab, locked_with_env, run_cli, temp_dir, wait_for_completion,
 };
 #[test]
 fn bun_await_preserves_multiline_execution_and_persistent_bindings() {
@@ -48,7 +48,7 @@ fn cmd_submission_uses_interactive_percent_and_batch_return_semantics() {
     .unwrap();
     let tab = create_tab(&cwd, "cmd").tab_id;
     for source in ["cd /d C:\\", "cd /", "echo AFTER_ROOT"] {
-        let result = parse_command_result(&run_cli(&[
+        let result = wait_for_completion(&run_cli(&[
             "send-command",
             &tab,
             "--command",
