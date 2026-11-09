@@ -1,4 +1,6 @@
+extern crate alloc;
 use super::wire::{McpSession, assert_field, entries, text};
+use alloc::rc::Rc;
 use core::time::Duration;
 use rmcp::serde_json::json;
 use std::time::Instant;
@@ -9,11 +11,7 @@ pub(super) const SHELL: &str = "bash";
 pub(super) fn create_tabs<const N: usize>(session: &mut McpSession) -> [String; N] {
     let exec = (0..N)
         .map(|index| {
-            if index == 0 {
-                json!({"starting_shell": SHELL})
-            } else {
-                json!({"starting_shell": SHELL, "starting_directory": crate::support::temp_root()})
-            }
+            json!({"starting_shell": SHELL, "starting_directory": (index != 0).then(crate::support::temp_root)})
         })
         .collect::<Vec<_>>();
     let response = session.call("new_tab", json!({"exec": exec}));
@@ -73,56 +71,66 @@ fn mcp_batch_preserves_order_and_isolates_errors() {
     assert!(text(errors.last().unwrap(), "/error").contains("either text or bytes"));
 }
 #[test]
-fn mcp_wait_budget_is_shared_and_timeout_does_not_cancel_commands() {
-    let mut session = McpSession::new();
-    let [first, second] = create_tabs(&mut session);
-    #[cfg(windows)]
-    let initialization = "Write-Output BATCH_READY";
-    #[cfg(not(windows))]
-    let initialization = "printf '%s\\n' BATCH_READY";
-    let ready = session.call(
-        "send_command",
-        json!({
-            "exec": [
-                {"tab_id": first, "command": initialization, "separate_output": true},
-                {"tab_id": second, "command": initialization, "separate_output": true}
-            ], "wait_timeout": 10_u64
-        }),
-    );
-    for entry in entries(&ready) {
-        assert_field(entry, "/result/command/finished", true);
-        assert_field(entry, "/result/command/exit_code", 0_i32);
-        assert!(text(entry, "/result/command/stdout").contains("BATCH_READY"));
-    }
-    #[cfg(windows)]
-    let source = "Start-Sleep -Seconds 4\nWrite-Output BATCH_FINISHED";
-    #[cfg(not(windows))]
-    let source = "sleep 4\necho BATCH_FINISHED";
-    let started = Instant::now();
-    let response = session.call(
-        "send_command",
-        json!({
-            "exec": [
-                {"tab_id": first, "command": source, "separate_output": true},
-                {"tab_id": second, "command": source, "separate_output": true}
-            ], "wait_timeout": 1.5_f64
-        }),
-    );
-    let elapsed = started.elapsed();
-    assert!(
-        elapsed < Duration::from_millis(2800),
-        "{elapsed:?}: {response}"
-    );
-    let ids = entries(&response)
-        .iter()
-        .map(|entry| {
-            assert_field(entry, "/result/command/finished", false);
-            text(entry, "/result/command/command_id")
-        })
-        .collect::<Vec<_>>();
-    let completed = session.view(&ids, 1, 8.0);
-    for entry in entries(&completed) {
-        assert_field(entry, "/result/command/finished", true);
-        assert!(text(entry, "/result/command/stdout").contains("BATCH_FINISHED"));
+fn mcp_scaled_wait_budget_is_shared_and_timeout_does_not_cancel_commands() {
+    for (multiplier, timeout) in [("1", 1.5_f64), ("1.5", 1.0_f64), ("0.5", 3.0_f64)] {
+        let daemon = Rc::new(crate::support::locked_with_env(&[]));
+        let mut session = McpSession::on(
+            &daemon,
+            &["--no-profile", "--wait-timeout-multiplier", multiplier],
+        );
+        let [first, second] = create_tabs(&mut session);
+        let initialization = "echo BATCH_READY";
+        let ready = session.call(
+            "send_command",
+            json!({
+                "exec": [
+                    {"tab_id": first, "command": initialization, "separate_output": true},
+                    {"tab_id": second, "command": initialization, "separate_output": true}
+                ], "wait_timeout": 10_u64
+            }),
+        );
+        for entry in entries(&ready) {
+            assert_field(entry, "/result/command/finished", true);
+            assert_field(entry, "/result/command/exit_code", 0_i32);
+            assert!(text(entry, "/result/command/stdout").contains("BATCH_READY"));
+        }
+        let window = Duration::from_millis(1400)..Duration::from_millis(2800);
+        let viewing = Instant::now();
+        session.view(&[&first, &second], 1, timeout);
+        assert!(window.contains(&viewing.elapsed()));
+        #[cfg(windows)]
+        let source = "Start-Sleep -Seconds 4\nWrite-Output BATCH_FINISHED";
+        #[cfg(not(windows))]
+        let source = "sleep 4\necho BATCH_FINISHED";
+        let started = Instant::now();
+        let response = session.call(
+            "send_command",
+            json!({
+                "exec": [
+                    {"tab_id": first, "command": source, "separate_output": true},
+                    {"tab_id": second, "command": source, "separate_output": true}
+                ], "wait_timeout": timeout
+            }),
+        );
+        let elapsed = started.elapsed();
+        assert!(window.contains(&elapsed), "{elapsed:?}: {response}");
+        let ids = entries(&response)
+            .iter()
+            .map(|entry| {
+                assert_field(entry, "/result/command/finished", false);
+                text(entry, "/result/command/command_id")
+            })
+            .collect::<Vec<_>>();
+        let writing = Instant::now();
+        let written = session.call("manual_write", json!({
+            "exec": [{"tab_id": first, "text": ""}, {"tab_id": second, "text": ""}], "wait_timeout": timeout
+        }));
+        assert_field(&written, "/result/isError", false);
+        assert!(window.contains(&writing.elapsed()), "{written}");
+        let completed = session.view(&ids, 1, 8.0);
+        for entry in entries(&completed) {
+            assert_field(entry, "/result/command/finished", true);
+            assert!(text(entry, "/result/command/stdout").contains("BATCH_FINISHED"));
+        }
     }
 }

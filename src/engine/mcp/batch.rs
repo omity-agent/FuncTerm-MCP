@@ -1,9 +1,37 @@
 use super::{collection, invocation::Backend, operations::Operation};
 use crate::runtime::{config::Settings, protocol::wait_timeout_from_seconds};
+use anyhow::{Context as _, Result, ensure};
+use core::str::FromStr;
 use core::time::Duration;
 use rmcp::model::CallToolResult;
 use serde::Deserialize;
 use std::{collections::HashSet, time::Instant};
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(try_from = "f64")]
+pub(crate) struct WaitTimeoutMultiplier(f64);
+impl TryFrom<f64> for WaitTimeoutMultiplier {
+    type Error = anyhow::Error;
+    fn try_from(value: f64) -> Result<Self> {
+        ensure!(
+            value.is_finite() && value > 0.0_f64,
+            "wait timeout multiplier must be finite and greater than zero"
+        );
+        Ok(Self(value))
+    }
+}
+impl FromStr for WaitTimeoutMultiplier {
+    type Err = anyhow::Error;
+    fn from_str(value: &str) -> Result<Self> {
+        Self::try_from(value.parse::<f64>()?)
+    }
+}
+impl WaitTimeoutMultiplier {
+    fn scale(self, seconds: f64) -> Result<Duration> {
+        wait_timeout_from_seconds(seconds)?;
+        wait_timeout_from_seconds(seconds * self.0)
+            .context("scaled wait timeout exceeds the supported duration range")
+    }
+}
 #[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub(super) struct ExecBatch<T> {
@@ -29,7 +57,7 @@ where
 {
     validate(&entries)?;
     let budget = wait_timeout
-        .map(wait_timeout_from_seconds)
+        .map(|seconds| settings.mcp.wait_timeout_multiplier.scale(seconds))
         .transpose()
         .map_err(super::error_text)?
         .unwrap_or(Duration::ZERO);

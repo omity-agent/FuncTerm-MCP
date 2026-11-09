@@ -1,3 +1,4 @@
+use crate::engine::mcp::WaitTimeoutMultiplier;
 use crate::engine::privileges::PrivilegeMode;
 use crate::runtime::protocol::OutputMode;
 use alloc::collections::BTreeMap;
@@ -77,6 +78,7 @@ impl IpcSettings {
 }
 #[derive(Clone, Debug, Deserialize)]
 pub(crate) struct McpSettings {
+    pub(crate) wait_timeout_multiplier: WaitTimeoutMultiplier,
     pub(crate) http: HttpSettings,
     pub(crate) new_tab: ToolDescription,
     pub(crate) manual_write: ToolDescription,

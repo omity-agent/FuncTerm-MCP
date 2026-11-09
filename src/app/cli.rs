@@ -1,6 +1,6 @@
-use super::interface::{self, Args, CliCommand, DaemonCommand};
+use super::interface::{self, Args, CliCommand, DaemonCommand, print_result};
 use crate::runtime::protocol::{
-    EnvironmentSnapshot, KeyboardInput, Request, format::line_terminated, wait_timeout_from_seconds,
+    EnvironmentSnapshot, KeyboardInput, Request, wait_timeout_from_seconds,
 };
 use crate::runtime::{config, service_control};
 use anyhow::{Context as _, Result};
@@ -12,6 +12,7 @@ pub(crate) async fn run() -> Result<std::process::ExitCode> {
         no_profile: false,
         privilege_mode: None,
         output_mode: None,
+        wait_timeout_multiplier: None,
     }) {
         CliCommand::InternalEnsureShims { directory } => {
             crate::shell::shims::ensure_directory(&directory)
@@ -86,9 +87,12 @@ pub(crate) async fn run() -> Result<std::process::ExitCode> {
             no_profile,
             privilege_mode,
             output_mode,
+            wait_timeout_multiplier,
         } => {
             let mut settings = config::load()?;
             settings.shell_load_profile &= !no_profile;
+            settings.mcp.wait_timeout_multiplier =
+                wait_timeout_multiplier.unwrap_or(settings.mcp.wait_timeout_multiplier);
             crate::mcp::run(settings, privilege_mode, output_mode).await
         }
         CliCommand::Daemon { command } => {
@@ -191,9 +195,4 @@ pub(crate) async fn run() -> Result<std::process::ExitCode> {
         }
     }?;
     Ok(std::process::ExitCode::SUCCESS)
-}
-fn print_result(result: Result<String>) -> Result<()> {
-    let text = line_terminated(result?);
-    print!("{text}");
-    Ok(())
 }

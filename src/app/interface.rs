@@ -1,8 +1,9 @@
+use crate::engine::mcp::WaitTimeoutMultiplier;
 use crate::engine::privileges::PrivilegeMode;
 use crate::runtime::{
     client,
     config::Settings,
-    protocol::{OutputMode, Request},
+    protocol::{OutputMode, Request, format::line_terminated},
 };
 use crate::shell::ShellChoice;
 use anyhow::{Context as _, Result, ensure};
@@ -35,6 +36,11 @@ pub(super) enum CliCommand {
             help = "Fix command output handling and hide its separate_output input"
         )]
         output_mode: Option<OutputMode>,
+        #[arg(
+            long,
+            help = "Multiply MCP tool wait_timeout values by this positive factor"
+        )]
+        wait_timeout_multiplier: Option<WaitTimeoutMultiplier>,
     },
     Daemon {
         #[command(subcommand)]
@@ -182,4 +188,9 @@ pub(crate) async fn execute(settings: &Settings, request: Request) -> Result<Str
     client::ensure_daemon(settings).await?;
     let mut connection = client::DaemonClient::connect(settings).await?;
     Ok(connection.call(request).await?.into_plain_text())
+}
+pub(super) fn print_result(result: Result<String>) -> Result<()> {
+    let text = line_terminated(result?);
+    print!("{text}");
+    Ok(())
 }

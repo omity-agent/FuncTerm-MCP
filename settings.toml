@@ -77,6 +77,10 @@ windows_access_control = "D:P(A;;GA;;;SY)(A;;GA;;;{user_sid})"
 # 中等完整性标签允许已获 DACL 授权的普通权限客户端访问管理员 Daemon 的管道与互斥锁。
 windows_security_label = "S:(ML;;NW;;;ME)"
 
+[mcp]
+# MCP 工具 wait_timeout 的等待时间倍率；命令行 --wait-timeout-multiplier 可覆盖 stdio 实例的值。
+wait_timeout_multiplier = 1.0
+
 [mcp.http]
 # Daemon 内置的无身份验证 MCP HTTP 服务；默认允许所有 IPv4 网络接口访问。
 # 可通过 FUNCTERM_MCP_HTTP_BIND 覆盖；端口 0 由系统分配。
