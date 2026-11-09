@@ -77,7 +77,11 @@ fn process_exit_preserves_codes_and_consistent_idle_state() {
             for target in [&id, &tab] {
                 let output = run_cli(&["view", target]);
                 let document = String::from_utf8(output.stdout).unwrap();
-                assert_eq!(tagged_content(&document, "ALIVE").unwrap().trim(), "false");
+                assert_eq!(
+                    tagged_content(&document, "ALIVE").unwrap().trim(),
+                    "false",
+                    "{shell}: {source}: {document}"
+                );
                 assert_eq!(tagged_content(&document, "IDLE").unwrap().trim(), "true");
             }
         }

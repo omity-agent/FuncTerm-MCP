@@ -65,8 +65,7 @@ pub(crate) async fn run() -> Result<std::process::ExitCode> {
             time_consumption,
             cwd,
             directory,
-            replay_output,
-            stdio,
+            options,
         } => crate::app::command_state::complete(
             &crate::app::command_state::DoneOutput {
                 command_id: &command_id,
@@ -75,8 +74,7 @@ pub(crate) async fn run() -> Result<std::process::ExitCode> {
                 cwd: &cwd,
             },
             &directory,
-            replay_output,
-            stdio,
+            options,
         ),
         CliCommand::InternalWriteStart {
             command_id,

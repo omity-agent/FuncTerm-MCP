@@ -11,6 +11,9 @@ pub(crate) fn run(rows: u16, cols: u16, cwd: &Path, arguments: Vec<OsString>) ->
         !is_elevated(&current_token()?)?,
         "ordinary PTY host still has administrator permissions"
     );
+    unsafe { windows::Win32::SetConsoleCtrlHandler(None, false) }
+        .ok()
+        .context("failed to restore Ctrl+C processing for ordinary PTY descendants")?;
     let pair = native_pty_system()
         .openpty(PtySize {
             rows,

@@ -16,7 +16,7 @@ fn restart_discards_old_tabs_without_stopping_another_service() {
     let previous = create_tab(&temp_root(), SHELL);
     let accepted = send_command(&previous.tab_id, "echo BEFORE_RESTART", 5.0);
     assert_eq!(parse_command_result(&accepted).exit_code, Some(0_i32));
-    let second = locked_with_env(&[]);
+    let _neighbor_service = locked_with_env(&[]);
     let other = create_tab(&temp_root(), SHELL);
     let restarted = run_cli_with_env(&["daemon", "restart"], &first_environment);
     assert!(restarted.status.success(), "{restarted:?}");
@@ -41,8 +41,6 @@ fn restart_discards_old_tabs_without_stopping_another_service() {
     let result = parse_command_result(&recovered);
     assert_eq!(result.exit_code, Some(0_i32));
     assert!(result.stdout.contains("AFTER_RESTART"));
-    drop(second);
-    drop(first);
 }
 #[test]
 fn concurrent_starts_share_a_single_background_instance() {
@@ -52,20 +50,15 @@ fn concurrent_starts_share_a_single_background_instance() {
         let environment = guard.env();
         thread::spawn(move || run_cli_with_env(&["daemon", "start"], &environment))
     });
-    let outputs: Vec<_> = workers
+    let started = workers
         .into_iter()
-        .map(|worker| worker.join().unwrap())
-        .collect();
-    for output in &outputs {
-        assert!(output.status.success(), "{output:?}");
-    }
-    assert_eq!(
-        outputs
-            .iter()
-            .filter(|output| String::from_utf8_lossy(&output.stdout).trim() == "daemon started")
-            .count(),
-        1
-    );
+        .map(|worker| {
+            let output = worker.join().unwrap();
+            assert!(output.status.success(), "{output:?}");
+            usize::from(String::from_utf8_lossy(&output.stdout).trim() == "daemon started")
+        })
+        .sum::<usize>();
+    assert_eq!(started, 1);
     let tab = create_tab(&temp_root(), SHELL);
     assert!(parse_tab_view(&run_cli(&["view", &tab.tab_id])).alive);
     assert_lifecycle("start", "already running");
@@ -92,13 +85,21 @@ fn stop_terminates_running_commands_and_allows_automatic_startup() {
     );
     let running = parse_command_result(&send_command(&tab.tab_id, &command, 0.0));
     assert!(!running.finished);
+    let workspace = crate::support::command_directory(&tab.tab_id, "pending")
+        .ancestors()
+        .nth(6)
+        .unwrap()
+        .to_path_buf();
     assert_lifecycle("stop", "stopped");
+    assert!(
+        !workspace.exists(),
+        "daemon workspace remained after shutdown"
+    );
     assert_stopped(&guard.env());
     thread::sleep(Duration::from_secs(3));
     assert!(!marker.exists(), "stopped command continued running");
     let fresh = create_tab(&temp_root(), SHELL);
     assert!(parse_tab_view(&run_cli(&["view", &fresh.tab_id])).alive);
-    drop(guard);
 }
 fn assert_lifecycle(command: &str, expected: &str) {
     let output = run_cli(&["daemon", command]);

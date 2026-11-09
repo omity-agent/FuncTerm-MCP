@@ -1,5 +1,6 @@
 use super::emulation;
 use anyhow::{Context as _, Result, ensure};
+use bytestring::ByteString;
 use portable_pty::PtySize;
 use std::io::Write;
 use wezterm_escape_parser::{
@@ -11,15 +12,18 @@ use wezterm_term::StableRowIndex;
 pub(super) struct CommandScreen {
     pub(super) model: wezterm_term::Terminal,
     start: Option<(StableRowIndex, usize)>,
+    cached_output: Option<ByteString>,
 }
 impl CommandScreen {
     pub(super) fn new(size: PtySize, writer: Box<dyn Write + Send>) -> Self {
         Self {
             model: emulation::emulator(size, writer),
             start: None,
+            cached_output: None,
         }
     }
     pub(super) fn apply(&mut self, actions: Vec<Action>) {
+        self.cached_output = None;
         let reset = matches!(
             actions.last(),
             Some(Action::Esc(Esc::Code(EscCode::FullReset)))
@@ -48,24 +52,31 @@ impl CommandScreen {
             "terminal output region is already active"
         );
         let cursor = self.model.cursor_pos();
+        self.cached_output = None;
         self.start = Some((
             self.model.screen().visible_row_to_stable_row(cursor.y),
             cursor.x,
         ));
         Ok(())
     }
-    pub(super) fn contents(&self) -> Result<String> {
+    pub(super) fn contents(&mut self) -> Result<ByteString> {
         let initial = self.start.context("terminal output region is not active")?;
+        if let Some(output) = self.cached_output.as_ref() {
+            return Ok(output.clone());
+        }
         let start = if self.model.is_alt_screen_active() {
             (self.model.screen().phys_to_stable_row_index(0), 0)
         } else {
             initial.max((self.model.screen().phys_to_stable_row_index(0), 0))
         };
-        Ok(self.text(start, true))
+        let output: ByteString = self.text(start, true).into();
+        self.cached_output = Some(output.clone());
+        Ok(output)
     }
-    pub(super) fn finish(&mut self) -> Result<String> {
+    pub(super) fn finish(&mut self) -> Result<ByteString> {
         let output = self.contents()?;
         self.start = None;
+        self.cached_output = None;
         self.model.screen_mut().erase_scrollback();
         Ok(output)
     }

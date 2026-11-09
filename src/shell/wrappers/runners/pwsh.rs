@@ -48,6 +48,7 @@ function @FUNCTION@ {
     $@VAR_nativeVariable@ = $null
     $@VAR_nativeWrite@ = [FuncTermNativeWrite]::new()
     $@VAR_timer@ = [Diagnostics.Stopwatch]::new()
+    $@VAR_sessionExit@ = $false
     $env:@COMMAND_ID_ENV@ = $@VAR_CommandId@
     $env:@COMMAND_DIR_ENV@ = $@VAR_Directory@
     try {
@@ -90,8 +91,10 @@ function @FUNCTION@ {
             )
         }
         $null = $@VAR_pipeline@.Invoke($null, $@VAR_invocationSettings@)
-        if (-not $@VAR_returned@) {
+        if (-not $@VAR_returned@ -and
+            $@VAR_pipeline@.InvocationStateInfo.State -ne [System.Management.Automation.PSInvocationState]::Stopped) {
             $@VAR_exitCode@ = [int]$global:LASTEXITCODE
+            $@VAR_sessionExit@ = $true
             exit $@VAR_exitCode@
         }
         if ($@VAR_succeeded@) { $@VAR_exitCode@ = 0 }
@@ -146,7 +149,8 @@ function @FUNCTION@ {
             'internal-write-done', '--command-id', $@VAR_CommandId@,
             '--exit-code', [string]$@VAR_exitCode@, '--time-consumption', $@VAR_elapsed@,
             '--cwd', $ExecutionContext.SessionState.Path.CurrentFileSystemLocation.ProviderPath,
-            '--directory', $@VAR_Directory@
+            '--directory', $@VAR_Directory@,
+            '--session-exit', $@VAR_sessionExit@.ToString().ToLowerInvariant()
         )
         [Environment]::SetEnvironmentVariable('@COMMAND_ID_ENV@', $@VAR_previousCommandId@)
         [Environment]::SetEnvironmentVariable('@COMMAND_DIR_ENV@', $@VAR_previousCommandDirectory@)

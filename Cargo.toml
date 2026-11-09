@@ -161,6 +161,7 @@ which = "*"
 kill_tree = "*"
 reqwest = { version = "*", default-features = false, features = ["blocking"] }
 rmp-serde = "*"
+sse-parse = { git = "https://github.com/hey-jj/sse-parse" }
 wait-timeout = "*"
 
 [patch.crates-io]

@@ -23,6 +23,7 @@ fn read_pty(terminal: &Terminal, owned_reader: &mut dyn Read) {
                 return;
             }
             Ok(length) => length,
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
             Err(error) => {
                 tracing::error!(%error, "failed to read PTY output");
                 terminal.reader_failed(&format!("failed to read PTY output: {error}"));

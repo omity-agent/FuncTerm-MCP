@@ -11,7 +11,7 @@ use self::emulation::PtyResponder;
 pub(super) use self::io::start_reader;
 use self::registry::CaptureRegistry;
 use self::rendering::CommandScreen;
-use alloc::sync::{Arc, Weak};
+use alloc::sync::Arc;
 use anyhow::{Context as _, Result, bail};
 use bytestring::ByteString;
 use event_listener::Event;
@@ -25,6 +25,7 @@ pub(super) struct Terminal {
 }
 struct TerminalState {
     screen: Arc<Mutex<CommandScreen>>,
+    responder: PtyResponder,
     screen_title: String,
     parser: Parser,
     captures: CaptureRegistry,
@@ -41,25 +42,24 @@ impl Terminal {
         writer: Arc<Mutex<Box<dyn Write + Send>>>,
     ) -> Result<Arc<Self>> {
         let initial_title = crate::contract::window_title_sequence(model_title)?;
-        Ok(Arc::new_cyclic(|terminal| {
-            let responder = PtyResponder::new(writer, Weak::clone(terminal));
-            let mut screen = CommandScreen::new(size, Box::new(responder));
-            screen.model.advance_bytes(initial_title.as_bytes());
-            let visible_contents = screen.visible_contents().into();
-            Self {
-                state: Mutex::new(TerminalState {
-                    screen: Arc::new(Mutex::new(screen)),
-                    screen_title: model_title.to_owned(),
-                    parser: Parser::new(),
-                    captures: CaptureRegistry::new(model_title.to_owned()),
-                    visible_revision: 0,
-                    visible_contents,
-                    reader_closed: false,
-                    reader_failure: None,
-                    process_exited: false,
-                }),
-                changed: Event::new(),
-            }
+        let responder = PtyResponder::new(writer);
+        let mut screen = CommandScreen::new(size, Box::new(responder.clone()));
+        screen.model.advance_bytes(initial_title.as_bytes());
+        let visible_contents = screen.visible_contents().into();
+        Ok(Arc::new(Self {
+            state: Mutex::new(TerminalState {
+                screen: Arc::new(Mutex::new(screen)),
+                responder,
+                screen_title: model_title.to_owned(),
+                parser: Parser::new(),
+                captures: CaptureRegistry::new(model_title.to_owned()),
+                visible_revision: 0,
+                visible_contents,
+                reader_closed: false,
+                reader_failure: None,
+                process_exited: false,
+            }),
+            changed: Event::new(),
         }))
     }
     pub(super) fn capture_command(
@@ -152,6 +152,7 @@ impl TerminalState {
         });
         let mut screen = self.screen.lock();
         screen.apply(actions);
+        self.responder.check()?;
         if title_written || self.screen_title != screen.model.get_title() {
             screen.model.get_title().clone_into(&mut self.screen_title);
             drop(screen);

@@ -1,6 +1,6 @@
 use crate::support::{
-    create_tab_with_env, locked_with_env, parse_command_result, parse_tab_created,
-    run_cli_with_env, send_command, temp_dir, temp_root,
+    create_tab_with_env, locked_with_env, parse_command_result, run_cli, send_command, temp_dir,
+    temp_root,
 };
 use std::path::Path;
 const SHELL: &str = if cfg!(windows) { "powershell" } else { "bash" };
@@ -9,6 +9,15 @@ fn new_tab_uses_client_path_after_daemon_startup() {
     let guard = locked_with_env(&[]);
     let probe_dir = temp_dir("client-path-probe");
     write_path_probe(&probe_dir);
+    assert!(
+        run_cli(&[
+            "internal-ensure-shims",
+            "--directory",
+            probe_dir.to_str().unwrap()
+        ])
+        .status
+        .success()
+    );
     let inherited_path = std::env::var_os("PATH").unwrap();
     let client_path = std::env::join_paths(
         core::iter::once(probe_dir).chain(std::env::split_paths(&inherited_path)),
@@ -24,7 +33,6 @@ fn new_tab_uses_client_path_after_daemon_startup() {
     assert!(result.finished);
     assert_eq!(result.exit_code, Some(0_i32));
     assert!(result.stdout.contains("FUNCTERM_CLIENT_PATH_PROBE"));
-    drop(guard);
 }
 #[test]
 fn new_tab_inherits_environment_from_each_client() {
@@ -44,17 +52,7 @@ fn new_tab_inherits_environment_from_each_client() {
         if !expected.is_empty() {
             client_environment.push(("FUNCTERM_CLIENT_ENV_PROBE".to_owned(), expected.to_owned()));
         }
-        let tab = parse_tab_created(&run_cli_with_env(
-            &[
-                "new-tab",
-                "--starting-directory",
-                temp_root().to_str().unwrap(),
-                "--starting-shell",
-                SHELL,
-                "--no-profile",
-            ],
-            &client_environment,
-        ));
+        let tab = create_tab_with_env(&temp_root(), SHELL, &client_environment);
         let command = environment_probe_command(expected);
         let output = send_command(&tab.tab_id, &command, 5.0);
         let result = parse_command_result(&output);
@@ -62,7 +60,6 @@ fn new_tab_inherits_environment_from_each_client() {
         assert_eq!(result.exit_code, Some(0_i32), "stderr: {}", result.stderr);
         assert!(result.stdout.contains("CLIENT_ENVIRONMENT_INHERITED"));
     }
-    drop(guard);
 }
 #[cfg(not(windows))]
 fn write_path_probe(directory: &Path) {

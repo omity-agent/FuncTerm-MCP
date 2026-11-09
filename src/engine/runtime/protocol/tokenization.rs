@@ -1,9 +1,23 @@
-use super::{CommandOutput, OutputPresentation, ViewResult};
+use super::{CommandOutput, ViewResult};
 use anyhow::{Context as _, Result, ensure};
 use bytestring::ByteString;
 use core::num::NonZeroUsize;
 pub(crate) struct OutputTokenizer {
     tokenizer: toktok::Tokenizer,
+}
+#[derive(Default)]
+pub(crate) struct OutputTokens {
+    text: ByteString,
+    tokens: usize,
+}
+impl OutputTokens {
+    pub(crate) fn count(&mut self, tokenizer: &OutputTokenizer, text: &ByteString) -> usize {
+        if self.text != *text {
+            self.tokens = tokenizer.tokenizer.count(text.as_bytes());
+            self.text = text.clone();
+        }
+        self.tokens
+    }
 }
 impl OutputTokenizer {
     pub(crate) fn new(encoding: &str) -> Result<Self> {
@@ -11,16 +25,6 @@ impl OutputTokenizer {
             tokenizer: toktok::Tokenizer::builtin(encoding)
                 .with_context(|| format!("failed to initialize output tokenizer {encoding}"))?,
         })
-    }
-    pub(crate) fn count(&self, command_output: &CommandOutput) -> Result<usize> {
-        match command_output.presentation() {
-            OutputPresentation::Terminal { output } => Ok(self.tokenizer.count(output.as_bytes())),
-            OutputPresentation::Separated { stdout, stderr } => self
-                .tokenizer
-                .count(stdout.as_bytes())
-                .checked_add(self.tokenizer.count(stderr.as_bytes()))
-                .context("combined output token count exceeds the supported range"),
-        }
     }
     pub(crate) fn start_at(
         &self,
@@ -66,6 +70,9 @@ impl OutputTokenizer {
         }
     }
     fn skip_tokens(&self, text: &ByteString, start_token: NonZeroUsize) -> Result<ByteString> {
+        if start_token == NonZeroUsize::MIN {
+            return Ok(text.clone());
+        }
         let prefix = self
             .tokenizer
             .truncate(text.as_bytes(), start_token.get() - 1);

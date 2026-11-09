@@ -55,8 +55,13 @@ impl Manager {
         tokio::time::timeout(self.shutdown_timeout, self.supervisors.wait())
             .await
             .context("command supervision did not finish before daemon shutdown timeout")?;
+        closed?;
+        let shutting_down = Arc::clone(self);
+        self.blocking
+            .run(move || shutting_down.launcher.cleanup())
+            .await?;
         tracing::debug!("daemon terminal session shutdown completed");
-        closed
+        Ok(())
     }
     pub(crate) async fn new_tab(
         self: &Arc<Self>,

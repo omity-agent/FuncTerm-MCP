@@ -28,9 +28,11 @@ impl ShellSession {
         if command.id() != command_id {
             return Err(KeyboardWriteFailure::CommandEnded);
         }
+        tracing::debug!(%command_id, "delivering keyboard input to running command");
         let visible_revision = self.screen.visible_revision()?;
         let write_result = command.deliver_input(|| self.write_keyboard(input));
         drop(busy);
+        tracing::debug!(%command_id, succeeded = write_result.is_ok(), "keyboard input delivery completed");
         match write_result {
             Ok(()) => {}
             Err(super::super::command::CommandInputFailure::CommandEnded) => {

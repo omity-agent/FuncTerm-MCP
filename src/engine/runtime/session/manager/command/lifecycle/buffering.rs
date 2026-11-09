@@ -1,4 +1,4 @@
-use crate::runtime::protocol::{CommandOutput, OutputTokenizer};
+use crate::runtime::protocol::{CommandOutput, OutputTokenizer, OutputTokens};
 use crate::runtime::session::records::CommandRecord;
 use anyhow::{Context as _, Result, bail, ensure};
 use bytestring::ByteString;
@@ -10,8 +10,8 @@ use std::path::Path;
 pub(super) struct SeparatedOutput {
     stdout: StreamOutput,
     stderr: StreamOutput,
-    tokens: usize,
-    dirty: bool,
+    stdout_tokens: OutputTokens,
+    stderr_tokens: OutputTokens,
 }
 struct StreamOutput {
     offset: u64,
@@ -40,36 +40,35 @@ impl SeparatedOutput {
         tokenizer: &OutputTokenizer,
         finished: bool,
     ) -> Result<(CommandOutput, usize)> {
-        self.dirty |= self
-            .stdout
+        self.stdout
             .refresh(&record.stdout, finished)
             .context("failed to read captured stdout")?;
-        self.dirty |= self
-            .stderr
+        self.stderr
             .refresh(&record.stderr, finished)
             .context("failed to read captured stderr")?;
         let output = CommandOutput::Separated {
             stdout: self.stdout.visible.clone(),
             stderr: self.stderr.visible.clone(),
         };
-        if self.dirty {
-            self.tokens = tokenizer.count(&output)?;
-            self.dirty = false;
-        }
-        Ok((output, self.tokens))
+        let tokens = self
+            .stdout_tokens
+            .count(tokenizer, &self.stdout.visible)
+            .checked_add(self.stderr_tokens.count(tokenizer, &self.stderr.visible))
+            .context("combined output token count exceeds the supported range")?;
+        Ok((output, tokens))
     }
 }
 impl StreamOutput {
-    fn refresh(&mut self, path: &Path, finished: bool) -> Result<bool> {
+    fn refresh(&mut self, path: &Path, finished: bool) -> Result<()> {
         if let Some(message) = self.failure.as_deref() {
             bail!("{message}");
         }
         if self.finished {
-            return Ok(false);
+            return Ok(());
         }
         let bytes = self.read_appended(path)?;
         if bytes.is_empty() && !finished {
-            return Ok(false);
+            return Ok(());
         }
         let previous_len = self.decoded.len();
         if let Err(error) = self.decode(&bytes, finished) {
@@ -78,14 +77,14 @@ impl StreamOutput {
         }
         self.finished = finished;
         if self.decoded.len() == previous_len {
-            return Ok(false);
+            return Ok(());
         }
         let text = fast_strip_ansi::strip_ansi_string(&self.decoded);
         if text.as_ref() == &*self.visible {
-            return Ok(false);
+            return Ok(());
         }
         self.visible = text.into_owned().into();
-        Ok(true)
+        Ok(())
     }
     fn read_appended(&mut self, path: &Path) -> Result<Vec<u8>> {
         let mut file = match File::open(path) {

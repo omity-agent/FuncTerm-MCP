@@ -30,8 +30,8 @@ pub(super) struct ShellLauncher {
 impl ShellLauncher {
     pub(super) fn new(settings: Settings) -> Result<Self> {
         let root = temp::daemon_root()?;
-        temp::remove_stale_service_runtime(&root, &settings.daemon_service_name);
-        let generation = runtime_generation();
+        temp::clear_service_runtime(&root, &settings.daemon_service_name)?;
+        let generation = format!("{}-{}", std::process::id(), nanoid::nanoid!());
         let generation_root =
             temp::generation_root(&root, &settings.daemon_service_name, &generation);
         let shim_dir = temp::shim_directory(&generation_root);
@@ -43,6 +43,9 @@ impl ShellLauncher {
             #[cfg(unix)]
             runtime_root: root,
         })
+    }
+    pub(super) fn cleanup(&self) -> Result<()> {
+        temp::clear_service_runtime(&temp::daemon_root()?, &self.settings.daemon_service_name)
     }
     pub(super) fn launch(
         &self,
@@ -182,7 +185,4 @@ impl ShellLauncher {
                 .build(),
         ))
     }
-}
-fn runtime_generation() -> String {
-    format!("{}-{}", std::process::id(), nanoid::nanoid!())
 }

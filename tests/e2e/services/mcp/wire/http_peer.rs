@@ -6,6 +6,8 @@ use reqwest::{
     blocking::{Client, RequestBuilder, Response},
 };
 use rmcp::serde_json::{Value, json};
+use sse_parse::SseParser;
+use std::io::Read as _;
 pub(super) struct HttpSession {
     client: Client,
     endpoint: String,
@@ -91,7 +93,7 @@ impl HttpSession {
         self.request("tools/call", tool_arguments(name, arguments))
     }
 }
-fn decode(response: Response, id: u64) -> Value {
+fn decode(mut response: Response, id: u64) -> Value {
     let event_stream = response
         .headers()
         .get("Content-Type")
@@ -99,16 +101,25 @@ fn decode(response: Response, id: u64) -> Value {
         .to_str()
         .unwrap()
         .starts_with("text/event-stream");
-    let text = response.text().unwrap();
     if !event_stream {
-        let message: Value = rmcp::serde_json::from_str(&text).unwrap();
+        let message: Value = rmcp::serde_json::from_str(&response.text().unwrap()).unwrap();
         assert_eq!(message.get("id"), Some(&json!(id)));
         return message;
     }
-    text.lines()
-        .filter_map(|line| line.strip_prefix("data:"))
-        .filter(|data| !data.trim().is_empty())
-        .map(|data| rmcp::serde_json::from_str::<Value>(data).unwrap())
-        .find(|message| message.get("id") == Some(&json!(id)))
-        .unwrap_or_else(|| panic!("missing JSON-RPC response {id} in SSE stream: {text}"))
+    let mut parser = SseParser::new();
+    let mut buffer = [0_u8; 8192];
+    loop {
+        while let Some(event) = parser.next_event() {
+            let message: Value = rmcp::serde_json::from_str(&event.data).unwrap();
+            if message.get("id") == Some(&json!(id)) {
+                return message;
+            }
+        }
+        let length = response.read(&mut buffer).unwrap();
+        assert!(
+            length > 0,
+            "SSE stream ended without JSON-RPC response {id}"
+        );
+        parser.feed(buffer.get(..length).unwrap());
+    }
 }

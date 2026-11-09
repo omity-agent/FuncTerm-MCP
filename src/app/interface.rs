@@ -143,10 +143,8 @@ pub(super) enum CliCommand {
         cwd: String,
         #[arg(long)]
         directory: PathBuf,
-        #[arg(long)]
-        replay_output: bool,
-        #[arg(long)]
-        stdio: bool,
+        #[command(flatten)]
+        options: super::command_state::CompletionOptions,
     },
     #[command(hide = true)]
     InternalWriteStart {

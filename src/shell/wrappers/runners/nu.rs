@@ -64,7 +64,7 @@ def --env functerm_finish [@VAR_requested_exit@: int = -1] {
         $env.@COMMAND_DIR_ENV@ = $@VAR_state@.previous_directory
     }
     ensure_nushell_shims
-    functerm_helper internal-write-done --command-id $@VAR_state@.id --exit-code $@VAR_exit_code@ --time-consumption $@VAR_elapsed@ --cwd $@VAR_cwd@ --directory $@VAR_state@.directory | ignore
+    functerm_helper internal-write-done --command-id $@VAR_state@.id --exit-code $@VAR_exit_code@ --time-consumption $@VAR_elapsed@ --cwd $@VAR_cwd@ --directory $@VAR_state@.directory --session-exit ($@VAR_requested_exit@ >= 0) | ignore
 }
 def --env ensure_nushell_shims [] {
     let @VAR_shim@ = $env.FUNCTERM_SHIM_DIR

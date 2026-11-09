@@ -31,13 +31,8 @@ pub(crate) fn tab_root(generation_root: &std::path::Path, tab_id: &str) -> PathB
 pub(crate) fn tab_state_directory(tab_root: &std::path::Path) -> PathBuf {
     tab_root.join(SESSION_STATE_DIRECTORY)
 }
-pub(crate) fn remove_stale_service_runtime(root: &std::path::Path, service_name: &str) {
-    if let Err(error) = remove_directory_if_present(&service_root(root, service_name)) {
-        tracing::error!(
-            error = format!("{error:#}"),
-            "failed to remove stale service runtime"
-        );
-    }
+pub(crate) fn clear_service_runtime(root: &std::path::Path, service_name: &str) -> Result<()> {
+    remove_directory_if_present(&service_root(root, service_name))
 }
 fn service_root(root: &std::path::Path, service_name: &str) -> PathBuf {
     root.join(SERVICES_DIRECTORY)

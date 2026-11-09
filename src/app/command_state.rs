@@ -22,6 +22,15 @@ pub(crate) fn time_millis() -> Result<String> {
     Ok(rounded.to_string())
 }
 pub(crate) type DoneOutput<'value> = crate::contract::CommandCompletion<&'value str>;
+#[derive(Clone, Copy, clap::Args, Default)]
+pub(crate) struct CompletionOptions {
+    #[arg(long)]
+    replay_output: bool,
+    #[arg(long)]
+    stdio: bool,
+    #[arg(long, action = clap::ArgAction::Set, default_value_t = false)]
+    session_exit: bool,
+}
 pub(crate) fn write_start(command_id: &str, directory: &Path, stdio: bool) -> Result<()> {
     let mut terminal = marker_output(stdio)?;
     title::restore(&mut terminal, directory, stdio)?;
@@ -32,16 +41,22 @@ fn write_start_to(command_id: &str, directory: &Path, output: &mut impl Write) -
     write_marker(output, crate::contract::TERMINAL_MARKER_START, command_id)
 }
 pub(crate) fn write_done(done: &DoneOutput<'_>, directory: &Path) -> Result<()> {
-    complete(done, directory, false, false)
+    complete(done, directory, CompletionOptions::default())
 }
 pub(crate) fn complete(
     done: &DoneOutput<'_>,
     directory: &Path,
-    replay_output: bool,
-    stdio: bool,
+    options: CompletionOptions,
 ) -> Result<()> {
-    let mut terminal = marker_output(stdio)?;
-    if replay_output {
+    if options.session_exit
+        && std::env::var_os(crate::shell::shims::PARENT_SHELL_ENV)
+            .is_none_or(|parent| parent.is_empty())
+    {
+        crate::publication::write_once(&directory.join(crate::contract::SESSION_EXIT_FILE), b"")
+            .context("failed to publish shell exit request")?;
+    }
+    let mut terminal = marker_output(options.stdio)?;
+    if options.replay_output {
         for name in [crate::contract::STDOUT_FILE, crate::contract::STDERR_FILE] {
             let mut stream = std::fs::File::open(directory.join(name))
                 .with_context(|| format!("failed to open captured {name}"))?;

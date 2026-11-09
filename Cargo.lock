@@ -1088,6 +1088,7 @@ dependencies = [
  "shell-words",
  "snmalloc-rs",
  "sonic-rs",
+ "sse-parse",
  "strum",
  "sugar_path",
  "tempfile",
@@ -3341,6 +3342,16 @@ version = "0.1.4"
 source = "git+https://github.com/cloudwego/sonic-rs#f63d1851de596fb9c53bf2a67ec84828c1d65c3c"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "sse-parse"
+version = "0.1.0"
+source = "git+https://github.com/hey-jj/sse-parse#201f726b3da20ecc8bd2ef67266eb49bdc43284d"
+dependencies = [
+ "futures-core",
+ "memchr",
+ "pin-project-lite",
 ]
 
 [[package]]

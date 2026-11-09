@@ -15,7 +15,7 @@ mod tokenization;
 pub(crate) use emission::{CommandOutput, OutputMode, OutputPresentation};
 pub(crate) use environment::{EnvironmentSnapshot, environment_name_equals};
 pub(crate) use presentation::{CommandPresentation, ShellPresentation};
-pub(crate) use tokenization::OutputTokenizer;
+pub(crate) use tokenization::{OutputTokenizer, OutputTokens};
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, strum :: EnumDiscriminants)]
 #[strum_discriminants(name(RequestKind), derive(strum::Display))]
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]

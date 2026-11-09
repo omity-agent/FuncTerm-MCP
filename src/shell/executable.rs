@@ -60,6 +60,13 @@ fn is_rejected_executable(
         || is_windows_subsystem_bash(choice, path, environment)?)
 }
 fn is_inherited_shim(path: &Path, inherited_shim: Option<&OsStr>) -> Result<bool> {
+    #[cfg(windows)]
+    if let Some(parent) = path.parent() {
+        let dispatcher = parent.join("dispatcher.exe");
+        if dispatcher.try_exists()? && same_file::is_same_file(path, &dispatcher)? {
+            return Ok(true);
+        }
+    }
     if same_file(
         path,
         &std::env::current_exe().context("failed to resolve current executable")?,

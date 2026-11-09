@@ -1,7 +1,7 @@
 mod buffering;
 mod history;
 use self::{buffering::SeparatedOutput, history::CommandInputHistory};
-use crate::runtime::protocol::{CommandOutput, CommandSnapshot, OutputTokenizer};
+use crate::runtime::protocol::{CommandOutput, CommandSnapshot, OutputTokenizer, OutputTokens};
 use crate::runtime::session::keyboard::InputDelivery;
 use crate::runtime::session::observation::PathWatch;
 use crate::runtime::session::records::{CommandRecord, DoneFile, read_command_result};
@@ -26,12 +26,14 @@ pub(super) struct ManagedCommandState {
     pub(super) input: CommandInputHistory,
     pub(super) session_exit: bool,
     separated: Option<SeparatedOutput>,
+    terminal_tokens: OutputTokens,
 }
 impl ManagedCommandState {
     pub(super) fn finish(&mut self, view: CommandSnapshot, wait: CommandWait) {
         self.cached_view = Some(view);
         self.wait = wait;
         self.separated = None;
+        self.terminal_tokens = OutputTokens::default();
     }
 }
 #[derive(Clone, Copy)]
@@ -66,6 +68,7 @@ impl ManagedCommand {
                 input: CommandInputHistory::default(),
                 session_exit: false,
                 separated: None,
+                terminal_tokens: OutputTokens::default(),
             }),
             capture,
             watch,
@@ -150,8 +153,8 @@ impl ManagedCommand {
         finished: bool,
     ) -> Result<CommandSnapshot> {
         let (output, tokens) = if let Some(output) = self.capture.output()? {
+            let count = state.terminal_tokens.count(&self.tokenizer, &output);
             let captured = CommandOutput::Terminal { output };
-            let count = self.tokenizer.count(&captured)?;
             (captured, count)
         } else {
             state

@@ -1,5 +1,5 @@
-use super::Terminal;
-use alloc::sync::{Arc, Weak};
+use alloc::sync::Arc;
+use anyhow::{Result, bail};
 use core::sync::atomic::{AtomicUsize, Ordering};
 use parking_lot::Mutex;
 use portable_pty::PtySize;
@@ -40,24 +40,29 @@ pub(super) fn emulator(size: PtySize, writer: Box<dyn Write + Send>) -> wezterm_
     );
     model
 }
+#[derive(Clone)]
 pub(super) struct PtyResponder {
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
-    terminal: Weak<Terminal>,
+    failure: Arc<Mutex<Option<String>>>,
 }
 impl PtyResponder {
-    pub(super) const fn new(
-        writer: Arc<Mutex<Box<dyn Write + Send>>>,
-        terminal: Weak<Terminal>,
-    ) -> Self {
-        Self { writer, terminal }
+    pub(super) fn new(writer: Arc<Mutex<Box<dyn Write + Send>>>) -> Self {
+        Self {
+            writer,
+            failure: Arc::default(),
+        }
+    }
+    pub(super) fn check(&self) -> Result<()> {
+        if let Some(message) = self.failure.lock().as_deref() {
+            bail!("{message}");
+        }
+        Ok(())
     }
     fn report<T>(&self, result: io::Result<T>) -> io::Result<T> {
         if let Err(error) = result.as_ref() {
             let message = format!("failed to answer terminal host query: {error}");
             tracing::error!("{message}");
-            if let Some(terminal) = self.terminal.upgrade() {
-                terminal.reader_failed(&message);
-            }
+            *self.failure.lock() = Some(message);
         }
         result
     }

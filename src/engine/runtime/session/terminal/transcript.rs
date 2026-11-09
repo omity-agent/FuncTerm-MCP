@@ -31,7 +31,7 @@ impl RenderedOutput {
         )]
         match self {
             Self::Pending(_) => Ok(ByteString::new()),
-            Self::Active(screen) => Ok(screen.lock().contents()?.into()),
+            Self::Active(screen) => screen.lock().contents(),
             Self::Frozen(output) => Ok(output.clone()),
         }
     }
@@ -41,11 +41,11 @@ impl RenderedOutput {
     )]
     pub(super) fn finish(&mut self) -> Result<()> {
         let output = match self {
-            Self::Pending(_) => String::new(),
+            Self::Pending(_) => ByteString::new(),
             Self::Active(screen) => screen.lock().finish()?,
             Self::Frozen(_) => return Ok(()),
         };
-        *self = Self::Frozen(output.into());
+        *self = Self::Frozen(output);
         Ok(())
     }
 }
