@@ -1,4 +1,3 @@
-use itertools::Itertools as _;
 const SUFFIX_LENGTH: usize = 12;
 const BASE36_ALPHABET: [char; 36] = [
     '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i',
@@ -27,21 +26,6 @@ impl VariableNamespace {
         }
         rendered.push_str(remaining);
         rendered
-    }
-    pub(in crate::shell) fn render_powershell(&self, template: &str) -> String {
-        let names = template
-            .split(MARKER_START)
-            .skip(1)
-            .map(|tail| split_marker(tail).0)
-            .unique()
-            .format_with(", ", |name, format| {
-                format(&format_args!("'{name}_{}'", self.suffix))
-            });
-        let cleanup = format!(
-            "Get-Variable -Scope Local | Where-Object Name -In @({names}) | Remove-Variable -Scope Local"
-        );
-        let script = template.replace("@POWERSHELL_STATE_CLEANUP@", &cleanup);
-        self.render(&script)
     }
 }
 fn split_marker(tail: &str) -> (&str, &str) {

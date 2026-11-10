@@ -2,17 +2,15 @@ use super::daemon;
 use super::parse::{
     CommandResult, TabCreated, parse_command_id, parse_command_result, parse_tab_created,
 };
-use super::process::read_pipe;
-use super::process::wait_for_status;
 use base64_turbo::STANDARD;
 use core::cell::RefCell;
 use core::time::Duration;
+use process_control::{ChildExt as _, Control as _};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::time::Instant;
-pub(crate) const CLI_COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
-const PIPE_CLOSE_TIMEOUT: Duration = Duration::from_secs(5);
+pub(crate) const CLI_COMMAND_TIMEOUT: Duration = Duration::from_secs(60);
 thread_local! {
     static TAB_SEPARATE_OUTPUT: RefCell<HashMap<String, bool>> = RefCell::new(HashMap::new());
 }
@@ -30,7 +28,19 @@ pub(crate) fn run_cli(arguments: &[&str]) -> Output {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     daemon::apply_active_env(&mut command);
-    output_from_pipes(command, CLI_COMMAND_TIMEOUT)
+    command
+        .spawn()
+        .unwrap()
+        .controlled_with_output()
+        .time_limit(CLI_COMMAND_TIMEOUT)
+        .terminate_for_timeout()
+        .strict_errors()
+        .wait()
+        .unwrap()
+        .unwrap_or_else(|| {
+            panic!("CLI command {command:?} timed out after {CLI_COMMAND_TIMEOUT:?}")
+        })
+        .into_std_lossy()
 }
 pub(crate) fn run_cli_with_env(arguments: &[&str], env: &[(String, String)]) -> Output {
     let previous = daemon::active_env();
@@ -134,22 +144,4 @@ pub(crate) fn manual_write(tab_id: &str, bytes: &[u8], wait_timeout: f64) -> Out
         "--wait-timeout",
         &wait_timeout.to_string(),
     ])
-}
-fn output_from_pipes(mut command: Command, timeout: Duration) -> Output {
-    let description = format!("{command:?}");
-    let mut child = command.spawn().unwrap();
-    let stdout = child.stdout.take().unwrap();
-    let stderr = child.stderr.take().unwrap();
-    let stdout_rx = read_pipe(stdout);
-    let stderr_rx = read_pipe(stderr);
-    let status = wait_for_status(&mut child, timeout, &description);
-    Output {
-        status,
-        stdout: stdout_rx
-            .recv_timeout(PIPE_CLOSE_TIMEOUT)
-            .unwrap_or_else(|error| panic!("stdout did not close after {description}: {error}")),
-        stderr: stderr_rx
-            .recv_timeout(PIPE_CLOSE_TIMEOUT)
-            .unwrap_or_else(|error| panic!("stderr did not close after {description}: {error}")),
-    }
 }

@@ -1,14 +1,9 @@
 use anyhow::{Context as _, Result};
-use core::time::Duration;
 #[cfg(not(windows))]
 use kill_tree::{Config, blocking::kill_tree_with_config};
-use std::io::Read;
 #[cfg(windows)]
 use std::os::windows::io::{AsRawHandle as _, FromRawHandle as _, OwnedHandle};
-use std::process::{Child, Command, ExitStatus};
-use std::sync::mpsc;
-use std::thread;
-use wait_timeout::ChildExt as _;
+use std::process::{Child, Command};
 pub(crate) struct ChildGuard {
     child: Child,
     #[cfg(windows)]
@@ -94,24 +89,4 @@ impl Drop for ChildGuard {
     fn drop(&mut self) {
         self.terminate();
     }
-}
-pub(crate) fn wait_for_status(
-    child: &mut Child,
-    timeout: Duration,
-    description: &str,
-) -> ExitStatus {
-    child.wait_timeout(timeout).unwrap().unwrap_or_else(|| {
-        child.kill().unwrap();
-        let status = child.wait().unwrap();
-        panic!("CLI command {description} timed out after {timeout:?} with status {status}");
-    })
-}
-pub(crate) fn read_pipe(mut pipe: impl Read + Send + 'static) -> mpsc::Receiver<Vec<u8>> {
-    let (sender, receiver) = mpsc::channel();
-    thread::spawn(move || {
-        let mut bytes = Vec::new();
-        pipe.read_to_end(&mut bytes).unwrap();
-        sender.send(bytes).unwrap();
-    });
-    receiver
 }

@@ -1,6 +1,5 @@
 mod posix;
 mod runners;
-mod start;
 mod template;
 mod variables;
 pub(super) use posix::{bash_wrapper, zsh_wrapper};

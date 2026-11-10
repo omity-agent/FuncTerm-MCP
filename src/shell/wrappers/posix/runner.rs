@@ -1,4 +1,3 @@
-use super::super::start;
 use super::PosixDialect;
 use crate::contract::{COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV};
 pub(super) fn helpers(dialect: PosixDialect) -> String {
@@ -52,6 +51,18 @@ functerm_restore_status() {{ return "$1"; }}"#,
         command_dir_env = COMMAND_DIRECTORY_ENV,
         test_one = dialect.test_arg("1"),
         test_three = dialect.test_arg("3"),
-        publish_start = start::posix(dialect),
+        publish_start = publish_start(dialect),
+    )
+}
+fn publish_start(dialect: PosixDialect) -> String {
+    format!(
+        r#"functerm_publish_start() {{
+{emulate}    local @VAR_command_id@="$1"
+            local @VAR_native_directory@="$2"
+            functerm_terminal_helper "$@VAR_helper_path@" internal-write-start \
+                --command-id "$@VAR_command_id@" \
+                --directory "$@VAR_native_directory@"
+        }}"#,
+        emulate = dialect.emulate(),
     )
 }

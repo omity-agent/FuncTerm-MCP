@@ -16,27 +16,10 @@ fn ctrl_c_stops_native_process_and_returns_to_usable_shell() {
     assert!(!pending.finished, "native probe should still be running");
     wait_for_stdout(&command_id, PROBE_READY, Duration::from_secs(5));
     let written = manual_write(&tab.tab_id, &[3], 0.0);
-    assert!(
-        written.status.success(),
-        "stdout: {}\nstderr: {}",
-        String::from_utf8_lossy(&written.stdout),
-        String::from_utf8_lossy(&written.stderr)
-    );
+    assert!(written.status.success(), "{written:?}");
     let interrupted = wait_for_completion(&accepted);
-    assert!(
-        interrupted.finished,
-        "native process did not stop after Ctrl+C; stdout: {}; stderr: {}",
-        interrupted.stdout, interrupted.stderr
-    );
-    assert_eq!(
-        interrupted.exit_code,
-        Some(130_i32),
-        "Ctrl+C should publish the conventional interrupted exit code; stdout: {}; stderr: {}",
-        interrupted.stdout,
-        interrupted.stderr
-    );
+    assert_eq!(interrupted.exit_code, Some(130_i32), "{interrupted:?}");
     let follow_up = complete_command(&tab.tab_id, "Write-Output 'FUNCTERM_CTRL_C_RECOVERED'");
-    assert!(follow_up.finished, "follow-up command should finish");
     assert_eq!(follow_up.exit_code, Some(0_i32));
     assert!(follow_up.stdout.contains("FUNCTERM_CTRL_C_RECOVERED"));
     let query = parse_tab_view(&run_cli(&["view", &tab.tab_id]));

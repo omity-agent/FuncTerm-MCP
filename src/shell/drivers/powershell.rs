@@ -65,7 +65,7 @@ function prompt {{
         )
     };
     let initialization = format!(
-        "{}\n{INPUT_GUARD}\n$env:{CURRENT_SHELL_ENV} = 'powershell'\n{}\n{}\nMicrosoft.PowerShell.Management\\Set-Location -LiteralPath {}\n$script:@VAR_readyWritten@ = $false\n{}",
+        "{}\n$env:{CURRENT_SHELL_ENV} = 'powershell'\n{}\n{}\nMicrosoft.PowerShell.Management\\Set-Location -LiteralPath {}\n$script:@VAR_readyWritten@ = $false\n{}",
         startup_environment(crate::shell::ShellChoice::PowerShell, context.environment)?,
         powershell_wrapper(),
         style,
@@ -74,19 +74,6 @@ function prompt {{
     );
     Ok(crate::shell::wrappers::VariableNamespace::new().render(&initialization))
 }
-const INPUT_GUARD: &str = r"& {
-    foreach ($@VAR_reservedName@ in @(
-        'Invoke-FuncTermDispatcher', 'Invoke-FuncTermCommand', 'Set-FuncTermShimPath',
-        'Invoke-FuncTermHelper', 'Publish-FuncTermStart'
-    )) {
-        if (Microsoft.PowerShell.Management\Get-Item -LiteralPath ('Alias:' + $@VAR_reservedName@) -ErrorAction SilentlyContinue) {
-            Microsoft.PowerShell.Management\Remove-Item -LiteralPath ('Alias:' + $@VAR_reservedName@) -Force -ErrorAction Stop
-        }
-    }
-    if (Microsoft.PowerShell.Core\Get-Command Set-PSReadLineKeyHandler -ErrorAction SilentlyContinue) {
-        Set-PSReadLineKeyHandler -Chord Enter -Function AcceptLine
-    }
-}";
 pub(super) fn keyboard_bytes(bytes: &[u8]) -> Cow<'_, [u8]> {
     if !bytes.contains(&b'\n') {
         return Cow::Borrowed(bytes);

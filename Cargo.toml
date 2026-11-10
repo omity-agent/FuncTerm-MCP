@@ -159,10 +159,10 @@ which = "*"
 
 [dev-dependencies]
 kill_tree = "*"
+process_control = { git = "https://github.com/dylni/process_control" }
 reqwest = { version = "*", default-features = false, features = ["blocking"] }
 rmp-serde = "*"
 sse-parse = { git = "https://github.com/hey-jj/sse-parse" }
-wait-timeout = "*"
 
 [patch.crates-io]
 anyhow = { git = "https://github.com/dtolnay/anyhow" }
