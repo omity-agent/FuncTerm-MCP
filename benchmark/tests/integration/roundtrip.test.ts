@@ -101,6 +101,7 @@ test(
       (sample) => sample.tool === "send_command",
     );
     for (const sample of sends) {
+      if (sample.driver === "nu") expect(sample.separateOutput).toBe(false);
       expect(sample.commandBytes).toBeGreaterThanOrEqual(
         settings.commandBytes.minimum,
       );

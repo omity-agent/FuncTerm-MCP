@@ -97,3 +97,38 @@ fn bash_reports_native_cwd_for_apostrophes() {
     let next = complete_command(&tab, "pwd");
     assert_eq!(next.exit_code, Some(0_i32), "{next:?}");
 }
+#[test]
+fn separated_output_replaces_malformed_and_incomplete_utf8_without_losing_the_shell() {
+    let _guard = locked_with_env(&[]);
+    for (shell, source, next) in [
+        (
+            "bash",
+            "printf 'before\\377after\\342'; printf 'error\\377tail\\342' >&2",
+            ":",
+        ),
+        (
+            "python",
+            "import sys\n_ = sys.stdout.buffer.write(b'before\\xffafter\\xe2')\n_ = sys.stderr.buffer.write(b'error\\xfftail\\xe2')",
+            "pass",
+        ),
+        (
+            "bun",
+            "process.stdout.write(Buffer.from('before\\xffafter\\xe2', 'latin1')); process.stderr.write(Buffer.from('error\\xfftail\\xe2', 'latin1')); void 0",
+            "void 0",
+        ),
+    ] {
+        let tab = create_tab(&temp_dir("binary-output"), shell).tab_id;
+        let result = complete_command(&tab, source);
+        assert_eq!(result.exit_code, Some(0_i32), "{shell}: {result:?}");
+        assert!(
+            result.stdout.contains("before\u{fffd}after\u{fffd}"),
+            "{shell}: {result:?}"
+        );
+        assert!(
+            result.stderr.contains("error\u{fffd}tail\u{fffd}"),
+            "{shell}: {result:?}"
+        );
+        let resumed = complete_command(&tab, next);
+        assert_eq!(resumed.exit_code, Some(0_i32), "{shell}: {resumed:?}");
+    }
+}

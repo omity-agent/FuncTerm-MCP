@@ -67,6 +67,13 @@ impl ProcessTree {
         Ok(())
     }
 }
+impl Drop for ProcessTree {
+    fn drop(&mut self) {
+        if let Err(error) = self.terminate() {
+            tracing::error!(%error, "failed to terminate abandoned shell process tree");
+        }
+    }
+}
 pub(in crate::engine::runtime::session::manager) fn is_alive(
     child: &mut (dyn Child + Send + Sync),
 ) -> Result<bool> {

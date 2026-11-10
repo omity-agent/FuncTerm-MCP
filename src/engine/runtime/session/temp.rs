@@ -25,8 +25,17 @@ pub(crate) fn shim_directory(generation_root: &std::path::Path) -> PathBuf {
 pub(crate) fn tab_commands_directory(tab_root: &std::path::Path) -> PathBuf {
     tab_root.join(SESSION_COMMANDS_DIRECTORY)
 }
-pub(crate) fn tab_root(generation_root: &std::path::Path, tab_id: &str) -> PathBuf {
-    generation_root.join(TABS_DIRECTORY).join(tab_id)
+pub(crate) fn create_tab_directory(
+    generation_root: &std::path::Path,
+    tab_id: &str,
+) -> Result<tempfile::TempDir> {
+    let parent = generation_root.join(TABS_DIRECTORY);
+    fs_err::create_dir_all(&parent)?;
+    tempfile::Builder::new()
+        .prefix(tab_id)
+        .rand_bytes(0)
+        .tempdir_in(parent)
+        .context("failed to create Tab runtime directory")
 }
 pub(crate) fn tab_state_directory(tab_root: &std::path::Path) -> PathBuf {
     tab_root.join(SESSION_STATE_DIRECTORY)

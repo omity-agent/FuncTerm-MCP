@@ -33,5 +33,11 @@ impl Drop for ShellSession {
             process::join_reader(reader, "pty reader thread");
             tracing::debug!("closed shell PTY reader joined");
         }
+        if let Some(directory) = self.directory.take()
+            && let Err(error) = directory.close()
+        {
+            tracing::error!("failed to remove closed Tab workspace");
+            tracing::debug!(%error, "Tab workspace cleanup failed");
+        }
     }
 }

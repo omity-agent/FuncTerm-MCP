@@ -71,9 +71,6 @@ impl PathWatch {
             }
         }
     }
-    pub(in crate::engine::runtime::session) fn wake(&self) {
-        self.signal.changed.notify(usize::MAX);
-    }
 }
 pub(super) async fn wait_until(
     changed: &Event,

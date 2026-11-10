@@ -29,7 +29,7 @@ pub(super) struct ShellSession {
     #[builder(skip)]
     terminated: Mutex<bool>,
     command_root: PathBuf,
-    command_watch: Arc<PathWatch>,
+    command_watch: PathWatch,
     dispatch_file: PathBuf,
     active_shell_file: PathBuf,
     command_start_timeout: Duration,
@@ -40,6 +40,8 @@ pub(super) struct ShellSession {
     slave: Mutex<Option<Box<dyn SlavePty + Send>>>,
     #[builder(required)]
     reader: Option<JoinHandle<()>>,
+    #[builder(required)]
+    directory: Option<tempfile::TempDir>,
 }
 pub(in crate::engine::runtime::session::manager) use input::KeyboardWriteFailure;
 impl ShellSession {
@@ -49,8 +51,8 @@ impl ShellSession {
     pub(super) fn command_root(&self) -> &Path {
         &self.command_root
     }
-    pub(super) fn command_watch(&self) -> Arc<PathWatch> {
-        Arc::clone(&self.command_watch)
+    pub(super) const fn command_watch(&self) -> &PathWatch {
+        &self.command_watch
     }
     pub(super) fn set_cwd(&self, cwd: PathBuf) {
         *self.cwd.lock() = cwd;

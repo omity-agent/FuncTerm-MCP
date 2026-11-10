@@ -1,6 +1,6 @@
 use crate::support::{
-    create_tab, locked_with_env, parse_command_id, parse_command_result, parse_tab_view, run_cli,
-    send_command, temp_root, wait_for_completion,
+    command_directory, create_tab, locked_with_env, parse_command_id, parse_command_result,
+    parse_tab_view, run_cli, run_cli_with_env, send_command, temp_root, wait_for_completion,
 };
 #[cfg(windows)]
 const SHELL: &str = "powershell";
@@ -14,28 +14,31 @@ fn close_and_reader_failure_preserve_history_and_other_tabs() {
     let accepted = send_command(&target.tab_id, "echo CLOSE_HISTORY", 5.0);
     let command_id = parse_command_id(&accepted);
     wait_for_completion(&accepted);
+    let workspace = command_directory(&target.tab_id, &command_id)
+        .ancestors()
+        .nth(2)
+        .unwrap()
+        .to_path_buf();
     let closed = run_cli(&["close", "--tab-id", &target.tab_id]);
-    assert!(
-        closed.status.success(),
-        "{}",
-        String::from_utf8_lossy(&closed.stderr)
-    );
+    assert!(closed.status.success(), "{closed:?}");
     assert!(String::from_utf8_lossy(&closed.stdout).contains(&target.tab_id));
+    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
+    while workspace.try_exists().unwrap() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "closed Tab workspace was retained"
+        );
+        std::thread::sleep(core::time::Duration::from_millis(10));
+    }
     assert!(!parse_tab_view(&run_cli(&["view", &target.tab_id])).alive);
     assert!(parse_tab_view(&run_cli(&["view", &other.tab_id])).alive);
     let history = parse_command_result(&run_cli(&["view", &command_id]));
     assert!(history.finished);
     assert!(history.stdout.contains("CLOSE_HISTORY"));
-    assert!(
-        !send_command(&target.tab_id, "echo unreachable", 0.0)
-            .status
-            .success()
-    );
-    assert!(
-        run_cli(&["close", "--tab-id", &target.tab_id])
-            .status
-            .success()
-    );
+    let rejected = send_command(&target.tab_id, "echo unreachable", 0.0);
+    assert!(!rejected.status.success(), "{rejected:?}");
+    let repeated = run_cli(&["close", "--tab-id", &target.tab_id]);
+    assert!(repeated.status.success(), "{repeated:?}");
     let failing = create_tab(&temp_root(), "bun").tab_id;
     let submitted = send_command(
         &failing,
@@ -70,4 +73,33 @@ fn close_current_from_nested_shell_targets_its_own_tab() {
         String::from_utf8_lossy(&closed.stdout)
     );
     assert!(parse_tab_view(&run_cli(&["view", &other.tab_id])).alive);
+}
+#[test]
+fn failed_startup_removes_its_runtime_directory() {
+    let guard = locked_with_env(&[("FUNCTERM_SHELL_LOAD_PROFILE", "true")]);
+    let root = temp_root();
+    let tab = create_tab(&root, "python");
+    let workspace = command_directory(&tab.tab_id, "unused");
+    let tabs = workspace.ancestors().nth(3).unwrap();
+    let before = fs_err::read_dir(tabs).unwrap().count();
+    let startup = root.join("exit-startup.py");
+    fs_err::write(&startup, "raise SystemExit(23)\n").unwrap();
+    let mut environment = guard.env();
+    environment.push((
+        "PYTHONSTARTUP".to_owned(),
+        startup.to_str().unwrap().to_owned(),
+    ));
+    let failed = run_cli_with_env(
+        &[
+            "new-tab",
+            "--starting-shell",
+            "python",
+            "--starting-directory",
+            root.to_str().unwrap(),
+        ],
+        &environment,
+    );
+    assert!(!failed.status.success(), "{failed:?}");
+    assert_eq!(fs_err::read_dir(tabs).unwrap().count(), before);
+    assert!(parse_tab_view(&run_cli(&["view", &tab.tab_id])).alive);
 }

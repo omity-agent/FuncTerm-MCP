@@ -17,7 +17,6 @@ pub(in crate::engine::runtime::session::manager) struct ManagedCommand {
     started_at: Instant,
     pub(super) state: Mutex<ManagedCommandState>,
     pub(super) capture: Arc<CommandCapture>,
-    watch: Arc<PathWatch>,
     pub(super) tokenizer: Arc<OutputTokenizer>,
 }
 pub(super) struct ManagedCommandState {
@@ -54,7 +53,6 @@ impl ManagedCommand {
         id: String,
         record: CommandRecord,
         capture: Arc<CommandCapture>,
-        watch: Arc<PathWatch>,
         tokenizer: Arc<OutputTokenizer>,
     ) -> Self {
         tracing :: debug ! (command_id = % id , directory = % record . directory . display () , "command registered");
@@ -71,7 +69,6 @@ impl ManagedCommand {
                 terminal_tokens: OutputTokens::default(),
             }),
             capture,
-            watch,
             tokenizer,
         }
     }
@@ -126,11 +123,8 @@ impl ManagedCommand {
         }
         Ok(None)
     }
-    pub(super) fn wake(&self) {
-        self.watch.wake();
-    }
-    pub(super) async fn wait_released(&self) -> Result<()> {
-        self.watch
+    pub(super) async fn wait_released(&self, watch: &PathWatch) -> Result<()> {
+        watch
             .wait(Duration::MAX, || {
                 self.record.released.try_exists().with_context(|| {
                     format!(

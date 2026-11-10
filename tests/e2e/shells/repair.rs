@@ -86,9 +86,20 @@ fn interrupted_shells_return_to_a_usable_prompt() {
     ] {
         let tab = create_tab(&temp_dir(shell), shell).tab_id;
         let cwd = complete_command(&tab, "echo CWD_READY").cwd;
-        let accepted = send_command(&tab, source, 0.0);
+        let announce = if shell == "nu" { "print" } else { "echo" };
+        let synchronized = format!("{announce} INTERRUPT_READY\n{source}");
+        let accepted = send_command(&tab, &synchronized, 0.0);
         let id = parse_command_id(&accepted);
-        std::thread::sleep(core::time::Duration::from_millis(600));
+        let ready = std::time::Instant::now() + core::time::Duration::from_secs(15);
+        while !parse_command_result(&run_cli(&["view", &id, "--wait-timeout", "0.1"]))
+            .stdout
+            .contains("INTERRUPT_READY")
+        {
+            assert!(
+                std::time::Instant::now() < ready,
+                "{shell}: command did not become ready"
+            );
+        }
         let _interrupted = manual_write(&tab, &[3], 0.5);
         if shell == "cmd" {
             let deadline = std::time::Instant::now() + core::time::Duration::from_secs(3);

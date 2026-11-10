@@ -90,6 +90,7 @@ version = "0.0.0"
 edition = "2024"
 
 [dependencies]
+anstream = { git = "https://github.com/rust-cli/anstyle", default-features = false }
 anyhow = { git = "https://github.com/dtolnay/anyhow", public = true }
 axum = { version = "*", default-features = false, features = [
     "http1",
@@ -110,7 +111,6 @@ clap = { git = "https://github.com/clap-rs/clap", features = [
 dashmap = "*"
 encoding_rs = "*"
 event-listener = "*"
-fast-strip-ansi = "*"
 fs-err = "*"
 futures-util = { version = "*", features = ["sink"] }
 humantime = "*"

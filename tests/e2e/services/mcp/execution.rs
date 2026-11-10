@@ -19,13 +19,10 @@ pub(super) fn create_tabs<const N: usize>(session: &mut McpSession) -> [String; 
     assert_eq!(created.len(), N);
     super::wire::text_documents(&response);
     core::array::from_fn(|index| {
-        text(
-            created
-                .get(index)
-                .unwrap_or_else(|| panic!("missing tab {index}: {response}")),
-            "/result/tab_id",
-        )
-        .to_owned()
+        let entry = created
+            .get(index)
+            .unwrap_or_else(|| panic!("missing tab {index}"));
+        text(entry, "/result/tab_id").to_owned()
     })
 }
 #[test]

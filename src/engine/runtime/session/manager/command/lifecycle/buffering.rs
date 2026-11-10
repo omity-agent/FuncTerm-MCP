@@ -1,8 +1,9 @@
 use crate::runtime::protocol::{CommandOutput, OutputTokenizer, OutputTokens};
 use crate::runtime::session::records::CommandRecord;
+use anstream::adapter::StripBytes;
 use anyhow::{Context as _, Result, bail, ensure};
 use bytestring::ByteString;
-use encoding_rs::{Decoder, DecoderResult};
+use encoding_rs::{CoderResult, Decoder};
 use std::fs::File;
 use std::io::{Read as _, Seek as _, SeekFrom};
 use std::path::Path;
@@ -16,7 +17,7 @@ pub(super) struct SeparatedOutput {
 struct StreamOutput {
     offset: u64,
     decoder: Decoder,
-    decoded: String,
+    stripper: StripBytes,
     visible: ByteString,
     finished: bool,
     failure: Option<String>,
@@ -26,7 +27,7 @@ impl Default for StreamOutput {
         Self {
             offset: 0,
             decoder: encoding_rs::UTF_8.new_decoder(),
-            decoded: String::new(),
+            stripper: StripBytes::default(),
             visible: ByteString::new(),
             finished: false,
             failure: None,
@@ -70,20 +71,20 @@ impl StreamOutput {
         if bytes.is_empty() && !finished {
             return Ok(());
         }
-        let previous_len = self.decoded.len();
-        if let Err(error) = self.decode(&bytes, finished) {
+        let decoded = self.decode(&bytes, finished).inspect_err(|error| {
             self.failure = Some(format!("{error:#}"));
-            return Err(error);
-        }
+        })?;
         self.finished = finished;
-        if self.decoded.len() == previous_len {
-            return Ok(());
+        let mut fragments = self.stripper.strip_next(decoded.as_bytes()).peekable();
+        if fragments.peek().is_some() {
+            let mut visible = self.visible.as_bytes().to_vec();
+            for fragment in fragments {
+                visible.extend_from_slice(fragment);
+            }
+            self.visible = String::from_utf8(visible)
+                .context("ANSI stripping produced invalid UTF-8")?
+                .into();
         }
-        let text = fast_strip_ansi::strip_ansi_string(&self.decoded);
-        if text.as_ref() == &*self.visible {
-            return Ok(());
-        }
-        self.visible = text.into_owned().into();
         Ok(())
     }
     fn read_appended(&mut self, path: &Path) -> Result<Vec<u8>> {
@@ -116,27 +117,24 @@ impl StreamOutput {
             .context("captured output position overflowed")?;
         Ok(bytes)
     }
-    fn decode(&mut self, bytes: &[u8], finished: bool) -> Result<()> {
+    fn decode(&mut self, bytes: &[u8], finished: bool) -> Result<String> {
         let capacity = self
             .decoder
-            .max_utf8_buffer_length_without_replacement(bytes.len())
+            .max_utf8_buffer_length(bytes.len())
             .context("decoded output exceeds the supported size")?;
-        self.decoded
+        let mut decoded = String::new();
+        decoded
             .try_reserve(capacity)
             .context("failed to reserve decoded output storage")?;
-        let (result, consumed) =
-            self.decoder
-                .decode_to_string_without_replacement(bytes, &mut self.decoded, finished);
+        let (result, consumed, _replaced) =
+            self.decoder.decode_to_string(bytes, &mut decoded, finished);
         match result {
-            DecoderResult::InputEmpty => ensure!(
+            CoderResult::InputEmpty => ensure!(
                 consumed == bytes.len(),
                 "output decoder did not consume the captured bytes"
             ),
-            DecoderResult::OutputFull => bail!("output decoder exceeded its reserved storage"),
-            DecoderResult::Malformed(_, _) => {
-                bail!("text is not valid {}", self.decoder.encoding().name());
-            }
+            CoderResult::OutputFull => bail!("output decoder exceeded its reserved storage"),
         }
-        Ok(())
+        Ok(decoded)
     }
 }

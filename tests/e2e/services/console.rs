@@ -1,6 +1,7 @@
 use crate::support::{
-    assert_powershell_primary_prompt, create_tab, locked, manual_write, parse_command_id,
-    parse_command_result, parse_tab_view, required_executable, run_cli, send_command, temp_root,
+    assert_powershell_primary_prompt, complete_command, create_tab, locked, manual_write,
+    parse_command_id, parse_command_result, parse_tab_view, required_executable, run_cli,
+    send_command, temp_root, wait_for_completion,
 };
 use core::time::Duration;
 use functerm::shell::quote;
@@ -23,7 +24,7 @@ fn ctrl_c_stops_native_process_and_returns_to_usable_shell() {
         String::from_utf8_lossy(&written.stdout),
         String::from_utf8_lossy(&written.stderr)
     );
-    let interrupted = parse_command_result(&run_cli(&["view", &command_id, "--wait-timeout", "5"]));
+    let interrupted = wait_for_completion(&accepted);
     assert!(
         interrupted.finished,
         "native process did not stop after Ctrl+C; stdout: {}; stderr: {}",
@@ -36,11 +37,7 @@ fn ctrl_c_stops_native_process_and_returns_to_usable_shell() {
         interrupted.stdout,
         interrupted.stderr
     );
-    let follow_up = parse_command_result(&send_command(
-        &tab.tab_id,
-        "Write-Output 'FUNCTERM_CTRL_C_RECOVERED'",
-        5.0,
-    ));
+    let follow_up = complete_command(&tab.tab_id, "Write-Output 'FUNCTERM_CTRL_C_RECOVERED'");
     assert!(follow_up.finished, "follow-up command should finish");
     assert_eq!(follow_up.exit_code, Some(0_i32));
     assert!(follow_up.stdout.contains("FUNCTERM_CTRL_C_RECOVERED"));

@@ -1,7 +1,7 @@
 use crate::contract::{DONE_FILE, RELEASED_FILE, STDERR_FILE, STDOUT_FILE};
 use crate::runtime::protocol::{CommandOutput, CommandSnapshot, CommandView};
 use crate::shell::ShellChoice;
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result};
 use core::time::Duration;
 use fs_err as fs;
 use std::path::{Path, PathBuf};
@@ -97,29 +97,12 @@ pub(super) fn command_note(output: &CommandOutput, extra: &str) -> String {
     }
     lines.join("\n")
 }
-fn decode_text(bytes: &[u8]) -> Result<String> {
-    let encoding = encoding_rs::Encoding::for_bom(bytes)
-        .map_or(encoding_rs::UTF_8, |(detected_encoding, _)| {
-            detected_encoding
-        });
-    let (text, had_errors) = encoding.decode_with_bom_removal(bytes);
-    if had_errors {
-        bail!("text is not valid {}", encoding.name());
-    }
-    Ok(text.into_owned())
-}
 pub(super) fn read_done(path: &Path) -> Result<Option<DoneFile>> {
-    let Some(bytes) = read_if_present(path, "done file")? else {
-        return Ok(None);
-    };
-    let text = decode_text(&bytes).context("failed to decode done file")?;
-    let done = sonic_rs::from_str::<DoneFile>(&text).context("failed to parse done file")?;
-    Ok(Some(done))
-}
-fn read_if_present(path: &Path, label: &str) -> Result<Option<Vec<u8>>> {
     match fs::read(path) {
-        Ok(bytes) => Ok(Some(bytes)),
+        Ok(bytes) => Ok(Some(
+            sonic_rs::from_slice(&bytes).context("failed to parse done file")?,
+        )),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(error).with_context(|| format!("failed to read {label}")),
+        Err(error) => Err(error).context("failed to read done file"),
     }
 }

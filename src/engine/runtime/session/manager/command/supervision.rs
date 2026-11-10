@@ -96,9 +96,23 @@ impl Tab {
         command: Arc<ManagedCommand>,
         session: Arc<ShellSession>,
     ) -> Result<()> {
-        tracing :: debug ! (command_id = % command . id () , "waiting for command resources to be released");
-        tokio::select! { released = command . wait_released () => released ?, exited = session . wait_for_exit () => exited ?, }
-        self . blocking . run (move | | { let result = remove_record_directory (command . record ()) ; tracing :: debug ! (command_id = % command . id () , removed = result . is_ok () , "command record cleanup completed") ; drop (session) ; result }) . await
+        tracing::debug!(command_id = %command.id(), "waiting for command resources to be released");
+        tokio::select! {
+            released = command.wait_released(session.command_watch()) => released?,
+            exited = session.wait_for_exit() => exited?,
+        }
+        self.blocking
+            .run(move || {
+                let result = remove_record_directory(command.record());
+                tracing::debug!(
+                    command_id = %command.id(),
+                    removed = result.is_ok(),
+                    "command record cleanup completed"
+                );
+                drop(session);
+                result
+            })
+            .await
     }
     pub(in crate::engine::runtime::session::manager) async fn fail_command(
         self: &Arc<Self>,

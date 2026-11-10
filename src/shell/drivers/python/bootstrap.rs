@@ -127,9 +127,6 @@ def _functerm_dispatch():
                 @VAR_exit_code@ = 1
                 import traceback as @VAR_traceback@
                 @VAR_traceback@.print_exc()
-        if @VAR_receipt@["separate_output"]:
-            print(@VAR_stdout_file@.read_text(encoding="utf-8"), end="")
-            print(@VAR_stderr_file@.read_text(encoding="utf-8"), end="", file=@VAR_sys@.stderr)
     finally:
         @VAR_environment_was_cleared@ = not @VAR_os@.environ
         for @VAR_name@, @VAR_value@ in @VAR_protected_environment@.items():
@@ -146,6 +143,7 @@ def _functerm_dispatch():
             "--time-consumption", f"{{@VAR_elapsed@}}ms",
             "--cwd", @VAR_os@.getcwd(),
             "--directory", str(@VAR_directory@),
+            *(["--replay-output"] if @VAR_receipt@["separate_output"] else []),
         )
         if @VAR_previous_id@ is None:
             @VAR_os@.environ.pop("{COMMAND_ID_ENV}", None)

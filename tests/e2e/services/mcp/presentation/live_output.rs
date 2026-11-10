@@ -11,9 +11,14 @@ fn mcp_separated_output_counts_both_streams_and_rejects_skipping_tokens() {
     let tab = text(super::wire::result(&created), "/tab_id").to_owned();
     let command = r"import sys
 _ = input()
-_ = sys.stdout.buffer.write(b'hello world \xe4')
+_ = sys.stdout.buffer.write(b'\x1b[31mhello world \x1b[3')
 sys.stdout.flush()
-_ = sys.stderr.buffer.write(b'\xe4')
+_ = sys.stderr.buffer.write(b'\x1b]8;;https://example.invalid')
+sys.stderr.flush()
+_ = input()
+_ = sys.stdout.buffer.write(b'1mnext \xe4')
+sys.stdout.flush()
+_ = sys.stderr.buffer.write(b'\x1b\\\xe4')
 sys.stderr.flush()
 _ = input()
 _ = sys.stdout.buffer.write(b'\xbd\xa0\xe5\xa5\xbd \xf0\x9f\xa7\xa0')
@@ -22,23 +27,25 @@ _ = sys.stderr.buffer.write(b'\xbd\xa0\xe5\xa5\xbd \xf0\x9f\xa7\xa0')
     let started = session.execute(&tab, command, true, 0.5);
     let id = text(command_result(&started), "/command_id").to_owned();
     let input = json!({"exec": [{"tab_id": tab, "text": "\r"}], "wait_timeout": 0_u64});
-    session.call("manual_write", input.clone());
     let tokenizer = toktok::Tokenizer::builtin("o200k_base").unwrap();
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(15);
-    loop {
-        let partial = session.view(&[&id], 1, 0.1);
-        let snapshot = command_result(&partial);
-        assert_field(snapshot, "/finished", false);
-        if text(snapshot, "/stdout") == "hello world " {
-            assert_field(snapshot, "/stderr", "");
-            assert_field(
-                snapshot,
-                "/total_output_tokens",
-                tokenizer.count(b"hello world "),
-            );
-            break;
+    for expected in ["hello world ", "hello world next "] {
+        session.call("manual_write", input.clone());
+        let deadline = std::time::Instant::now() + core::time::Duration::from_secs(15);
+        loop {
+            let partial = session.view(&[&id], 1, 0.1);
+            let snapshot = command_result(&partial);
+            assert_field(snapshot, "/finished", false);
+            if text(snapshot, "/stdout") == expected {
+                assert_field(snapshot, "/stderr", "");
+                assert_field(
+                    snapshot,
+                    "/total_output_tokens",
+                    tokenizer.count(expected.as_bytes()),
+                );
+                break;
+            }
+            assert!(std::time::Instant::now() < deadline, "{partial}");
         }
-        assert!(std::time::Instant::now() < deadline, "{partial}");
     }
     session.call("manual_write", input);
     let accepted = session.view(&[&id], 1, 5.0);
@@ -47,7 +54,7 @@ _ = sys.stderr.buffer.write(b'\xbd\xa0\xe5\xa5\xbd \xf0\x9f\xa7\xa0')
     assert_field(result, "/exit_code", 0_i32);
     let stdout = text(result, "/stdout");
     let stderr = text(result, "/stderr");
-    assert_eq!(stdout, "hello world 你好 🧠");
+    assert_eq!(stdout, "hello world next 你好 🧠");
     assert!(stderr.contains("你好 🧠"), "{accepted}");
     assert_field(
         result,

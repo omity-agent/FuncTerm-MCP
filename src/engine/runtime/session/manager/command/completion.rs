@@ -26,7 +26,6 @@ impl ManagedCommand {
         state.input.normalize(&mut view);
         state.finish(view, CommandWait::Finished);
         drop(state);
-        self.wake();
         Ok(())
     }
     pub(in crate::engine::runtime::session::manager) fn publish_interruption(
@@ -78,7 +77,6 @@ impl ManagedCommand {
         state.session_exit = self.record.session_exit.try_exists()?;
         state.finish(view, CommandWait::Finished);
         drop(state);
-        self.wake();
         Ok(())
     }
     pub(in crate::engine::runtime::session::manager) fn mark_failed(
@@ -102,7 +100,6 @@ impl ManagedCommand {
         view.note = command_note(&view.command.output, &failure_message);
         state.finish(view, CommandWait::Failed);
         drop(state);
-        self.wake();
         Ok(())
     }
 }

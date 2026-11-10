@@ -57,17 +57,17 @@ impl ShellLauncher {
         client_environment: &EnvironmentSnapshot,
     ) -> Result<Arc<ShellSession>> {
         let identity = ShellIdentity::resolve(elevated, &self.settings)?;
-        let tab_root = temp::tab_root(&self.generation_root, tab_id);
+        let directory = temp::create_tab_directory(&self.generation_root, tab_id)?;
+        let tab_root = directory.path();
         let shim_dir = self
             .shim_dir
             .join(if elevated { "elevated" } else { "normal" });
-        fs_err::create_dir_all(&tab_root)?;
         fs_err::create_dir_all(&shim_dir)?;
         #[cfg(unix)]
         identity.prepare_workspace(
             &self.runtime_root,
             &self.generation_root,
-            &tab_root,
+            tab_root,
             &shim_dir,
         )?;
         let ready = if elevated {
@@ -76,18 +76,18 @@ impl ShellLauncher {
             &self.shim_ready.0
         };
         ready.get_or_try_init(|| shims::ensure_directory(&shim_dir))?;
-        let tab_state = temp::tab_state_directory(&tab_root);
-        let command_root = temp::tab_commands_directory(&tab_root);
+        let tab_state = temp::tab_state_directory(tab_root);
+        let command_root = temp::tab_commands_directory(tab_root);
         fs_err::create_dir_all(&tab_state)?;
         fs_err::create_dir_all(&command_root)?;
-        let command_watch = Arc::new(PathWatch::new(
+        let command_watch = PathWatch::new(
             &command_root,
             RecursiveMode::Recursive,
             crate::runtime::session::records::lifecycle_event,
-        )?);
+        )?;
         let managed_environment = shims::environment(
             &self.settings,
-            &tab_root,
+            tab_root,
             &shim_dir,
             starting_shell,
             client_environment,
@@ -99,7 +99,7 @@ impl ShellLauncher {
         variables.push((shims::TAB_ID_ENV.into(), tab_id.into()));
         let startup = starting_shell.startup(
             starting_directory,
-            &tab_root,
+            tab_root,
             load_profile,
             self.settings.shell_ignore_style,
             &EnvironmentSnapshot::from_variables(variables),
@@ -160,6 +160,9 @@ impl ShellLauncher {
             });
         if let Err(error) = initialized {
             tracing::debug!(shim_dir = %shim_dir.display(), "shell initialization failed");
+            if let Err(failure) = process_tree.terminate() {
+                tracing::error!(%failure, "failed to terminate unready shell process tree");
+            }
             process::cleanup(child.as_mut(), "unregistered shell child");
             drop(retained_slave);
             drop(spawned.master);
@@ -182,6 +185,7 @@ impl ShellLauncher {
                 .child(child)
                 .slave(retained_slave)
                 .reader(Some(reader_worker))
+                .directory(Some(directory))
                 .build(),
         ))
     }

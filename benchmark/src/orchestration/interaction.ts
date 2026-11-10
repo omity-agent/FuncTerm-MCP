@@ -33,14 +33,18 @@ export function execute(
       tabId: tab.id,
       commandBytes: new TextEncoder().encode(source).length,
       payloadBytes: spec.outputBytes,
-      separateOutput: spec.separate,
+      separateOutput: tab.driver !== "nu" && spec.separate,
       ...(spec.interactive ? { readyPath } : {}),
     };
     const send = invoke(
       "send_command",
       {
         exec: [
-          { tab_id: tab.id, command: source, separate_output: spec.separate },
+          {
+            tab_id: tab.id,
+            command: source,
+            separate_output: context.separateOutput,
+          },
         ],
         wait_timeout: settings.timeouts.commandSeconds,
       },
