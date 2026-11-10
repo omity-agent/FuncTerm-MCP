@@ -1,6 +1,6 @@
 use crate::support::{
     complete_command, create_tab, parse_command_id, parse_command_result, parse_tab_view, run_cli,
-    send_command, temp_dir, wait_for_completion,
+    send_command, send_command_with_output, temp_dir, wait_for_completion,
 };
 use core::time::Duration;
 #[test]
@@ -20,18 +20,14 @@ fn nushell_parse_errors_and_user_bindings_preserve_lexical_state() {
 #[test]
 fn powershell_top_level_return_keeps_state_and_does_not_exit() {
     let _guard = super::matrix::daemon();
-    for separated in ["false", "true"] {
+    for separated in [false, true] {
         let tab = create_tab(&temp_dir("early-return"), "powershell").tab_id;
-        let output = run_cli(&[
-            "send-command",
+        let output = send_command_with_output(
             &tab,
-            "--command",
             "$retained = 42; function f { 'USER_F' }; function Get-Retained { $retained }; return 'RETURN_VALUE'; throw 'UNREACHABLE'",
-            "--separate-output",
             separated,
-            "--wait-timeout",
-            "0",
-        ]);
+            0.0,
+        );
         let returned = wait_for_completion(&output);
         assert_eq!(returned.exit_code, Some(0_i32), "{returned:?}");
         assert!(returned.stdout.contains("RETURN_VALUE"), "{returned:?}");

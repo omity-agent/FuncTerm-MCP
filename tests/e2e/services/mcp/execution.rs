@@ -76,16 +76,7 @@ fn mcp_scaled_wait_budget_is_shared_and_timeout_does_not_cancel_commands() {
             &["--no-profile", "--wait-timeout-multiplier", multiplier],
         );
         let [first, second] = create_tabs(&mut session);
-        let initialization = "echo BATCH_READY";
-        let ready = session.call(
-            "send_command",
-            json!({
-                "exec": [
-                    {"tab_id": first, "command": initialization, "separate_output": true},
-                    {"tab_id": second, "command": initialization, "separate_output": true}
-                ], "wait_timeout": 10_u64
-            }),
-        );
+        let ready = session.execute_many(&[&first, &second], "echo BATCH_READY", true, 10.0);
         for entry in entries(&ready) {
             assert_field(entry, "/result/command/finished", true);
             assert_field(entry, "/result/command/exit_code", 0_i32);
@@ -100,15 +91,7 @@ fn mcp_scaled_wait_budget_is_shared_and_timeout_does_not_cancel_commands() {
         #[cfg(not(windows))]
         let source = "sleep 4\necho BATCH_FINISHED";
         let started = Instant::now();
-        let response = session.call(
-            "send_command",
-            json!({
-                "exec": [
-                    {"tab_id": first, "command": source, "separate_output": true},
-                    {"tab_id": second, "command": source, "separate_output": true}
-                ], "wait_timeout": timeout
-            }),
-        );
+        let response = session.execute_many(&[&first, &second], source, true, timeout);
         let elapsed = started.elapsed();
         assert!(window.contains(&elapsed), "{elapsed:?}: {response}");
         let ids = entries(&response)

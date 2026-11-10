@@ -10,6 +10,24 @@ impl Tab {
         if !matches!(command.state.lock().wait, CommandWait::Running) {
             return Ok(());
         }
+        self.wait_done_capture(command).await?;
+        let _operation = self.operation.lock().await;
+        if !matches!(command.state.lock().wait, CommandWait::Running) {
+            return Ok(());
+        }
+        let tab = Arc::clone(self);
+        let managed = Arc::clone(command);
+        self.blocking
+            .run(move || tab.cache_done_command(&managed))
+            .await
+    }
+    pub(super) async fn wait_done_capture(
+        self: &Arc<Self>,
+        command: &Arc<ManagedCommand>,
+    ) -> Result<()> {
+        if !matches!(command.state.lock().wait, CommandWait::Running) {
+            return Ok(());
+        }
         if let Some(session) = self.optional_session() {
             tokio::select! {
                 captured = command.capture.wait_finished() => { captured?; }
@@ -20,12 +38,7 @@ impl Tab {
                 }
             }
         }
-        let _operation = self.operation.lock().await;
-        let tab = Arc::clone(self);
-        let managed = Arc::clone(command);
-        self.blocking
-            .run(move || tab.cache_done_command(&managed))
-            .await
+        Ok(())
     }
     pub(in crate::engine::runtime::session::manager) fn cache_done_command(
         &self,

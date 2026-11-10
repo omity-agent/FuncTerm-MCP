@@ -1,6 +1,6 @@
 use crate::support::{
     complete_command, create_tab, manual_write, parse_command_id, parse_command_result,
-    parse_tab_view, run_cli, send_command, temp_dir, wait_for_completion,
+    parse_tab_view, run_cli, send_command, temp_dir, wait_for_completion, wait_for_stdout,
 };
 #[test]
 fn python_captures_native_standard_streams() {
@@ -90,16 +90,7 @@ fn interrupted_shells_return_to_a_usable_prompt() {
         let synchronized = format!("{announce} INTERRUPT_READY\n{source}");
         let accepted = send_command(&tab, &synchronized, 0.0);
         let id = parse_command_id(&accepted);
-        let ready = std::time::Instant::now() + core::time::Duration::from_secs(15);
-        while !parse_command_result(&run_cli(&["view", &id, "--wait-timeout", "0.1"]))
-            .stdout
-            .contains("INTERRUPT_READY")
-        {
-            assert!(
-                std::time::Instant::now() < ready,
-                "{shell}: command did not become ready"
-            );
-        }
+        wait_for_stdout(&id, "INTERRUPT_READY", core::time::Duration::from_secs(15));
         let _interrupted = manual_write(&tab, &[3], 0.5);
         if shell == "cmd" {
             let deadline = std::time::Instant::now() + core::time::Duration::from_secs(3);

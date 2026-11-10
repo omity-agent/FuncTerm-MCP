@@ -1,6 +1,7 @@
 use crate::support::{
     complete_command, create_tab, locked_with_env, parse_command_id, parse_command_result,
-    parse_tab_view, run_cli, tagged_content, temp_dir, wait_for_completion,
+    parse_tab_view, run_cli, send_command_with_output, tagged_content, temp_dir,
+    wait_for_completion, wait_for_stdout,
 };
 #[test]
 fn bash_declarations_arguments_dispatch_and_status_survive_submissions() {
@@ -97,16 +98,8 @@ fn cmd_codepage_changes_do_not_fill_terminal_records_with_blanks() {
     assert!(previous.stdout.contains("PREVIOUS=28"), "{previous:?}");
     for codepage in [936_i32, 65_001_i32] {
         complete_command(&tab, &format!("chcp {codepage}"));
-        let result = wait_for_completion(&run_cli(&[
-            "send-command",
-            &tab,
-            "--command",
-            "echo ONE_LINE",
-            "--separate-output",
-            "false",
-            "--wait-timeout",
-            "5",
-        ]));
+        let result =
+            wait_for_completion(&send_command_with_output(&tab, "echo ONE_LINE", false, 5.0));
         assert_eq!(result.stdout.trim(), "ONE_LINE", "{result:?}");
         assert!(result.stdout.len() < 30, "{result:?}");
     }
@@ -118,17 +111,13 @@ fn powershell_records_source_locations_native_status_prompts_and_releases_cwd() 
     let _guard = locked_with_env(&[]);
     let cwd = temp_dir("released-directory");
     let tab = create_tab(&cwd, "powershell").tab_id;
-    for separate in ["false", "true"] {
-        let failed = wait_for_completion(&run_cli(&[
-            "send-command",
+    for separate in [false, true] {
+        let failed = wait_for_completion(&send_command_with_output(
             &tab,
-            "--command",
             "$ErrorView = 'NormalView'\nthrow 'SOURCE_ERROR'",
-            "--separate-output",
             separate,
-            "--wait-timeout",
-            "0",
-        ]));
+            0.0,
+        ));
         let diagnostic = format!("{}{}", failed.stdout, failed.stderr);
         assert!(
             diagnostic.contains("SOURCE_ERROR") && diagnostic.contains("CategoryInfo"),
@@ -152,14 +141,7 @@ fn powershell_records_source_locations_native_status_prompts_and_releases_cwd() 
     assert!(previous.stdout.contains("PREVIOUS=28"), "{previous:?}");
     let waiting = crate::support::send_command(&tab, "Read-Host 'VISIBLE_PROMPT'", 0.0);
     let id = parse_command_id(&waiting);
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(15);
-    loop {
-        let prompt = parse_command_result(&run_cli(&["view", &id, "--wait-timeout", "1"]));
-        if prompt.stdout.contains("VISIBLE_PROMPT") {
-            break;
-        }
-        assert!(std::time::Instant::now() < deadline, "{prompt:?}");
-    }
+    wait_for_stdout(&id, "VISIBLE_PROMPT", core::time::Duration::from_secs(15));
     crate::support::manual_write(&tab, b"REPLY\r", 0.0);
     assert!(wait_for_completion(&waiting).stdout.contains("REPLY"));
     complete_command(

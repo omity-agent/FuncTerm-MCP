@@ -61,11 +61,12 @@ where
         .transpose()
         .map_err(super::error_text)?
         .unwrap_or(Duration::ZERO);
-    backend.prepare(settings).await.map_err(super::error_text)?;
+    let prepared = backend.prepare(settings).await.map_err(super::error_text)?;
+    let execution = &prepared;
     let started = Instant::now();
     let operations = entries.into_iter().map(|entry| async move {
         let request = entry.request(settings, budget.saturating_sub(started.elapsed()))?;
-        let payload = backend
+        let payload = execution
             .execute(settings, request)
             .await
             .map_err(super::error_text)?;

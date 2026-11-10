@@ -9,7 +9,6 @@ use core::time::Duration;
 pub(in crate::engine::runtime::session::manager) struct StartedCommand {
     command: Arc<ManagedCommand>,
     tab: Arc<Tab>,
-    session: Arc<ShellSession>,
 }
 impl Tab {
     pub(in crate::engine::runtime::session::manager) async fn start_command(
@@ -85,7 +84,6 @@ impl Tab {
         Ok(StartedCommand {
             command: managed,
             tab: Arc::clone(self),
-            session,
         })
     }
     fn abandon_start(&self, command: &ManagedCommand, session: &ShellSession) -> Result<()> {
@@ -101,30 +99,22 @@ impl StartedCommand {
         self,
         wait_timeout: Duration,
     ) -> Result<(String, EndReason, ViewResult)> {
-        let reason = match self
+        let observed = self
             .tab
             .observe_command(&self.command, wait_timeout)
-            .await?
-        {
-            CommandWait::Finished => {
-                self.tab.finish_done_command(&self.command).await?;
-                EndReason::CommandEnded
-            }
+            .await?;
+        let reason = match observed {
+            CommandWait::Finished => EndReason::CommandEnded,
             CommandWait::Running => {
-                if self
-                    .tab
-                    .abort_if_shell_dead(&self.session, &self.command)
-                    .await?
-                {
-                    EndReason::CommandFailed
-                } else {
-                    tracing::debug!(command_id = %self.command.id(), "command wait timed out");
-                    EndReason::WaitTimeout
-                }
+                tracing::debug!(command_id = %self.command.id(), "command wait timed out");
+                EndReason::WaitTimeout
             }
             CommandWait::Failed => EndReason::CommandFailed,
         };
-        let result = self.tab.command_view_result(&self.command).await?;
+        let result = self
+            .tab
+            .command_view_result(&self.command, observed)
+            .await?;
         Ok((self.command.id().to_owned(), reason, result))
     }
 }

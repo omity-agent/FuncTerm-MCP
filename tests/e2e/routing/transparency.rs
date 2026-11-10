@@ -1,11 +1,9 @@
 use crate::support::{
     complete_command, create_tab, locked_with_env, manual_write, parse_command_id,
-    parse_command_result, parse_tab_view, run_cli, send_command, tagged_content, temp_dir,
-    wait_for_completion,
+    parse_command_result, parse_tab_view, run_cli, send_command, send_command_with_output,
+    tagged_content, temp_dir, wait_for_completion, wait_for_stdout,
 };
 use core::time::Duration;
-use std::process::Output;
-use std::time::Instant;
 #[test]
 fn terminal_mode_preserves_tty_and_switches_back_to_separated_output() {
     let _guard = locked_with_env(&[]);
@@ -19,7 +17,7 @@ fn terminal_mode_preserves_tty_and_switches_back_to_separated_output() {
         let query = tty_query(shell);
         let separated = complete_command(&tab, query);
         assert_eq!(separated.exit_code, Some(0_i32), "{shell}: {separated:?}");
-        let direct = run_terminal(&tab, query, "10");
+        let direct = send_command_with_output(&tab, query, false, 10.0);
         let terminal = wait_for_completion(&direct);
         let document = String::from_utf8(direct.stdout.clone()).unwrap();
         for tag in ["STDOUT", "STDERR"] {
@@ -57,7 +55,7 @@ fn terminal_state_keeps_scrolled_unicode_output_and_command_boundaries() {
             .success()
     );
     let command = "python -c \"import sys; sys.stdout.write(''.join('记录_%04d\\n' % i for i in range(4200))); print('FINAL_ERROR', file=sys.stderr); sys.exit(7)\"";
-    let accepted = run_terminal(&tab, command, "10");
+    let accepted = send_command_with_output(&tab, command, false, 10.0);
     let result = wait_for_completion(&accepted);
     for expected in ["记录_0000", "记录_4199", "FINAL_ERROR"] {
         assert!(result.stdout.contains(expected), "{result:?}");
@@ -69,7 +67,12 @@ fn terminal_state_keeps_scrolled_unicode_output_and_command_boundaries() {
     let screen = parse_tab_view(&run_cli(&["view", &tab])).screen;
     assert!(!screen.contains("记录_0000"), "{screen}");
     assert!(screen.contains("记录_4199"), "{screen}");
-    let next = wait_for_completion(&run_terminal(&tab, "echo AFTER_CAPTURE", "10"));
+    let next = wait_for_completion(&send_command_with_output(
+        &tab,
+        "echo AFTER_CAPTURE",
+        false,
+        10.0,
+    ));
     assert!(next.stdout.contains("AFTER_CAPTURE"), "{next:?}");
     let saved = parse_command_result(&run_cli(&["view", &parse_command_id(&accepted)]));
     assert_eq!(saved.stdout, result.stdout);
@@ -82,14 +85,9 @@ fn terminal_mode_accepts_input_and_honors_user_redirection() {
     let tab = create_tab(&directory, parent_shell()).tab_id;
     let command =
         "python -c \"reply = input('INPUT_READY:'); print('INPUT_RECEIVED_' + reply, flush=True)\"";
-    let accepted = run_terminal(&tab, command, "0.3");
+    let accepted = send_command_with_output(&tab, command, false, 0.3);
     let id = parse_command_id(&accepted);
-    let mut pending = parse_command_result(&accepted);
-    let started = Instant::now();
-    while !pending.stdout.contains("INPUT_READY:") {
-        assert!(started.elapsed() < Duration::from_secs(10), "{pending:?}");
-        pending = parse_command_result(&run_cli(&["view", &id, "--wait-timeout", "0.05"]));
-    }
+    let pending = wait_for_stdout(&id, "INPUT_READY:", Duration::from_secs(10));
     assert!(!pending.finished, "{pending:?}");
     assert!(manual_write(&tab, b"hello\r", 0.1).status.success());
     let finished = parse_command_result(&run_cli(&["view", &id, "--wait-timeout", "10"]));
@@ -98,10 +96,11 @@ fn terminal_mode_accepts_input_and_honors_user_redirection() {
         "{finished:?}"
     );
     assert!(finished.finished, "{finished:?}");
-    let redirected = run_terminal(
+    let redirected = send_command_with_output(
         &tab,
         "python -c \"import sys; print('FILE_ONLY'); print('SCREEN_ONLY', file=sys.stderr)\" > user-output.txt",
-        "10",
+        false,
+        10.0,
     );
     let result = parse_command_result(&redirected);
     assert!(result.stdout.contains("SCREEN_ONLY"), "{result:?}");
@@ -111,18 +110,6 @@ fn terminal_mode_accepts_input_and_honors_user_redirection() {
             .unwrap()
             .contains("FILE_ONLY")
     );
-}
-fn run_terminal(tab_id: &str, command: &str, wait_timeout: &str) -> Output {
-    run_cli(&[
-        "send-command",
-        tab_id,
-        "--command",
-        command,
-        "--separate-output",
-        "false",
-        "--wait-timeout",
-        wait_timeout,
-    ])
 }
 const fn parent_shell() -> &'static str {
     if cfg!(windows) { "powershell" } else { "bash" }

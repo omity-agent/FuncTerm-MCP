@@ -31,18 +31,14 @@ fn mcp_views_preserve_mixed_id_order_errors_and_shared_completion() {
         assert!(entry.pointer("/result/screen").is_some());
     }
     let completed = field(
-        results
-            .get(1)
-            .unwrap_or_else(|| panic!("missing command: {viewed}")),
+        results.get(1).unwrap_or_else(|| panic!("missing command")),
         "/result/command",
     );
     assert_field(completed, "/finished", true);
     assert!(text(completed, "/stdout").contains("VIEW_ID_LIST_RESULT"));
     assert!(
         text(
-            results
-                .get(2)
-                .unwrap_or_else(|| panic!("missing error: {viewed}")),
+            results.get(2).unwrap_or_else(|| panic!("missing error")),
             "/error"
         )
         .contains("unknown id missing")

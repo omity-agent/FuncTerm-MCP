@@ -1,8 +1,8 @@
 use super::super::variables;
 use super::PosixDialect;
 use crate::contract::{
-    CLAIM_RECEIPT_FILE, COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, HELPER_EXECUTABLE_ENV,
-    SESSION_STATE_DIRECTORY, STDERR_FILE, STDOUT_FILE,
+    CLAIM_RECEIPT_FILE, COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV,
+    SESSION_COMMANDS_DIRECTORY, SESSION_STATE_DIRECTORY, STDERR_FILE, STDOUT_FILE,
 };
 pub(in crate::shell) fn script(zsh: bool) -> String {
     let dialect = if zsh {
@@ -12,9 +12,7 @@ pub(in crate::shell) fn script(zsh: bool) -> String {
     };
     format!(
         r#"functerm_prepare_command() {{
-    @VAR_helper@="$(functerm_posix_path "${{{helper_env}}}")" || return 1
-    @VAR_receipt_file@="$(functerm_posix_path "$FUNCTERM_SESSION_ROOT/{state}/{receipt}")" || return 1
-    @VAR_claim_error@="$("$@VAR_helper@" internal-claim-command --session-root "$FUNCTERM_SESSION_ROOT" --shell "$FUNCTERM_CURRENT_SHELL" --output-file "$FUNCTERM_SESSION_ROOT/{state}/{receipt}" < /dev/null 2>&1)" || {{
+    @VAR_claim_error@="$("$@VAR_helper_path@" internal-claim-command --session-root "$FUNCTERM_SESSION_ROOT" --shell "$FUNCTERM_CURRENT_SHELL" --output-file "$FUNCTERM_SESSION_ROOT/{state}/{receipt}" < /dev/null 2>&1)" || {{
         builtin printf '%s\n' "$@VAR_claim_error@" >&2
         return 1
     }}
@@ -23,8 +21,8 @@ pub(in crate::shell) fn script(zsh: bool) -> String {
         IFS= read -r -d '' @VAR_native_directory@ &&
         IFS= read -r -d '' @VAR_working_directory@ &&
         IFS= read -r -d '' @VAR_separate_output@
-    }} < "$@VAR_receipt_file@" || return 1
-    @VAR_directory@="$(functerm_posix_path "$@VAR_native_directory@")" || return 1
+    }} < "$@VAR_receipt_path@" || return 1
+    @VAR_directory@="$@VAR_session_root_path@/{commands}/$@VAR_command_id@"
     @VAR_working_directory@="$(functerm_posix_path "$@VAR_working_directory@")" || return 1
     @VAR_stdout_file@="$@VAR_directory@/{stdout}"
     @VAR_stderr_file@="$@VAR_directory@/{stderr}"
@@ -70,9 +68,9 @@ if functerm_prepare_command; then
     functerm_finish_command
 fi
 "#,
-        helper_env = HELPER_EXECUTABLE_ENV,
         state = SESSION_STATE_DIRECTORY,
         receipt = CLAIM_RECEIPT_FILE,
+        commands = SESSION_COMMANDS_DIRECTORY,
         stdout = STDOUT_FILE,
         stderr = STDERR_FILE,
         source = COMMAND_FILE,

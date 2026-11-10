@@ -8,7 +8,7 @@ fn background_daemon_survives_its_launcher_job() {
     let guard = locked_with_env(&[]);
     let stopped = run_cli(&["daemon", "stop"]);
     assert!(stopped.status.success(), "{stopped:?}");
-    let mut command = Command::new(env!("CARGO_BIN_EXE_functerm"));
+    let mut command = Command::new(crate::support::exe());
     command
         .args(["daemon", "start"])
         .stdin(Stdio::null())

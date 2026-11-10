@@ -17,7 +17,10 @@ thread_local! {
     static TAB_SEPARATE_OUTPUT: RefCell<HashMap<String, bool>> = RefCell::new(HashMap::new());
 }
 pub(crate) fn exe() -> PathBuf {
-    PathBuf::from(env!("CARGO_BIN_EXE_functerm"))
+    std::env::var_os("FUNCTERM_TEST_EXECUTABLE").map_or_else(
+        || PathBuf::from(env!("CARGO_BIN_EXE_functerm")),
+        PathBuf::from,
+    )
 }
 pub(crate) fn run_cli(arguments: &[&str]) -> Output {
     let mut command = Command::new(exe());
@@ -58,19 +61,47 @@ pub(crate) fn create_tab_with_env(cwd: &Path, shell: &str, env: &[(String, Strin
     created
 }
 pub(crate) fn send_command(tab_id: &str, command: &str, wait_timeout: f64) -> Output {
-    let separate_output = TAB_SEPARATE_OUTPUT
-        .with(|tabs| tabs.borrow().get(tab_id).copied().unwrap_or(true))
-        .to_string();
+    let separate_output =
+        TAB_SEPARATE_OUTPUT.with(|tabs| tabs.borrow().get(tab_id).copied().unwrap_or(true));
+    send_command_with_output(tab_id, command, separate_output, wait_timeout)
+}
+pub(crate) fn send_command_with_output(
+    tab_id: &str,
+    command: &str,
+    separate_output: bool,
+    wait_timeout: f64,
+) -> Output {
     run_cli(&[
         "send-command",
         tab_id,
         "--command",
         command,
         "--separate-output",
-        &separate_output,
+        &separate_output.to_string(),
         "--wait-timeout",
         &wait_timeout.to_string(),
     ])
+}
+pub(crate) fn wait_for_stdout(
+    command_id: &str,
+    expected: &str,
+    timeout: Duration,
+) -> CommandResult {
+    let started = Instant::now();
+    loop {
+        let result = parse_command_result(&run_cli(&["view", command_id, "--wait-timeout", "0.1"]));
+        assert!(
+            !result.finished,
+            "command ended before producing {expected}: {result:?}"
+        );
+        if result.stdout.contains(expected) {
+            return result;
+        }
+        assert!(
+            started.elapsed() < timeout,
+            "command did not produce {expected}: {result:?}"
+        );
+    }
 }
 pub(crate) fn complete_command(tab_id: &str, command: &str) -> CommandResult {
     wait_for_completion(&send_command(tab_id, command, 0.0))

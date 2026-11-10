@@ -1,6 +1,6 @@
 use crate::support::{
-    complete_command, create_tab, locked_with_env, parse_command_result, run_cli, tagged_content,
-    temp_dir,
+    complete_command, create_tab, locked_with_env, parse_command_result, send_command_with_output,
+    tagged_content, temp_dir,
 };
 #[cfg(windows)]
 #[test]
@@ -56,16 +56,7 @@ fn terminal_capture_preserves_spacing_and_wide_character_wraps() {
         } else {
             format!("console.log({})", sonic_rs::to_string(&text).unwrap())
         };
-        let response = run_cli(&[
-            "send-command",
-            &tab,
-            "--command",
-            &source,
-            "--separate-output",
-            "false",
-            "--wait-timeout",
-            "5",
-        ]);
+        let response = send_command_with_output(&tab, &source, false, 5.0);
         let result = parse_command_result(&response);
         assert_eq!(result.exit_code, Some(0_i32), "{result:?}");
         let document = String::from_utf8(response.stdout).unwrap();

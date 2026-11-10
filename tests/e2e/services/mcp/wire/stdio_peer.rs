@@ -29,14 +29,7 @@ impl McpSession {
     }
     pub(super) fn on(daemon: &Rc<TestGuard>, arguments: &[&str]) -> Self {
         let environment = daemon.env();
-        Self::with_context(Rc::clone(daemon), arguments, &environment)
-    }
-    pub(super) fn with_context(
-        daemon: Rc<TestGuard>,
-        arguments: &[&str],
-        environment: &[(String, String)],
-    ) -> Self {
-        Self::start(daemon, arguments, environment, "2025-11-25")
+        Self::start(Rc::clone(daemon), arguments, &environment, "2025-11-25")
     }
     pub(super) fn with_protocol_version(daemon: Rc<TestGuard>, version: &str) -> Self {
         let environment = daemon.env();
@@ -48,7 +41,7 @@ impl McpSession {
         environment: &[(String, String)],
         version: &str,
     ) -> Self {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_functerm"));
+        let mut command = Command::new(crate::support::exe());
         command
             .arg("mcp")
             .args(arguments)
@@ -109,13 +102,20 @@ impl McpSession {
         self.request("tools/call", tool_arguments(name, arguments))
     }
     pub(super) fn execute(&mut self, tab: &str, source: &str, separate: bool, wait: f64) -> Value {
-        self.call(
-            "send_command",
-            json!({
-                "exec": [{"tab_id": tab, "command": source, "separate_output": separate}],
-                "wait_timeout": wait
-            }),
-        )
+        self.execute_many(&[tab], source, separate, wait)
+    }
+    pub(super) fn execute_many(
+        &mut self,
+        tabs: &[&str],
+        source: &str,
+        separate: bool,
+        wait: f64,
+    ) -> Value {
+        let exec = tabs
+            .iter()
+            .map(|tab| json!({"tab_id": tab, "command": source, "separate_output": separate}))
+            .collect::<Vec<_>>();
+        self.call("send_command", json!({"exec": exec, "wait_timeout": wait}))
     }
     pub(super) fn view(&mut self, ids: &[&str], start: usize, wait: f64) -> Value {
         self.call(
@@ -129,18 +129,14 @@ impl McpSession {
     }
 }
 pub(super) fn request_message(method: &str, params: Value, sequence: u64) -> Value {
-    Value::Object(rmcp::serde_json::Map::from_iter([
-        ("jsonrpc".to_owned(), "2.0".into()),
-        ("id".to_owned(), sequence.into()),
-        ("method".to_owned(), method.into()),
-        ("params".to_owned(), params),
-    ]))
+    let mut message = json!({"jsonrpc": "2.0", "id": sequence, "method": method, "params": null});
+    *message.get_mut("params").unwrap() = params;
+    message
 }
 pub(super) fn tool_arguments(name: &str, arguments: Value) -> Value {
-    Value::Object(rmcp::serde_json::Map::from_iter([
-        ("name".to_owned(), name.into()),
-        ("arguments".to_owned(), arguments),
-    ]))
+    let mut parameters = json!({"name": name, "arguments": null});
+    *parameters.get_mut("arguments").unwrap() = arguments;
+    parameters
 }
 impl Drop for McpSession {
     fn drop(&mut self) {

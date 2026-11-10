@@ -21,15 +21,7 @@ fn mcp_manual_write_delivers_text_and_bytes_to_distinct_tabs() {
     let source = "$line = [Console]::In.ReadLine()\nWrite-Output \"RECEIVED_$line\"";
     #[cfg(not(windows))]
     let source = "read -r line\nprintf 'RECEIVED_%s\\n' \"$line\"";
-    let pending = session.call(
-        "send_command",
-        json!({
-            "exec": [
-                {"tab_id": first, "command": source, "separate_output": true},
-                {"tab_id": second, "command": source, "separate_output": true}
-            ], "wait_timeout": 0_u64
-        }),
-    );
+    let pending = session.execute_many(&[&first, &second], source, true, 0.0);
     let busy = session.execute(&first, "echo UNEXPECTED", true, 0.0);
     assert!(
         entries(&busy).first().unwrap().get("error").is_some(),

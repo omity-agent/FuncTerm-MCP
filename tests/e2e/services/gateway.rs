@@ -16,8 +16,8 @@ mod pagination;
 mod policy_matrix;
 #[path = "mcp/wire/stdio_peer.rs"]
 mod wire;
-use rmcp::serde_json::{Value, json};
-use wire::{McpSession, assert_rejected, entries};
+use rmcp::serde_json::json;
+use wire::{McpSession, assert_rejected, command_result, entries, text};
 #[test]
 fn mcp_rejects_invalid_batches_before_dispatch() {
     for multiplier in ["0", "-0.5", "NaN", "inf", "-inf"] {
@@ -36,12 +36,7 @@ fn mcp_rejects_invalid_batches_before_dispatch() {
         entries(&creation).first().unwrap().get("error").is_some(),
         "{creation}"
     );
-    let tab = entries(&creation)
-        .last()
-        .unwrap()
-        .pointer("/result/tab_id")
-        .and_then(Value::as_str)
-        .unwrap();
+    let tab = text(entries(&creation).last().unwrap(), "/result/tab_id");
     for (name, arguments) in [
         ("new_tab", json ! ({ "exec" : [] })),
         (
@@ -85,16 +80,7 @@ fn mcp_rejects_invalid_batches_before_dispatch() {
             "wait_timeout": 5_u64
         }),
     );
-    assert!(
-        entries(&recovered)
-            .first()
-            .unwrap()
-            .pointer("/result/command/stdout")
-            .and_then(Value::as_str)
-            .unwrap()
-            .contains("DISPATCH_RECOVERED"),
-        "{recovered}"
-    );
+    assert!(text(command_result(&recovered), "/stdout").contains("DISPATCH_RECOVERED"));
     assert!(!directory.join("rejected.txt").exists());
     drop(session);
 }

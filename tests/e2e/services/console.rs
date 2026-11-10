@@ -1,12 +1,10 @@
 use crate::support::{
     assert_powershell_primary_prompt, complete_command, create_tab, locked, manual_write,
     parse_command_id, parse_command_result, parse_tab_view, required_executable, run_cli,
-    send_command, temp_root, wait_for_completion,
+    send_command, temp_root, wait_for_completion, wait_for_stdout,
 };
 use core::time::Duration;
 use functerm::shell::quote;
-use std::thread;
-use std::time::Instant;
 const PROBE_READY: &str = "FUNCTERM_CTRL_C_READY";
 #[test]
 fn ctrl_c_stops_native_process_and_returns_to_usable_shell() {
@@ -16,7 +14,7 @@ fn ctrl_c_stops_native_process_and_returns_to_usable_shell() {
     let command_id = parse_command_id(&accepted);
     let pending = parse_command_result(&accepted);
     assert!(!pending.finished, "native probe should still be running");
-    wait_for_stdout(&command_id, PROBE_READY);
+    wait_for_stdout(&command_id, PROBE_READY, Duration::from_secs(5));
     let written = manual_write(&tab.tab_id, &[3], 0.0);
     assert!(
         written.status.success(),
@@ -52,21 +50,4 @@ fn probe_command() -> String {
         quote::powershell_path(&executable).unwrap(),
         quote::powershell_string(&script)
     )
-}
-fn wait_for_stdout(command_id: &str, expected: &str) {
-    let timeout = Duration::from_secs(5);
-    let started = Instant::now();
-    while started.elapsed() < timeout {
-        let result = parse_command_result(&run_cli(&["view", command_id]));
-        assert!(
-            !result.finished,
-            "command finished before producing {expected}: stdout: {}; stderr: {}",
-            result.stdout, result.stderr
-        );
-        if result.stdout.contains(expected) {
-            return;
-        }
-        thread::sleep(Duration::from_millis(50));
-    }
-    panic!("command did not produce {expected} within {timeout:?}");
 }

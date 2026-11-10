@@ -18,7 +18,13 @@ use event_listener::Event;
 use parking_lot::Mutex;
 use portable_pty::PtySize;
 use std::io::Write;
-use wezterm_escape_parser::{Action, osc::OperatingSystemCommand, parser::Parser};
+use wezterm_escape_parser::{
+    Action, CSI,
+    csi::{Edit, EraseInDisplay},
+    esc::{Esc, EscCode},
+    osc::OperatingSystemCommand,
+    parser::Parser,
+};
 pub(super) struct Terminal {
     state: Mutex<TerminalState>,
     changed: Event,
@@ -28,6 +34,7 @@ struct TerminalState {
     responder: PtyResponder,
     screen_title: String,
     parser: Parser,
+    actions: Vec<Action>,
     captures: CaptureRegistry,
     visible_revision: u64,
     visible_contents: ByteString,
@@ -52,6 +59,7 @@ impl Terminal {
                 responder,
                 screen_title: model_title.to_owned(),
                 parser: Parser::new(),
+                actions: Vec::new(),
                 captures: CaptureRegistry::new(model_title.to_owned()),
                 visible_revision: 0,
                 visible_contents,
@@ -105,26 +113,39 @@ impl Terminal {
 }
 impl TerminalState {
     fn process(&mut self, chunk: &[u8]) -> Result<()> {
-        let mut actions = Vec::new();
+        let mut actions = core::mem::take(&mut self.actions);
         self.parser
             .parse(chunk, |action| action.append_to(&mut actions));
         let mut pending = Vec::new();
-        for action in actions {
+        let mut applied = false;
+        #[expect(
+            clippy::iter_with_drain,
+            reason = "retain the parser allocation for subsequent PTY chunks"
+        )]
+        for action in actions.drain(..) {
             if let Some(event) = markers::parse(&action)? {
-                self.apply(core::mem::take(&mut pending))?;
+                applied |= self.apply(core::mem::take(&mut pending))?;
                 self.captures.handle(event)?;
             } else {
                 let checkpoint = matches!(
                     action,
-                    Action::CSI(_) | Action::Esc(_) | Action::OperatingSystemCommand(_)
+                    Action::OperatingSystemCommand(_)
+                        | Action::Esc(Esc::Code(EscCode::FullReset))
+                        | Action::CSI(CSI::Edit(Edit::EraseInDisplay(
+                            EraseInDisplay::EraseDisplay
+                        )))
                 );
                 pending.push(action);
                 if checkpoint {
-                    self.apply(core::mem::take(&mut pending))?;
+                    applied |= self.apply(core::mem::take(&mut pending))?;
                 }
             }
         }
-        self.apply(pending)?;
+        self.actions = actions;
+        applied |= self.apply(pending)?;
+        if !applied {
+            return Ok(());
+        }
         let contents = self.screen.lock().visible_contents();
         if self.visible_contents != contents {
             self.visible_revision = self
@@ -135,9 +156,9 @@ impl TerminalState {
         }
         Ok(())
     }
-    fn apply(&mut self, actions: Vec<Action>) -> Result<()> {
+    fn apply(&mut self, actions: Vec<Action>) -> Result<bool> {
         if actions.is_empty() {
-            return Ok(());
+            return Ok(false);
         }
         let title_written = actions.iter().any(|action| {
             matches!(
@@ -158,6 +179,6 @@ impl TerminalState {
             drop(screen);
             self.captures.update(&self.screen_title)?;
         }
-        Ok(())
+        Ok(true)
     }
 }

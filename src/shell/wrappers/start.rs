@@ -1,5 +1,4 @@
 use super::posix::PosixDialect;
-use crate::contract::HELPER_EXECUTABLE_ENV;
 pub (super) const POWERSHELL : & str = "function Invoke-FuncTermHelper {
     param(
         [Parameter(Mandatory = $true)][string[]]$@VAR_Arguments@
@@ -68,17 +67,10 @@ pub(super) fn posix(dialect: PosixDialect) -> String {
         r#"functerm_publish_start() {{
 {emulate}    local @VAR_command_id@="$1"
 	    local @VAR_native_directory@="$2"
-	    local @VAR_helper@="${{{helper_env}-}}"
-	    if [ -z "$@VAR_helper@" ]; then
-	        printf '%s is not set\n' "{helper_env}" >&2
-	        return 1
-	    fi
-	    @VAR_helper@="$(functerm_posix_path "$@VAR_helper@")" || return 1
-            functerm_terminal_helper "$@VAR_helper@" internal-write-start \
+            functerm_terminal_helper "$@VAR_helper_path@" internal-write-start \
 	        --command-id "$@VAR_command_id@" \
 	        --directory "$@VAR_native_directory@"
 	}}"#,
         emulate = dialect.emulate(),
-        helper_env = HELPER_EXECUTABLE_ENV,
     )
 }

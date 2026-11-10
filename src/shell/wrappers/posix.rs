@@ -1,7 +1,8 @@
 mod dialect;
 mod dispatch;
 mod runner;
-use crate::shell::shims::SHIM_DIR_ENV;
+use crate::contract::{CLAIM_RECEIPT_FILE, HELPER_EXECUTABLE_ENV, SESSION_STATE_DIRECTORY};
+use crate::shell::shims::{SESSION_ROOT_ENV, SHIM_DIR_ENV};
 pub(super) use dialect::PosixDialect;
 pub(in crate::shell) use dispatch::script as posix_dispatch_script;
 pub(in crate::shell) fn bash_wrapper() -> String {
@@ -102,7 +103,12 @@ functerm_native_cwd() {{
     else
         printf '%s' "$PWD"
     fi
-}}"#
+}}
+@VAR_helper_path@="$(functerm_posix_path "${{{HELPER_EXECUTABLE_ENV}}}")" || return 1
+@VAR_session_root_path@="$(functerm_posix_path "${{{SESSION_ROOT_ENV}}}")" || return 1
+@VAR_shim_path@="$(functerm_posix_path "${{{SHIM_DIR_ENV}-}}")" || return 1
+@VAR_receipt_path@="$@VAR_session_root_path@/{SESSION_STATE_DIRECTORY}/{CLAIM_RECEIPT_FILE}"
+readonly @VAR_helper_path@ @VAR_session_root_path@ @VAR_shim_path@ @VAR_receipt_path@"#
     )
 }
 pub(super) fn shim_path_function(zsh: bool) -> String {
@@ -113,17 +119,15 @@ pub(super) fn shim_path_function(zsh: bool) -> String {
     };
     format!(
         r#"functerm_ensure_shim_path() {{{local_options}
-    if [ -z "${{{SHIM_DIR_ENV}-}}" ]; then
+    if [ -z "$@VAR_shim_path@" ]; then
         return 0
     fi
-	    local @VAR_shim_dir@="${{{SHIM_DIR_ENV}}}"
-	    @VAR_shim_dir@="$(functerm_posix_path "$@VAR_shim_dir@")" || return 1
-	    local @VAR_new_path@="$@VAR_shim_dir@"
+	    local @VAR_new_path@="$@VAR_shim_path@"
 	    local @VAR_old_ifs@="$IFS"
 	    local @VAR_entry@
 	    IFS=:
 	    for @VAR_entry@ in $PATH; do
-	        if [ "$@VAR_entry@" != "$@VAR_shim_dir@" ]; then
+	        if [ "$@VAR_entry@" != "$@VAR_shim_path@" ]; then
 	            @VAR_new_path@="$@VAR_new_path@:$@VAR_entry@"
 	        fi
 	    done

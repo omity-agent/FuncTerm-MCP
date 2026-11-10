@@ -95,6 +95,10 @@ impl ManagedCommand {
         &self,
         limit: Duration,
     ) -> Result<CommandWait> {
+        let initial = self.state.lock().wait;
+        if !matches!(initial, CommandWait::Running) {
+            return Ok(initial);
+        }
         let result = self.capture.wait_ended(limit).await;
         let current = self.state.lock().wait;
         if !matches!(current, CommandWait::Running) {

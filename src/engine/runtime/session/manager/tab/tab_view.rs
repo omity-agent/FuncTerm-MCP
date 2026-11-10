@@ -25,10 +25,8 @@ impl Tab {
                 super::super::command::CommandWait::Finished => {
                     self.finish_done_command(&command).await?;
                 }
-                super::super::command::CommandWait::Running => {
-                    self.abort_if_shell_dead(&session, &command).await?;
-                }
-                super::super::command::CommandWait::Failed => {}
+                super::super::command::CommandWait::Running
+                | super::super::command::CommandWait::Failed => {}
             }
         }
         let observed_tab = Arc::clone(self);

@@ -1,6 +1,6 @@
 use super::super::start;
 use super::PosixDialect;
-use crate::contract::{COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV, HELPER_EXECUTABLE_ENV};
+use crate::contract::{COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV};
 pub(super) fn helpers(dialect: PosixDialect) -> String {
     format!(
         r#"functerm_restore_command_environment() {{
@@ -21,18 +21,12 @@ functerm_publish_done() {{
     local @VAR_time_consumption@="$3"
     local @VAR_cwd@="$4"
     local @VAR_native_directory@="$5"
-    local @VAR_helper@="${{{helper_env}-}}"
-    if [ -z "$@VAR_helper@" ]; then
-        printf '%s is not set\n' "{helper_env}" >&2
-        return 1
-    fi
-    @VAR_helper@="$(functerm_posix_path "$@VAR_helper@")" || return 1
     local @VAR_replay@=''
     if [ "${{@VAR_separate_output@-0}}" = 1 ]; then
         @VAR_replay@=--replay-output
     fi
     @VAR_cwd@="$(functerm_native_cwd)" || return 1
-    functerm_terminal_helper "$@VAR_helper@" internal-write-done \
+    functerm_terminal_helper "$@VAR_helper_path@" internal-write-done \
         --command-id "$@VAR_command_id@" \
         --exit-code "$@VAR_exit_code@" \
         --time-consumption "$@VAR_time_consumption@" \
@@ -41,14 +35,8 @@ functerm_publish_done() {{
 }}
 {publish_start}
 functerm_command_time_millis() {{
-{emulate}    local @VAR_helper@="${{{helper_env}-}}"
-    if [ -z "$@VAR_helper@" ]; then
-        printf '%s is not set\n' "{helper_env}" >&2
-        return 1
-    fi
-    @VAR_helper@="$(functerm_posix_path "$@VAR_helper@")" || return 1
-    local @VAR_millis@
-    @VAR_millis@="$("$@VAR_helper@" internal-time-millis < /dev/null 2>&1)" || {{
+{emulate}    local @VAR_millis@
+    @VAR_millis@="$("$@VAR_helper_path@" internal-time-millis < /dev/null 2>&1)" || {{
         builtin printf '%s\n' "$@VAR_millis@" >&2
         return 1
     }}
@@ -60,7 +48,6 @@ functerm_terminal_helper() (
 )
 functerm_restore_status() {{ return "$1"; }}"#,
         emulate = dialect.emulate(),
-        helper_env = HELPER_EXECUTABLE_ENV,
         command_id_env = COMMAND_ID_ENV,
         command_dir_env = COMMAND_DIRECTORY_ENV,
         test_one = dialect.test_arg("1"),

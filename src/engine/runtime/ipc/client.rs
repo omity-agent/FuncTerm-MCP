@@ -25,6 +25,13 @@ impl DaemonClient {
             Err(error) => Err(error),
         }
     }
+    pub(crate) async fn connect_or_start(settings: &Settings) -> Result<Self> {
+        if let Some(client) = Self::connect_if_running(settings).await? {
+            return Ok(client);
+        }
+        super::service_control::start(settings).await?;
+        Self::connect(settings).await
+    }
     pub(crate) async fn call(&mut self, request: Request) -> Result<Payload> {
         let kind = RequestKind::from(&request);
         self.stream.send(request).await?;
@@ -44,13 +51,6 @@ impl DaemonClient {
         }
         result
     }
-}
-pub(crate) async fn ensure_daemon(settings: &Settings) -> Result<()> {
-    if probe(settings).await? {
-        return Ok(());
-    }
-    super::service_control::start(settings).await?;
-    Ok(())
 }
 pub(crate) fn run_daemon_launcher() -> Result<()> {
     let settings = crate::runtime::config::load()?;

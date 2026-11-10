@@ -183,8 +183,7 @@ pub(crate) fn close_target(tab_id: Option<String>) -> Result<String> {
     Ok(current)
 }
 pub(crate) async fn execute(settings: &Settings, request: Request) -> Result<String> {
-    client::ensure_daemon(settings).await?;
-    let mut connection = client::DaemonClient::connect(settings).await?;
+    let mut connection = client::DaemonClient::connect_or_start(settings).await?;
     Ok(connection.call(request).await?.into_plain_text())
 }
 pub(super) fn print_result(result: Result<String>) -> Result<()> {

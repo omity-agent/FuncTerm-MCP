@@ -19,29 +19,29 @@ pub(super) fn parse(action: &Action) -> Result<Option<ProtocolEvent>> {
     let OperatingSystemCommand::Unspecified(parameters) = osc.as_ref() else {
         return Ok(None);
     };
-    let fields: Vec<_> = parameters.iter().map(Vec::as_slice).collect();
-    let Some((&[code, name], payload)) = fields.split_first_chunk::<2>() else {
+    let Some(([code, name], payload)) = parameters.split_first_chunk::<2>() else {
         return Ok(None);
     };
-    if code != TERMINAL_MARKER_CODE || name != TERMINAL_MARKER_NAME {
+    if code.as_slice() != TERMINAL_MARKER_CODE || name.as_slice() != TERMINAL_MARKER_NAME {
         return Ok(None);
     }
-    if let Some((&[b"prompt", shell], cwd)) = payload.split_first_chunk::<2>()
-        && matches!(shell, b"cmd" | b"bash" | b"zsh")
+    if let Some(([phase, shell], cwd)) = payload.split_first_chunk::<2>()
+        && phase == b"prompt"
+        && matches!(shell.as_slice(), b"cmd" | b"bash" | b"zsh")
     {
         let path =
             String::from_utf8(cwd.join(b";".as_slice())).context("prompt cwd is not UTF-8")?;
         return Ok(Some(ProtocolEvent::Prompt(path)));
     }
-    let &[phase, raw_id] = payload else {
+    let [phase, raw_id] = payload else {
         bail!("terminal marker has invalid fields");
     };
     let id = str::from_utf8(raw_id)
         .context("terminal marker contains an invalid command id")?
         .to_owned();
-    Ok(Some(if phase == TERMINAL_MARKER_START {
+    Ok(Some(if phase.as_slice() == TERMINAL_MARKER_START {
         ProtocolEvent::Start(id)
-    } else if phase == TERMINAL_MARKER_END {
+    } else if phase.as_slice() == TERMINAL_MARKER_END {
         ProtocolEvent::End(id)
     } else {
         bail!("terminal marker has unknown phase {phase:?}");

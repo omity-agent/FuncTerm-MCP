@@ -22,8 +22,7 @@ fn ordinary_client_controls_a_daemon_and_mutex_created_by_the_test_process() {
     let identity = parse_command_result(&send_command(&tab.tab_id, QUERY, 10.0));
     assert_eq!(identity.exit_code, Some(0_i32), "{identity:?}");
     assert!(!privileged_output(&identity.stdout), "{identity:?}");
-    let executable =
-        quote::powershell_path(std::path::Path::new(env!("CARGO_BIN_EXE_functerm"))).unwrap();
+    let executable = quote::powershell_path(&crate::support::exe()).unwrap();
     for (operation, message) in [
         ("start", "daemon is already running"),
         ("stop", "daemon stopped"),

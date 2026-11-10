@@ -1,6 +1,6 @@
 use crate::support::{
     complete_command, create_tab, locked_with_env, manual_write, parse_tab_view, run_cli,
-    tagged_content, temp_dir, wait_for_completion,
+    send_command_with_output, tagged_content, temp_dir, wait_for_completion,
 };
 #[test]
 fn bash_noclobber_preserves_dispatch_and_user_redirections() {
@@ -12,13 +12,14 @@ fn bash_empty_path_preserves_completion_and_dispatch() {
 }
 fn assert_environment_change(change: &str) {
     let _guard = locked_with_env(&[]);
-    for separated in ["true", "false"] {
+    for separated in [true, false] {
         let tab = create_tab(&temp_dir("environment-changes"), "bash").tab_id;
         for source in [
             format!("{change}; printf 'CHANGED\\n'"),
             "printf 'NEXT_COMMAND\\n'; printf 'ERROR_STREAM\\n' >&2".to_owned(),
         ] {
-            let result = wait_for_completion(&submit(&tab, &source, separated));
+            let result =
+                wait_for_completion(&send_command_with_output(&tab, &source, separated, 0.0));
             let screen = parse_tab_view(&run_cli(&["view", &tab])).screen;
             assert_eq!(result.exit_code, Some(0_i32), "{result:?}\n{screen}");
             assert!(!screen.contains("command not found"), "{screen}");
@@ -68,12 +69,13 @@ fn window_title_persists_across_commands_and_tab_queries() {
 #[test]
 fn bash_exit_replays_separated_streams_to_the_screen_once() {
     let _guard = locked_with_env(&[]);
-    for separated in ["true", "false"] {
+    for separated in [true, false] {
         let tab = create_tab(&temp_dir("exit-streams"), "bash").tab_id;
-        let result = wait_for_completion(&submit(
+        let result = wait_for_completion(&send_command_with_output(
             &tab,
             "printf 'LAST_STDOUT\\n'; printf 'LAST_STDERR\\n' >&2; exit 28",
             separated,
+            0.0,
         ));
         assert_eq!(result.exit_code, Some(28_i32), "{result:?}");
         assert!(result.stdout.contains("LAST_STDOUT"), "{result:?}");
@@ -99,21 +101,11 @@ fn bash_keyboard_echo_preserves_supplementary_unicode() {
     let _guard = locked_with_env(&[]);
     let tab = create_tab(&temp_dir("unicode-echo"), "bash").tab_id;
     let source = "IFS= read -r answer; printf '\\nVALUE=<%s>\\n' \"$answer\"";
-    let accepted = submit(&tab, source, "false");
+    let accepted = send_command_with_output(&tab, source, false, 0.0);
     assert!(manual_write(&tab, "🙂\n".as_bytes(), 0.0).status.success());
     let result = wait_for_completion(&accepted);
     assert!(result.stdout.contains("VALUE=<🙂>"), "{result:?}");
     let screen = parse_tab_view(&run_cli(&["view", &tab])).screen;
     assert_eq!(screen.matches('🙂').count(), 2, "{screen}");
     assert!(!screen.contains('\u{fffd}'), "{screen}");
-}
-fn submit(tab: &str, source: &str, separated: &str) -> std::process::Output {
-    run_cli(&[
-        "send-command",
-        tab,
-        "--command",
-        source,
-        "--separate-output",
-        separated,
-    ])
 }
