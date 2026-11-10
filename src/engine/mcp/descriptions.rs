@@ -1,4 +1,4 @@
-use super::McpServer;
+use super::{McpServer, WaitTimeoutSettings};
 use crate::engine::privileges::PrivilegeMode;
 use crate::runtime::config::{McpSettings, ToolDescription};
 use crate::runtime::protocol::OutputMode;
@@ -65,11 +65,21 @@ pub(super) fn apply(
             .map
             .get_mut(name)
             .with_context(|| format!("MCP tool {name} is missing from the tool router"))?;
-        apply_to_route(name, &mut route.attr, description)?;
+        apply_to_route(
+            name,
+            &mut route.attr,
+            description,
+            descriptions.wait_timeout,
+        )?;
     }
     Ok(())
 }
-fn apply_to_route(name: &str, tool: &mut Tool, description: &ToolDescription) -> Result<()> {
+fn apply_to_route(
+    name: &str,
+    tool: &mut Tool,
+    description: &ToolDescription,
+    timing: WaitTimeoutSettings,
+) -> Result<()> {
     tool.description = optional_description(&description.description);
     let mut input_schema = tool.input_schema.as_ref().clone();
     let properties = input_schema
@@ -77,6 +87,12 @@ fn apply_to_route(name: &str, tool: &mut Tool, description: &ToolDescription) ->
         .and_then(Value::as_object_mut)
         .with_context(|| format!("MCP tool {name} input schema has no properties object"))?;
     apply_parameters(name, properties, &description.parameters)?;
+    if let Some(timeout) = properties.get_mut("wait_timeout") {
+        let schema = timeout
+            .as_object_mut()
+            .with_context(|| format!("MCP tool {name} wait_timeout schema is not an object"))?;
+        timing.apply_schema(schema);
+    }
     if let Some(exec_schema) = properties.get_mut("exec") {
         let exec_properties = exec_schema
             .pointer_mut("/items/properties")

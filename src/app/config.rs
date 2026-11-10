@@ -1,4 +1,4 @@
-use crate::engine::mcp::WaitTimeoutMultiplier;
+use crate::engine::mcp::WaitTimeoutSettings;
 use crate::engine::privileges::PrivilegeMode;
 use crate::runtime::protocol::OutputMode;
 use alloc::collections::BTreeMap;
@@ -78,7 +78,8 @@ impl IpcSettings {
 }
 #[derive(Clone, Debug, Deserialize)]
 pub(crate) struct McpSettings {
-    pub(crate) wait_timeout_multiplier: WaitTimeoutMultiplier,
+    #[serde(flatten)]
+    pub(crate) wait_timeout: WaitTimeoutSettings,
     pub(crate) http: HttpSettings,
     pub(crate) new_tab: ToolDescription,
     pub(crate) manual_write: ToolDescription,
@@ -130,6 +131,7 @@ pub(crate) fn load() -> Result<Settings> {
     );
     crate::contract::validate_window_title(&settings.terminal_model_title)?;
     settings.ipc.validate()?;
+    settings.mcp.wait_timeout.validate()?;
     apply_string_override(
         "FUNCTERM_DIAGNOSTICS_FILTER",
         &mut settings.diagnostics_filter,

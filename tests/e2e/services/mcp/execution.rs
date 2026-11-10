@@ -73,7 +73,13 @@ fn mcp_scaled_wait_budget_is_shared_and_timeout_does_not_cancel_commands() {
         let daemon = Rc::new(crate::support::locked_with_env(&[]));
         let mut session = McpSession::on(
             &daemon,
-            &["--no-profile", "--wait-timeout-multiplier", multiplier],
+            &[
+                "--no-profile",
+                "--wait-timeout-multiplier",
+                multiplier,
+                "--wait-timeout-min=1",
+                "--wait-timeout-max=10",
+            ],
         );
         let [first, second] = create_tabs(&mut session);
         let ready = session.execute_many(&[&first, &second], "echo BATCH_READY", true, 10.0);

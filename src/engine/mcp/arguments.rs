@@ -89,7 +89,6 @@ impl FixedCommandExec {
 pub(super) struct ViewRequest {
     #[schemars(length(min = 1))]
     pub(super) ids: Vec<String>,
-    #[schemars(range(min = 0))]
     pub(super) wait_timeout: f64,
     #[serde(default = "first_token")]
     pub(super) start_token: NonZeroUsize,

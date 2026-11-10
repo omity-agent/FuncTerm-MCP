@@ -8,12 +8,10 @@ use base64_turbo::STANDARD;
 use clap::Parser as _;
 pub(crate) async fn run() -> Result<std::process::ExitCode> {
     let args = Args::parse();
-    match args.command.unwrap_or(CliCommand::Mcp {
-        no_profile: false,
-        privilege_mode: None,
-        output_mode: None,
-        wait_timeout_multiplier: None,
-    }) {
+    match args
+        .command
+        .unwrap_or_else(|| CliCommand::Mcp(super::stdio::Options::default()))
+    {
         CliCommand::InternalEnsureShims { directory } => {
             crate::shell::shims::ensure_directory(&directory)
         }
@@ -81,18 +79,7 @@ pub(crate) async fn run() -> Result<std::process::ExitCode> {
             directory,
             stdio,
         } => crate::app::command_state::write_start(&command_id, &directory, stdio),
-        CliCommand::Mcp {
-            no_profile,
-            privilege_mode,
-            output_mode,
-            wait_timeout_multiplier,
-        } => {
-            let mut settings = config::load()?;
-            settings.shell_load_profile &= !no_profile;
-            settings.mcp.wait_timeout_multiplier =
-                wait_timeout_multiplier.unwrap_or(settings.mcp.wait_timeout_multiplier);
-            crate::mcp::run(settings, privilege_mode, output_mode).await
-        }
+        CliCommand::Mcp(options) => options.run().await,
         CliCommand::Daemon { command } => {
             let settings = config::load()?;
             let message = match command {

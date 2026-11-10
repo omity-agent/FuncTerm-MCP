@@ -3,7 +3,7 @@ use crate::runtime::{config::Settings, protocol::wait_timeout_from_seconds};
 use anyhow::{Context as _, Result, ensure};
 use core::str::FromStr;
 use core::time::Duration;
-use rmcp::model::CallToolResult;
+use rmcp::model::{CallToolResult, JsonObject};
 use serde::Deserialize;
 use std::{collections::HashSet, time::Instant};
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -25,10 +25,49 @@ impl FromStr for WaitTimeoutMultiplier {
         Self::try_from(value.parse::<f64>()?)
     }
 }
-impl WaitTimeoutMultiplier {
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub(crate) struct WaitTimeoutSettings {
+    #[serde(rename = "wait_timeout_min")]
+    pub(crate) minimum: f64,
+    #[serde(rename = "wait_timeout_max")]
+    pub(crate) maximum: Option<f64>,
+    #[serde(rename = "wait_timeout_multiplier")]
+    pub(crate) multiplier: WaitTimeoutMultiplier,
+}
+impl WaitTimeoutSettings {
+    pub(crate) fn validate(self) -> Result<()> {
+        wait_timeout_from_seconds(self.minimum).context("invalid mcp.wait_timeout_min")?;
+        if let Some(maximum) = self.maximum {
+            wait_timeout_from_seconds(maximum).context("invalid mcp.wait_timeout_max")?;
+            ensure!(
+                maximum >= self.minimum,
+                "mcp.wait_timeout_max must be greater than or equal to mcp.wait_timeout_min"
+            );
+        }
+        Ok(())
+    }
+    pub(super) fn apply_schema(self, schema: &mut JsonObject) {
+        schema.insert("minimum".to_owned(), self.minimum.into());
+        if let Some(maximum) = self.maximum {
+            schema.insert("maximum".to_owned(), maximum.into());
+        } else {
+            schema.remove("maximum");
+        }
+    }
     fn scale(self, seconds: f64) -> Result<Duration> {
         wait_timeout_from_seconds(seconds)?;
-        wait_timeout_from_seconds(seconds * self.0)
+        ensure!(
+            seconds >= self.minimum,
+            "wait_timeout must be greater than or equal to {}",
+            self.minimum
+        );
+        if let Some(maximum) = self.maximum {
+            ensure!(
+                seconds <= maximum,
+                "wait_timeout must be less than or equal to {maximum}"
+            );
+        }
+        wait_timeout_from_seconds(seconds * self.multiplier.0)
             .context("scaled wait timeout exceeds the supported duration range")
     }
 }
@@ -43,7 +82,6 @@ pub(super) struct ExecBatch<T> {
 pub(super) struct TimedBatch<T> {
     #[schemars(length(min = 1))]
     pub(super) exec: Vec<T>,
-    #[schemars(range(min = 0))]
     pub(super) wait_timeout: f64,
 }
 pub(super) async fn run<T>(
@@ -57,7 +95,7 @@ where
 {
     validate(&entries)?;
     let budget = wait_timeout
-        .map(|seconds| settings.mcp.wait_timeout_multiplier.scale(seconds))
+        .map(|seconds| settings.mcp.wait_timeout.scale(seconds))
         .transpose()
         .map_err(super::error_text)?
         .unwrap_or(Duration::ZERO);

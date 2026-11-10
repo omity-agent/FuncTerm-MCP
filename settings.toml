@@ -78,7 +78,13 @@ windows_access_control = "D:P(A;;GA;;;SY)(A;;GA;;;{user_sid})"
 windows_security_label = "S:(ML;;NW;;;ME)"
 
 [mcp]
-# MCP 工具 wait_timeout 的等待时间倍率；命令行 --wait-timeout-multiplier 可覆盖 stdio 实例的值。
+# MCP 工具 wait_timeout 接受的最小秒数，包含边界；命令行 --wait-timeout-min 可覆盖。
+wait_timeout_min = 10.0
+
+# 可选的最大秒数，包含边界；不设置时无上限。命令行 --wait-timeout-max 可覆盖。
+# wait_timeout_max = 60.0
+
+# MCP 工具 wait_timeout 的等待时间倍率；命令行 --wait-timeout-multiplier 可覆盖。
 wait_timeout_multiplier = 1.0
 
 [mcp.http]

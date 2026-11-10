@@ -70,3 +70,53 @@ fn assert_references(value: &Value) {
         }
     }
 }
+#[test]
+fn wait_timeout_limits_apply_to_schemas_and_calls_before_the_multiplier() {
+    let daemon = Rc::new(locked_with_env(&[]));
+    for version in ["2025-06-18", "2025-11-25"] {
+        let mut session = McpSession::with_protocol_version(
+            Rc::clone(&daemon),
+            &[
+                "--wait-timeout-min=0.25",
+                "--wait-timeout-max=0.5",
+                "--wait-timeout-multiplier=2",
+                "--output-mode=terminal",
+            ],
+            version,
+        );
+        let response = session.request("tools/list", json!({}));
+        for tool in field(&response, "/result/tools").as_array().unwrap() {
+            if text(tool, "/name") != "new_tab" {
+                let timeout = field(tool, "/inputSchema/properties/wait_timeout");
+                assert_field(timeout, "/minimum", 0.25_f64);
+                assert_field(timeout, "/maximum", 0.5_f64);
+            }
+        }
+        for wait in [0.24_f64, 0.25_f64, 0.5_f64, 0.51_f64] {
+            for (name, arguments) in [
+                (
+                    "view",
+                    json!({"ids": ["missing"], "wait_timeout": wait, "start_token": 1_u64}),
+                ),
+                (
+                    "manual_write",
+                    json!({"exec": [{"tab_id": "missing", "text": "", "bytes": null}], "wait_timeout": wait}),
+                ),
+                (
+                    "send_command",
+                    json!({"exec": [{"tab_id": "missing", "command": "echo UNUSED"}], "wait_timeout": wait}),
+                ),
+            ] {
+                let called = session.call(name, arguments);
+                assert_rejected(&called);
+                assert_eq!(
+                    called
+                        .pointer("/result/structuredContent/results")
+                        .is_some(),
+                    (0.25_f64..=0.5_f64).contains(&wait),
+                    "{called}"
+                );
+            }
+        }
+    }
+}

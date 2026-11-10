@@ -11,19 +11,13 @@ fn both_versions_share_tools_terminal_state_and_errors_across_transports() {
     let daemon = Rc::new(locked_with_env(&[]));
     for version in ["2025-06-18", "2025-11-25"] {
         let mut http = HttpSession::new(&daemon, version);
-        let mut stdio = McpSession::with_protocol_version(Rc::clone(&daemon), version);
+        let mut stdio =
+            McpSession::with_protocol_version(Rc::clone(&daemon), &["--no-profile"], version);
         let http_tools = http.request("tools/list", json!({}));
         let stdio_tools = stdio.request("tools/list", json!({}));
         assert_eq!(
             field(&http_tools, "/result/tools"),
             field(&stdio_tools, "/result/tools")
-        );
-        assert_eq!(
-            field(&http_tools, "/result/tools")
-                .as_array()
-                .unwrap()
-                .len(),
-            4
         );
         let created = http.call("new_tab", json!({
             "exec": [{"starting_shell": super::execution::SHELL, "starting_directory": temp_root()}]

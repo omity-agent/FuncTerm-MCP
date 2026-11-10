@@ -25,15 +25,18 @@ pub(super) struct McpSession {
 impl McpSession {
     pub(super) fn new() -> Self {
         let daemon = Rc::new(locked_with_env(&[]));
-        Self::on(&daemon, &["--no-profile"])
+        Self::on(&daemon, &["--no-profile", "--wait-timeout-min=0"])
     }
     pub(super) fn on(daemon: &Rc<TestGuard>, arguments: &[&str]) -> Self {
-        let environment = daemon.env();
-        Self::start(Rc::clone(daemon), arguments, &environment, "2025-11-25")
+        Self::with_protocol_version(Rc::clone(daemon), arguments, "2025-11-25")
     }
-    pub(super) fn with_protocol_version(daemon: Rc<TestGuard>, version: &str) -> Self {
+    pub(super) fn with_protocol_version(
+        daemon: Rc<TestGuard>,
+        arguments: &[&str],
+        version: &str,
+    ) -> Self {
         let environment = daemon.env();
-        Self::start(daemon, &["--no-profile"], &environment, version)
+        Self::start(daemon, arguments, &environment, version)
     }
     fn start(
         daemon: Rc<TestGuard>,

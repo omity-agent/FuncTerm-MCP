@@ -14,8 +14,8 @@ use anyhow::Result;
 use arguments::{
     FixedCommandExec, FixedNewTabExec, ManualWriteExec, NewTabExec, SendCommandExec, ViewRequest,
 };
-pub(crate) use batch::WaitTimeoutMultiplier;
 use batch::{ExecBatch, TimedBatch};
+pub(crate) use batch::{WaitTimeoutMultiplier, WaitTimeoutSettings};
 use collection::BatchOutput;
 use invocation::Backend;
 use rmcp::{

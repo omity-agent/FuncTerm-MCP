@@ -4,3 +4,4 @@ pub(crate) mod config;
 pub(crate) mod contract;
 pub(crate) mod filesystem;
 mod interface;
+mod stdio;

@@ -1,9 +1,7 @@
-use crate::engine::mcp::WaitTimeoutMultiplier;
-use crate::engine::privileges::PrivilegeMode;
 use crate::runtime::{
     client,
     config::Settings,
-    protocol::{OutputMode, Request, format::line_terminated},
+    protocol::{Request, format::line_terminated},
 };
 use crate::shell::ShellChoice;
 use anyhow::{Context as _, Result, ensure};
@@ -18,30 +16,7 @@ pub(super) struct Args {
 }
 #[derive(Subcommand)]
 pub(super) enum CliCommand {
-    Mcp {
-        #[arg(
-            long,
-            help = "Disable Shell Profile loading for all Tabs created by this MCP server"
-        )]
-        no_profile: bool,
-        #[arg(
-            long,
-            value_enum,
-            help = "Fix New Tab permissions and hide its elevated input"
-        )]
-        privilege_mode: Option<PrivilegeMode>,
-        #[arg(
-            long,
-            value_enum,
-            help = "Fix command output handling and hide its separate_output input"
-        )]
-        output_mode: Option<OutputMode>,
-        #[arg(
-            long,
-            help = "Multiply MCP tool wait_timeout values by this positive factor"
-        )]
-        wait_timeout_multiplier: Option<WaitTimeoutMultiplier>,
-    },
+    Mcp(super::stdio::Options),
     Daemon {
         #[command(subcommand)]
         command: DaemonCommand,

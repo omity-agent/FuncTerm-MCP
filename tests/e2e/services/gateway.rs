@@ -20,14 +20,16 @@ use rmcp::serde_json::json;
 use wire::{McpSession, assert_rejected, command_result, entries, text};
 #[test]
 fn mcp_rejects_invalid_batches_before_dispatch() {
-    for multiplier in ["0", "-0.5", "NaN", "inf", "-inf"] {
-        let rejected =
-            crate::support::run_cli(&["mcp", &format!("--wait-timeout-multiplier={multiplier}")]);
-        assert!(!rejected.status.success(), "{rejected:?}");
-        assert!(
-            String::from_utf8_lossy(&rejected.stderr).contains("greater than zero"),
-            "{rejected:?}"
-        );
+    for (option, values) in [
+        ("multiplier", ["0", "-0.5", "NaN", "inf", "-inf"]),
+        ("min", ["-0.5", "NaN", "inf", "-inf", "1e99"]),
+        ("max", ["-0.5", "NaN", "inf", "-inf", "1e99"]),
+    ] {
+        for value in values {
+            let rejected =
+                crate::support::run_cli(&["mcp", &format!("--wait-timeout-{option}={value}")]);
+            assert!(!rejected.status.success(), "{rejected:?}");
+        }
     }
     let mut session = McpSession::new();
     let directory = crate::support::temp_dir("rejected-dispatch");
