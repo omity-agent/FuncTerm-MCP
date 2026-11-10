@@ -114,17 +114,21 @@ impl McpSession {
         separate: bool,
         wait: f64,
     ) -> Value {
-        let exec = tabs
+        let commands = tabs
             .iter()
             .map(|tab| json!({"tab_id": tab, "command": source, "separate_output": separate}))
             .collect::<Vec<_>>();
-        self.call("send_command", json!({"exec": exec, "wait_timeout": wait}))
-    }
-    pub(super) fn view(&mut self, ids: &[&str], start: usize, wait: f64) -> Value {
         self.call(
-            "view",
-            json!({"ids": ids, "start_token": start, "wait_timeout": wait}),
+            "send_command",
+            json!({"commands": commands, "wait_timeout": wait}),
         )
+    }
+    pub(super) fn view(&mut self, queries: &[(&str, usize)], wait: f64) -> Value {
+        let entries = queries
+            .iter()
+            .map(|&(id, start)| json!({"id": id, "start_token": start}))
+            .collect::<Vec<_>>();
+        self.call("view", json!({"queries": entries, "wait_timeout": wait}))
     }
     fn send(&mut self, message: &Value) {
         writeln!(self.input, "{message}").unwrap();

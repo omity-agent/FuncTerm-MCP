@@ -114,9 +114,9 @@ max_request_body_bytes = 67108864
 description = "打开新的终端标签页。返回 tab_id。Tab 是有状态的持久会话。"
 
 [mcp.new_tab.parameters]
-exec = ""
+tabs = ""
 
-[mcp.new_tab.exec_parameters]
+[mcp.new_tab.item_parameters]
 starting_directory = "初始位置。已有的 Tab 也可通过 send_command 改变 cwd（如 `cd` 命令）。"
 starting_shell = "启动时使用的交互式命令环境。在 Windows 系统，Bash 对应 MSYS2。"
 elevated = "默认为 false（普通权限）"
@@ -125,10 +125,10 @@ elevated = "默认为 false（普通权限）"
 description = "手动写入键盘输入。适用于使用 TUI 程序、点击快捷键等场景。调用时需在 text 和 bytes 中选择一个传入。"
 
 [mcp.manual_write.parameters]
-exec = ""
+inputs = ""
 wait_timeout = "等待终端画面变化的最长时长，单位为秒。"
 
-[mcp.manual_write.exec_parameters]
+[mcp.manual_write.item_parameters]
 tab_id = "该工具仅在 Tab 处于非空闲状态时有效"
 text = "要写入的 UTF-8 文本"
 bytes = "要写入的原始字节"
@@ -137,10 +137,10 @@ bytes = "要写入的原始字节"
 description = "执行命令。工具会在等待时长结束或命令结束时输出。"
 
 [mcp.send_command.parameters]
-exec = "向一个或多个不同的 Tab 发送命令"
+commands = "向一个或多个不同的 Tab 发送命令"
 wait_timeout = "等待时长，单位为秒。命令不会在时间结束后终止，仍可通过 view 查看后续。"
 
-[mcp.send_command.exec_parameters]
+[mcp.send_command.item_parameters]
 tab_id = "每个 Tab 在同一时刻仅能有一份命令正在运行，Tab 繁忙时收到的命令会被丢弃。"
 command = "Single-line or multi-line commands"
 separate_output = "是否分别捕获 stdout 和 stderr。false 时保留终端句柄。"
@@ -149,6 +149,9 @@ separate_output = "是否分别捕获 stdout 和 stderr。false 时保留终端�
 description = "查看状态。该工具会在等待时长结束或命令结束时输出。"
 
 [mcp.view.parameters]
-ids = "如果输入命令 ID，将返回该命令目前的状态；如果输入标签页 ID，将返回终端屏幕范围内显示的内容。一般输入命令 ID。"
+queries = ""
 wait_timeout = "等待时长，单位为秒。"
+
+[mcp.view.item_parameters]
+id = "如果输入命令 ID，将返回该命令目前的状态；如果输入标签页 ID，将返回终端屏幕范围内显示的内容。一般输入命令 ID。"
 start_token = "输出起始 Token 的索引。用于跳过输出中已经读过的部分；默认值为 1；不适用于 Separate Output。"

@@ -20,18 +20,21 @@ fn both_versions_share_tools_terminal_state_and_errors_across_transports() {
             field(&stdio_tools, "/result/tools")
         );
         let created = http.call("new_tab", json!({
-            "exec": [{"starting_shell": super::execution::SHELL, "starting_directory": temp_root()}]
+            "tabs": [{"starting_shell": super::execution::SHELL, "starting_directory": temp_root()}]
         }));
         let tab = text(super::wire::result(&created), "/tab_id");
         let executed = stdio.execute(tab, "echo SHARED_TRANSPORT_STATE", true, 10.0);
         let id = text(command_result(&executed), "/command_id");
-        let observed = http.call("view", json!({"ids": [id], "wait_timeout": 10_u64}));
+        let observed = http.call(
+            "view",
+            json!({"queries": [{"id": id}], "wait_timeout": 10_u64}),
+        );
         assert!(
             text(command_result(&observed), "/stdout").contains("SHARED_TRANSPORT_STATE"),
             "{observed}"
         );
         let reverse = http.call("send_command", json!({
-            "exec": [{"tab_id": tab, "command": "echo DIRECT_DAEMON_EXECUTION", "separate_output": true}], "wait_timeout": 10_u64
+            "commands": [{"tab_id": tab, "command": "echo DIRECT_DAEMON_EXECUTION", "separate_output": true}], "wait_timeout": 10_u64
         }));
         assert!(
             text(command_result(&reverse), "/stdout").contains("DIRECT_DAEMON_EXECUTION"),
@@ -40,11 +43,11 @@ fn both_versions_share_tools_terminal_state_and_errors_across_transports() {
         for response in [
             http.call(
                 "send_command",
-                json!({"exec": [{"tab_id": true}], "wait_timeout": 0_u64}),
+                json!({"commands": [{"tab_id": true}], "wait_timeout": 0_u64}),
             ),
             stdio.call(
                 "send_command",
-                json!({"exec": [{"tab_id": true}], "wait_timeout": 0_u64}),
+                json!({"commands": [{"tab_id": true}], "wait_timeout": 0_u64}),
             ),
         ] {
             if version == "2025-06-18" {

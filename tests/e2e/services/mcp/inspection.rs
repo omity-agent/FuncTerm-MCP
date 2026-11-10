@@ -15,7 +15,16 @@ fn mcp_views_preserve_mixed_id_order_errors_and_shared_completion() {
         .to_slash()
         .into_owned();
     assert_ne!(first_cwd, second_cwd);
-    let viewed = session.view(&[&second, command_id, "missing", &first, &second], 1, 0.0);
+    let viewed = session.view(
+        &[
+            (&second, 1),
+            (command_id, 1),
+            ("missing", 1),
+            (&first, 1),
+            (&second, 1),
+        ],
+        0.0,
+    );
     let results = entries(&viewed);
     assert_eq!(results.len(), 5);
     assert_field(&viewed, "/result/isError", true);
@@ -50,7 +59,7 @@ fn mcp_views_preserve_mixed_id_order_errors_and_shared_completion() {
     let source = "sleep 2\necho MANY_WAITERS_FINISHED";
     let accepted = session.execute(&first, source, true, 0.0);
     let pending_id = text(command_result(&accepted), "/command_id");
-    let waited = session.view(&[pending_id; 64], 1, 5.0);
+    let waited = session.view(&[(pending_id, 1); 64], 5.0);
     assert_eq!(entries(&waited).len(), 64);
     for entry in entries(&waited) {
         let saved = field(entry, "/result/command");

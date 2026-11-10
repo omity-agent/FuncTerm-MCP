@@ -12,9 +12,9 @@ use crate::runtime::protocol::OutputMode;
 use crate::runtime::protocol::time_consumption;
 use anyhow::Result;
 use arguments::{
-    FixedCommandExec, FixedNewTabExec, ManualWriteExec, NewTabExec, SendCommandExec, ViewRequest,
+    FixedCommandInput, FixedNewTabOptions, ManualWriteRequest, NewTabOptions, NewTabRequest,
+    SendCommandInput, SendCommandRequest, ViewRequest,
 };
-use batch::{ExecBatch, TimedBatch};
 pub(crate) use batch::{WaitTimeoutMultiplier, WaitTimeoutSettings};
 use collection::BatchOutput;
 use invocation::Backend;
@@ -87,20 +87,20 @@ impl McpServer {
     # [tool (name = "new_tab" , output_schema = schema_for_output ::< BatchOutput < output :: NewTabOutput <'static >>> ())]
     async fn new_tab(
         &self,
-        Parameters(request): Parameters<ExecBatch<NewTabExec>>,
+        Parameters(request): Parameters<NewTabRequest<NewTabOptions>>,
     ) -> Result<CallToolResult, String> {
-        batch::run(&self.settings, &self.backend, request.exec, None).await
+        batch::run(&self.settings, &self.backend, request.tabs, None).await
     }
     # [tool (name = "fixed_new_tab" , output_schema = schema_for_output ::< BatchOutput < output :: NewTabOutput <'static >>> ())]
     async fn fixed_new_tab(
         &self,
-        Parameters(request): Parameters<ExecBatch<FixedNewTabExec>>,
+        Parameters(request): Parameters<NewTabRequest<FixedNewTabOptions>>,
     ) -> Result<CallToolResult, String> {
         let mode = self
             .privilege_mode
             .ok_or("MCP privilege mode is not fixed")?;
         let entries = request
-            .exec
+            .tabs
             .into_iter()
             .map(|entry| entry.with_privilege(mode.elevated()))
             .collect();
@@ -109,12 +109,12 @@ impl McpServer {
     # [tool (name = "manual_write" , output_schema = schema_for_output ::< BatchOutput < output :: ManualWriteOutput <'static >>> ())]
     async fn manual_write(
         &self,
-        Parameters(request): Parameters<TimedBatch<ManualWriteExec>>,
+        Parameters(request): Parameters<ManualWriteRequest>,
     ) -> Result<CallToolResult, String> {
         batch::run(
             &self.settings,
             &self.backend,
-            request.exec,
+            request.inputs,
             Some(request.wait_timeout),
         )
         .await
@@ -122,12 +122,12 @@ impl McpServer {
     # [tool (name = "send_command" , output_schema = schema_for_output ::< BatchOutput < output :: SendCommandOutput <'static >>> ())]
     async fn send_command(
         &self,
-        Parameters(request): Parameters<TimedBatch<SendCommandExec>>,
+        Parameters(request): Parameters<SendCommandRequest<SendCommandInput>>,
     ) -> Result<CallToolResult, String> {
         batch::run(
             &self.settings,
             &self.backend,
-            request.exec,
+            request.commands,
             Some(request.wait_timeout),
         )
         .await
@@ -135,11 +135,11 @@ impl McpServer {
     #[tool(name = "fixed_send_command", output_schema = schema_for_output::<BatchOutput<output::SendCommandOutput<'static>>>())]
     async fn fixed_send_command(
         &self,
-        Parameters(request): Parameters<TimedBatch<FixedCommandExec>>,
+        Parameters(request): Parameters<SendCommandRequest<FixedCommandInput>>,
     ) -> Result<CallToolResult, String> {
         let mode = self.output_mode.ok_or("MCP output mode is not fixed")?;
         let entries = request
-            .exec
+            .commands
             .into_iter()
             .map(|entry| entry.with_output(mode.separate_output()))
             .collect();
@@ -159,14 +159,7 @@ impl McpServer {
         batch::run(
             &self.settings,
             &self.backend,
-            request
-                .ids
-                .into_iter()
-                .map(|id| operations::LookupId {
-                    id,
-                    start_token: request.start_token,
-                })
-                .collect(),
+            request.queries,
             Some(request.wait_timeout),
         )
         .await

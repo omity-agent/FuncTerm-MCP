@@ -1,6 +1,9 @@
 use super::{
     execution::create_tabs,
-    wire::{McpSession, assert_field, assert_saved, command_result, result, text, text_documents},
+    wire::{
+        McpSession, assert_field, assert_saved, command_result, entries, field, result, text,
+        text_documents,
+    },
 };
 use crate::support::tagged_content;
 #[cfg(windows)]
@@ -23,26 +26,31 @@ fn token_offsets_preserve_unicode_totals_and_saved_command_and_screen_output() {
         tagged_content(&text_documents(&accepted).concat(), "TOTAL_OUTPUT_TOKENS"),
         Some(format!("\n{total}\n").as_str())
     );
-    for start in (1..=total + 2).chain(core::iter::once(usize::MAX)) {
-        let viewed = session.view(&[id], start, 0.0);
-        let saved = command_result(&viewed);
+    let queries = (1..=total + 2)
+        .chain(core::iter::once(usize::MAX))
+        .map(|start| (id, start))
+        .collect::<Vec<_>>();
+    let batched = session.view(&queries, 0.0);
+    assert_eq!(entries(&batched).len(), queries.len());
+    for (entry, &(_, start)) in entries(&batched).iter().zip(&queries) {
+        let saved = field(entry, "/result/command");
         assert_eq!(
             text(saved, "/output"),
             expected_suffix(&tokenizer, output, start),
-            "{viewed}"
+            "{batched}"
         );
         assert_field(saved, "/total_output_tokens", total);
         assert_field(saved, "/finished", true);
         assert_field(saved, "/exit_code", 0_i32);
     }
-    let restored = session.view(&[id], 1, 0.0);
+    let restored = session.view(&[(id, 1)], 0.0);
     assert_saved(&accepted, &restored);
-    let full = session.view(&[&tab], 1, 0.1);
+    let full = session.view(&[(&tab, 1)], 0.1);
     let screen = text(result(&full), "/screen");
     assert!(screen.contains("TAIL"), "{full}");
     let screen_tokens = tokenizer.count(screen.as_bytes());
     for start in [1, 2, 3, screen_tokens + 1, screen_tokens + 2, usize::MAX] {
-        let viewed = session.view(&[&tab], start, 0.0);
+        let viewed = session.view(&[(&tab, start)], 0.0);
         assert_eq!(
             text(result(&viewed), "/screen"),
             expected_suffix(&tokenizer, screen, start),
@@ -59,7 +67,7 @@ fn token_offsets_preserve_unicode_totals_and_saved_command_and_screen_output() {
     assert_field(empty_command, "/output", "");
     let empty_id = text(empty_command, "/command_id");
     for start in [1, 2, usize::MAX] {
-        let viewed = session.view(&[empty_id], start, 0.0);
+        let viewed = session.view(&[(empty_id, start)], 0.0);
         assert_field(command_result(&viewed), "/total_output_tokens", 0_u64);
         assert_field(command_result(&viewed), "/output", "");
     }

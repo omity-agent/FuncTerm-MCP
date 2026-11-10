@@ -63,7 +63,7 @@ export function dispatch(
           invoke(
             "new_tab",
             {
-              exec: [
+              tabs: [
                 {
                   starting_directory: workspace,
                   starting_shell: admission.driver,
@@ -109,8 +109,7 @@ export function dispatch(
           invoke(
             "view",
             {
-              ids: [tab.id],
-              start_token: 1,
+              queries: [{ id: tab.id, start_token: 1 }],
               wait_timeout: 0,
             },
             {

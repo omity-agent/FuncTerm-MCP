@@ -51,7 +51,7 @@ test(
           const raw = yield* invoke(
             "new_tab",
             {
-              exec: [
+              tabs: [
                 {
                   starting_directory: workspace,
                   starting_shell: driver,

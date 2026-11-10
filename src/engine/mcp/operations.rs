@@ -1,25 +1,21 @@
 use super::{
-    arguments::{ManualWriteExec, NewTabExec, SendCommandExec},
+    arguments::{ManualWriteInput, NewTabOptions, SendCommandInput, ViewQuery},
     error_text, output,
 };
 use crate::runtime::config::Settings;
 use crate::runtime::protocol::{EnvironmentSnapshot, Payload, Request};
-use core::num::NonZeroUsize;
 use core::time::Duration;
 use rmcp::model::CallToolResult;
-pub(super) struct LookupId {
-    pub(super) id: String,
-    pub(super) start_token: NonZeroUsize,
-}
 pub(super) trait Operation {
-    const LIST_PARAMETER: &'static str = "exec";
+    const LIST_PARAMETER: &'static str;
     fn tab_id(&self) -> Option<&str> {
         None
     }
     fn request(self, settings: &Settings, wait_timeout: Duration) -> Result<Request, String>;
     fn output(payload: Payload) -> Result<CallToolResult, String>;
 }
-impl Operation for NewTabExec {
+impl Operation for NewTabOptions {
+    const LIST_PARAMETER: &'static str = "tabs";
     fn request(self, settings: &Settings, _wait_timeout: Duration) -> Result<Request, String> {
         let starting_directory =
             crate::runtime::working_dir::resolve(self.starting_directory_path())
@@ -36,7 +32,8 @@ impl Operation for NewTabExec {
         output::new_tab(payload)
     }
 }
-impl Operation for ManualWriteExec {
+impl Operation for ManualWriteInput {
+    const LIST_PARAMETER: &'static str = "inputs";
     fn tab_id(&self) -> Option<&str> {
         Some(&self.tab_id)
     }
@@ -52,7 +49,8 @@ impl Operation for ManualWriteExec {
         output::manual_write(payload)
     }
 }
-impl Operation for SendCommandExec {
+impl Operation for SendCommandInput {
+    const LIST_PARAMETER: &'static str = "commands";
     fn tab_id(&self) -> Option<&str> {
         Some(&self.tab_id)
     }
@@ -70,8 +68,8 @@ impl Operation for SendCommandExec {
         output::send_command(payload)
     }
 }
-impl Operation for LookupId {
-    const LIST_PARAMETER: &'static str = "ids";
+impl Operation for ViewQuery {
+    const LIST_PARAMETER: &'static str = "queries";
     fn request(self, _settings: &Settings, wait_timeout: Duration) -> Result<Request, String> {
         Ok(Request::View {
             id: self.id,

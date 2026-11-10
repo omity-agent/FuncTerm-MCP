@@ -39,7 +39,7 @@ export function execute(
     const send = invoke(
       "send_command",
       {
-        exec: [
+        commands: [
           {
             tab_id: tab.id,
             command: source,
@@ -59,7 +59,7 @@ export function execute(
       yield* invoke(
         "manual_write",
         {
-          exec: [{ tab_id: tab.id, ...keyboard(manualIndex) }],
+          inputs: [{ tab_id: tab.id, ...keyboard(manualIndex) }],
           wait_timeout: 0,
         },
         {

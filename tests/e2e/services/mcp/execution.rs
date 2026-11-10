@@ -9,12 +9,12 @@ pub(super) const SHELL: &str = "powershell";
 #[cfg(not(windows))]
 pub(super) const SHELL: &str = "bash";
 pub(super) fn create_tabs<const N: usize>(session: &mut McpSession) -> [String; N] {
-    let exec = (0..N)
+    let tabs = (0..N)
         .map(|index| {
             json!({"starting_shell": SHELL, "starting_directory": (index != 0).then(crate::support::temp_root)})
         })
         .collect::<Vec<_>>();
-    let response = session.call("new_tab", json!({"exec": exec}));
+    let response = session.call("new_tab", json!({"tabs": tabs}));
     let created = entries(&response);
     assert_eq!(created.len(), N);
     super::wire::text_documents(&response);
@@ -33,7 +33,7 @@ fn mcp_batch_preserves_order_and_isolates_errors() {
     let response = session.call(
         "send_command",
         json!({
-            "exec": [
+            "commands": [
                 {"tab_id": first, "command": "echo FIRST_BATCH_RESULT", "separate_output": true},
                 {"tab_id": "missing", "command": "echo UNUSED", "separate_output": true},
                 {"tab_id": second, "command": "echo LAST_BATCH_RESULT", "separate_output": true}
@@ -44,7 +44,11 @@ fn mcp_batch_preserves_order_and_isolates_errors() {
     assert_field(&response, "/result/isError", true);
     assert_eq!(results.len(), 3);
     let documents = super::wire::text_documents(&response);
-    assert!(documents.iter().all(|block| !block.starts_with("exec[")));
+    assert!(
+        documents
+            .iter()
+            .all(|block| !block.starts_with("commands["))
+    );
     assert!(
         text(results.first().unwrap(), "/result/command/stdout").contains("FIRST_BATCH_RESULT")
     );
@@ -54,14 +58,14 @@ fn mcp_batch_preserves_order_and_isolates_errors() {
             .is_some_and(|entry| entry.get("error").is_some())
     );
     assert!(text(results.last().unwrap(), "/result/command/stdout").contains("LAST_BATCH_RESULT"));
-    let viewed = session.view(&[&first, &second], 1, 0.0);
+    let viewed = session.view(&[(&first, 1), (&second, 1)], 0.0);
     assert!(
         entries(&viewed)
             .iter()
             .all(|entry| entry.pointer("/result/screen").is_some())
     );
     let written = session.call("manual_write", json!({
-        "exec": [{"tab_id": first, "text": "x", "bytes": [120_u8]}, {"tab_id": second}], "wait_timeout": 0_u64
+        "inputs": [{"tab_id": first, "text": "x", "bytes": [120_u8]}, {"tab_id": second}], "wait_timeout": 0_u64
     }));
     let errors = entries(&written);
     assert!(text(errors.first().unwrap(), "/error").contains("cannot be provided together"));
@@ -90,7 +94,7 @@ fn mcp_scaled_wait_budget_is_shared_and_timeout_does_not_cancel_commands() {
         }
         let window = Duration::from_millis(1400)..Duration::from_millis(2800);
         let viewing = Instant::now();
-        session.view(&[&first, &second], 1, timeout);
+        session.view(&[(&first, 1), (&second, 1)], timeout);
         assert!(window.contains(&viewing.elapsed()));
         #[cfg(windows)]
         let source = "Start-Sleep -Seconds 4\nWrite-Output BATCH_FINISHED";
@@ -100,20 +104,20 @@ fn mcp_scaled_wait_budget_is_shared_and_timeout_does_not_cancel_commands() {
         let response = session.execute_many(&[&first, &second], source, true, timeout);
         let elapsed = started.elapsed();
         assert!(window.contains(&elapsed), "{elapsed:?}: {response}");
-        let ids = entries(&response)
+        let queries = entries(&response)
             .iter()
             .map(|entry| {
                 assert_field(entry, "/result/command/finished", false);
-                text(entry, "/result/command/command_id")
+                (text(entry, "/result/command/command_id"), 1)
             })
             .collect::<Vec<_>>();
         let writing = Instant::now();
         let written = session.call("manual_write", json!({
-            "exec": [{"tab_id": first, "text": ""}, {"tab_id": second, "text": ""}], "wait_timeout": timeout
+            "inputs": [{"tab_id": first, "text": ""}, {"tab_id": second, "text": ""}], "wait_timeout": timeout
         }));
         assert_field(&written, "/result/isError", false);
         assert!(window.contains(&writing.elapsed()), "{written}");
-        let completed = session.view(&ids, 1, 8.0);
+        let completed = session.view(&queries, 8.0);
         for entry in entries(&completed) {
             assert_field(entry, "/result/command/finished", true);
             assert!(text(entry, "/result/command/stdout").contains("BATCH_FINISHED"));

@@ -23,23 +23,47 @@ fn schema_and_rejections_cover_every_privilege_and_output_policy_combination() {
             assert_eq!(tools.len(), 4, "{response}");
             for tool in tools {
                 assert_references(tool);
+                let parameter = match text(tool, "/name") {
+                    "new_tab" => "tabs",
+                    "send_command" => "commands",
+                    "manual_write" => "inputs",
+                    "view" => "queries",
+                    name => panic!("unexpected tool {name}"),
+                };
+                let batch = field(tool, &format!("/inputSchema/properties/{parameter}"));
+                assert_field(batch, "/minItems", 1_u64);
+                assert_field(batch, "/items/type", "object");
+                if parameter == "queries" {
+                    let offset = field(batch, "/items/properties/start_token");
+                    assert_field(offset, "/minimum", 1_u64);
+                    assert_field(offset, "/default", 1_u64);
+                }
             }
-            for (name, property, fixed) in [
-                ("new_tab", "elevated", privilege.is_some()),
-                ("send_command", "separate_output", output.is_some()),
+            for (name, parameter, property, fixed) in [
+                ("new_tab", "tabs", "elevated", privilege.is_some()),
+                (
+                    "send_command",
+                    "commands",
+                    "separate_output",
+                    output.is_some(),
+                ),
             ] {
                 let tool = tools
                     .iter()
                     .find(|tool| text(tool, "/name") == name)
                     .unwrap();
-                let path = format!("/inputSchema/properties/exec/items/properties/{property}");
+                let path =
+                    format!("/inputSchema/properties/{parameter}/items/properties/{property}");
                 let choice = tool.pointer(&path);
                 assert_eq!(choice.is_none(), fixed, "{response}");
                 if let Some(schema) = choice {
                     if name == "new_tab" {
                         assert_field(schema, "/type", "boolean");
                         assert_field(schema, "/default", false);
-                        let required = field(tool, "/inputSchema/properties/exec/items/required");
+                        let required = field(
+                            tool,
+                            &format!("/inputSchema/properties/{parameter}/items/required"),
+                        );
                         assert!(required.as_array().unwrap().contains(&json!(property)));
                     } else {
                         assert_field(schema, "/type", json!(["boolean", "null"]));
@@ -47,9 +71,9 @@ fn schema_and_rejections_cover_every_privilege_and_output_policy_combination() {
                 } else {
                     for value in [false, true] {
                         let request = if name == "new_tab" {
-                            json!({"exec": [{"starting_shell": super::execution::SHELL, "elevated": value}]})
+                            json!({"tabs": [{"starting_shell": super::execution::SHELL, "elevated": value}]})
                         } else {
-                            json!({"exec": [{"tab_id": "unused", "command": "echo UNUSED", "separate_output": value}], "wait_timeout": 0_u64})
+                            json!({"commands": [{"tab_id": "unused", "command": "echo UNUSED", "separate_output": value}], "wait_timeout": 0_u64})
                         };
                         assert_rejected(&session.call(name, request));
                     }
@@ -96,15 +120,15 @@ fn wait_timeout_limits_apply_to_schemas_and_calls_before_the_multiplier() {
             for (name, arguments) in [
                 (
                     "view",
-                    json!({"ids": ["missing"], "wait_timeout": wait, "start_token": 1_u64}),
+                    json!({"queries": [{"id": "missing", "start_token": 1_u64}], "wait_timeout": wait}),
                 ),
                 (
                     "manual_write",
-                    json!({"exec": [{"tab_id": "missing", "text": "", "bytes": null}], "wait_timeout": wait}),
+                    json!({"inputs": [{"tab_id": "missing", "text": "", "bytes": null}], "wait_timeout": wait}),
                 ),
                 (
                     "send_command",
-                    json!({"exec": [{"tab_id": "missing", "command": "echo UNUSED"}], "wait_timeout": wait}),
+                    json!({"commands": [{"tab_id": "missing", "command": "echo UNUSED"}], "wait_timeout": wait}),
                 ),
             ] {
                 let called = session.call(name, arguments);

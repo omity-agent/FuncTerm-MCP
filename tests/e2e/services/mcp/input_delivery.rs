@@ -10,7 +10,7 @@ fn mcp_manual_write_delivers_text_and_bytes_to_distinct_tabs() {
     let idle = session.call(
         "manual_write",
         json!({
-            "exec": [{"tab_id": first, "text": "UNEXPECTED"}], "wait_timeout": 0_u64
+            "inputs": [{"tab_id": first, "text": "UNEXPECTED"}], "wait_timeout": 0_u64
         }),
     );
     assert!(
@@ -27,12 +27,12 @@ fn mcp_manual_write_delivers_text_and_bytes_to_distinct_tabs() {
         entries(&busy).first().unwrap().get("error").is_some(),
         "{busy}"
     );
-    let ids = entries(&pending)
+    let queries = entries(&pending)
         .iter()
-        .map(|entry| text(entry, "/result/command/command_id"))
+        .map(|entry| (text(entry, "/result/command/command_id"), 1))
         .collect::<Vec<_>>();
     let written = session.call("manual_write", json!({
-        "exec": [{"tab_id": first, "text": "FIRST\r\n", "bytes": null}, {"tab_id": second, "text": null, "bytes": b"SECOND\r\n".to_vec()}], "wait_timeout": 2_u64
+        "inputs": [{"tab_id": first, "text": "FIRST\r\n", "bytes": null}, {"tab_id": second, "text": null, "bytes": b"SECOND\r\n".to_vec()}], "wait_timeout": 2_u64
     }));
     assert_eq!(entries(&written).len(), 2);
     super::wire::text_documents(&written);
@@ -42,7 +42,7 @@ fn mcp_manual_write_delivers_text_and_bytes_to_distinct_tabs() {
             .all(|entry| entry.pointer("/result/screen").is_some()),
         "{written}"
     );
-    let completed = session.view(&ids, 1, 5.0);
+    let completed = session.view(&queries, 5.0);
     for (entry, expected) in entries(&completed)
         .iter()
         .zip(["RECEIVED_FIRST", "RECEIVED_SECOND"])

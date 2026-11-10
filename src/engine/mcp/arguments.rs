@@ -7,7 +7,7 @@ use std::path::Path;
 #[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[schemars(inline)]
-pub(super) struct NewTabExec {
+pub(super) struct NewTabOptions {
     pub(super) starting_directory: Option<String>,
     pub(super) starting_shell: ShellChoice,
     #[serde(default)]
@@ -16,20 +16,20 @@ pub(super) struct NewTabExec {
 #[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[schemars(inline)]
-pub(super) struct FixedNewTabExec {
+pub(super) struct FixedNewTabOptions {
     pub(super) starting_directory: Option<String>,
     pub(super) starting_shell: ShellChoice,
 }
-impl FixedNewTabExec {
-    pub(super) fn with_privilege(self, elevated: bool) -> NewTabExec {
-        NewTabExec {
+impl FixedNewTabOptions {
+    pub(super) fn with_privilege(self, elevated: bool) -> NewTabOptions {
+        NewTabOptions {
             starting_directory: self.starting_directory,
             starting_shell: self.starting_shell,
             elevated,
         }
     }
 }
-impl NewTabExec {
+impl NewTabOptions {
     pub(super) fn starting_directory_path(&self) -> Option<&Path> {
         self.starting_directory.as_deref().map(Path::new)
     }
@@ -37,14 +37,14 @@ impl NewTabExec {
 #[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[schemars(inline)]
-pub(super) struct ManualWriteExec {
+pub(super) struct ManualWriteInput {
     pub(super) tab_id: String,
     #[serde(default)]
     pub(super) text: Option<String>,
     #[serde(default)]
     pub(super) bytes: Option<Vec<u8>>,
 }
-impl ManualWriteExec {
+impl ManualWriteInput {
     pub(super) fn into_parts(self) -> Result<(String, KeyboardInput)> {
         let Self {
             tab_id,
@@ -63,7 +63,7 @@ impl ManualWriteExec {
 #[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[schemars(inline)]
-pub(super) struct SendCommandExec {
+pub(super) struct SendCommandInput {
     pub(super) tab_id: String,
     pub(super) command: String,
     pub(super) separate_output: Option<bool>,
@@ -71,13 +71,13 @@ pub(super) struct SendCommandExec {
 #[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[schemars(inline)]
-pub(super) struct FixedCommandExec {
+pub(super) struct FixedCommandInput {
     pub(super) tab_id: String,
     pub(super) command: String,
 }
-impl FixedCommandExec {
-    pub(super) fn with_output(self, separate_output: bool) -> SendCommandExec {
-        SendCommandExec {
+impl FixedCommandInput {
+    pub(super) fn with_output(self, separate_output: bool) -> SendCommandInput {
+        SendCommandInput {
             tab_id: self.tab_id,
             command: self.command,
             separate_output: Some(separate_output),
@@ -86,10 +86,36 @@ impl FixedCommandExec {
 }
 #[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub(super) struct NewTabRequest<T> {
+    #[schemars(length(min = 1))]
+    pub(super) tabs: Vec<T>,
+}
+#[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(super) struct SendCommandRequest<T> {
+    #[schemars(length(min = 1))]
+    pub(super) commands: Vec<T>,
+    pub(super) wait_timeout: f64,
+}
+#[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(super) struct ManualWriteRequest {
+    #[schemars(length(min = 1))]
+    pub(super) inputs: Vec<ManualWriteInput>,
+    pub(super) wait_timeout: f64,
+}
+#[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub(super) struct ViewRequest {
     #[schemars(length(min = 1))]
-    pub(super) ids: Vec<String>,
+    pub(super) queries: Vec<ViewQuery>,
     pub(super) wait_timeout: f64,
+}
+#[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[schemars(inline)]
+pub(super) struct ViewQuery {
+    pub(super) id: String,
     #[serde(default = "first_token")]
     pub(super) start_token: NonZeroUsize,
 }

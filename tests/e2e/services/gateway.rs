@@ -33,37 +33,43 @@ fn mcp_rejects_invalid_batches_before_dispatch() {
     }
     let mut session = McpSession::new();
     let directory = crate::support::temp_dir("rejected-dispatch");
-    let creation = session . call ("new_tab" , json ! ({ "exec" : [{ "starting_shell" : execution :: SHELL , "starting_directory" : env ! ("CARGO_BIN_EXE_functerm") } , { "starting_shell" : execution :: SHELL , "starting_directory" : directory }] })) ;
+    let creation = session . call ("new_tab" , json ! ({ "tabs" : [{ "starting_shell" : execution :: SHELL , "starting_directory" : env ! ("CARGO_BIN_EXE_functerm") } , { "starting_shell" : execution :: SHELL , "starting_directory" : directory }] })) ;
     assert!(
         entries(&creation).first().unwrap().get("error").is_some(),
         "{creation}"
     );
     let tab = text(entries(&creation).last().unwrap(), "/result/tab_id");
     for (name, arguments) in [
-        ("new_tab", json ! ({ "exec" : [] })),
+        ("new_tab", json!({"tabs": []})),
         (
             "send_command",
-            json ! ({ "exec" : [{ "tab_id" : tab , "command" : "echo UNEXPECTED > rejected.txt" } , { "tab_id" : tab , "command" : "echo UNEXPECTED > rejected.txt" }] , "wait_timeout" : 0_u64 }),
+            json!({"commands": [], "wait_timeout": 0_u64}),
+        ),
+        ("manual_write", json!({"inputs": [], "wait_timeout": 0_u64})),
+        ("view", json!({"queries": [], "wait_timeout": 0_u64})),
+        (
+            "send_command",
+            json ! ({ "commands" : [{ "tab_id" : tab , "command" : "echo UNEXPECTED > rejected.txt" } , { "tab_id" : tab , "command" : "echo UNEXPECTED > rejected.txt" }] , "wait_timeout" : 0_u64 }),
         ),
         (
             "view",
-            json ! ({ "ids" : [tab] , "wait_timeout" : - 1_i64 }),
+            json!({"queries": [{"id": tab}], "wait_timeout": -1_i64}),
         ),
         (
             "view",
-            json!({"ids": [tab], "wait_timeout": 0_u64, "start_token": -1_i64}),
+            json!({"queries": [{"id": tab, "start_token": -1_i64}], "wait_timeout": 0_u64}),
         ),
         (
             "view",
-            json!({"ids": [tab], "wait_timeout": 0_u64, "start_token": 0_u64}),
+            json!({"queries": [{"id": tab, "start_token": 0_u64}], "wait_timeout": 0_u64}),
         ),
         (
             "view",
-            json!({"ids": [tab], "wait_timeout": 0_u64, "start_token": 1.5_f64}),
+            json!({"queries": [{"id": tab, "start_token": 1.5_f64}], "wait_timeout": 0_u64}),
         ),
         (
             "view",
-            json!({"ids": [tab], "wait_timeout": 0_u64, "start_token": null}),
+            json!({"queries": [{"id": tab, "start_token": null}], "wait_timeout": 0_u64}),
         ),
     ] {
         let response = session.call(name, arguments);
@@ -78,7 +84,7 @@ fn mcp_rejects_invalid_batches_before_dispatch() {
     let recovered = session.call(
         "send_command",
         json!({
-            "exec": [{"tab_id": tab, "command": "echo DISPATCH_RECOVERED", "separate_output": true}],
+            "commands": [{"tab_id": tab, "command": "echo DISPATCH_RECOVERED", "separate_output": true}],
             "wait_timeout": 5_u64
         }),
     );

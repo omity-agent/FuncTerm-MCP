@@ -1,4 +1,8 @@
-use super::{McpServer, WaitTimeoutSettings};
+use super::{
+    McpServer, WaitTimeoutSettings,
+    arguments::{ManualWriteInput, NewTabOptions, SendCommandInput, ViewQuery},
+    operations::Operation as _,
+};
 use crate::engine::privileges::PrivilegeMode;
 use crate::runtime::config::{McpSettings, ToolDescription};
 use crate::runtime::protocol::OutputMode;
@@ -48,25 +52,34 @@ pub(super) fn apply(
 ) -> Result<()> {
     let mut new_tab = descriptions.new_tab.clone();
     if fixed_privilege {
-        new_tab.exec_parameters.remove("elevated");
+        new_tab.item_parameters.remove("elevated");
     }
     let mut send_command = descriptions.send_command.clone();
     if fixed_output {
-        send_command.exec_parameters.remove("separate_output");
+        send_command.item_parameters.remove("separate_output");
     }
     let tools = [
-        ("new_tab", &new_tab),
-        ("manual_write", &descriptions.manual_write),
-        ("send_command", &send_command),
-        ("view", &descriptions.view),
+        ("new_tab", NewTabOptions::LIST_PARAMETER, &new_tab),
+        (
+            "manual_write",
+            ManualWriteInput::LIST_PARAMETER,
+            &descriptions.manual_write,
+        ),
+        (
+            "send_command",
+            SendCommandInput::LIST_PARAMETER,
+            &send_command,
+        ),
+        ("view", ViewQuery::LIST_PARAMETER, &descriptions.view),
     ];
-    for (name, description) in tools {
+    for (name, list_parameter, description) in tools {
         let route = router
             .map
             .get_mut(name)
             .with_context(|| format!("MCP tool {name} is missing from the tool router"))?;
         apply_to_route(
             name,
+            list_parameter,
             &mut route.attr,
             description,
             descriptions.wait_timeout,
@@ -76,6 +89,7 @@ pub(super) fn apply(
 }
 fn apply_to_route(
     name: &str,
+    list_parameter: &str,
     tool: &mut Tool,
     description: &ToolDescription,
     timing: WaitTimeoutSettings,
@@ -93,21 +107,18 @@ fn apply_to_route(
             .with_context(|| format!("MCP tool {name} wait_timeout schema is not an object"))?;
         timing.apply_schema(schema);
     }
-    if let Some(exec_schema) = properties.get_mut("exec") {
-        let exec_properties = exec_schema
-            .pointer_mut("/items/properties")
-            .and_then(Value::as_object_mut)
-            .with_context(|| {
-                format!("MCP tool {name} exec item schema has no properties object")
-            })?;
-        apply_parameters(
-            &format!("{name}.exec"),
-            exec_properties,
-            &description.exec_parameters,
-        )?;
-    } else if !description.exec_parameters.is_empty() {
-        bail!("MCP tool {name} has exec parameter descriptions but no exec parameter");
-    }
+    let item_properties = properties
+        .get_mut(list_parameter)
+        .and_then(|schema| schema.pointer_mut("/items/properties"))
+        .and_then(Value::as_object_mut)
+        .with_context(|| {
+            format!("MCP tool {name} {list_parameter} item schema has no properties object")
+        })?;
+    apply_parameters(
+        &format!("{name}.{list_parameter}"),
+        item_properties,
+        &description.item_parameters,
+    )?;
     tool.input_schema = normalize_schema(input_schema, true)?;
     tool.output_schema = tool
         .output_schema

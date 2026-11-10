@@ -71,19 +71,6 @@ impl WaitTimeoutSettings {
             .context("scaled wait timeout exceeds the supported duration range")
     }
 }
-#[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub(super) struct ExecBatch<T> {
-    #[schemars(length(min = 1))]
-    pub(super) exec: Vec<T>,
-}
-#[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub(super) struct TimedBatch<T> {
-    #[schemars(length(min = 1))]
-    pub(super) exec: Vec<T>,
-    pub(super) wait_timeout: f64,
-}
 pub(super) async fn run<T>(
     settings: &Settings,
     backend: &Backend,
