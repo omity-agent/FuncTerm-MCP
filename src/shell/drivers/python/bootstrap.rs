@@ -96,7 +96,11 @@ def _functerm_dispatch():
     @VAR_stderr_file@ = @VAR_directory@ / "{STDERR_FILE}"
     @VAR_previous_id@ = @VAR_os@.environ.get("{COMMAND_ID_ENV}")
     @VAR_previous_directory@ = @VAR_os@.environ.get("{COMMAND_DIRECTORY_ENV}")
-    @VAR_protected_environment@ = dict(@VAR_os@.environ)
+    @VAR_protected_environment@ = {{
+        @VAR_name@: @VAR_value@
+        for @VAR_name@, @VAR_value@ in @VAR_os@.environ.items()
+        if @VAR_name@.upper() in {{@PYTHON_PROTECTED_ENVIRONMENT@}}
+    }}
     @VAR_os@.environ["{COMMAND_ID_ENV}"] = @VAR_command_id@
     @VAR_os@.environ["{COMMAND_DIRECTORY_ENV}"] = str(@VAR_directory@)
     @VAR_exit_code@ = 0
@@ -128,10 +132,7 @@ def _functerm_dispatch():
                 import traceback as @VAR_traceback@
                 @VAR_traceback@.print_exc()
     finally:
-        @VAR_environment_was_cleared@ = not @VAR_os@.environ
-        for @VAR_name@, @VAR_value@ in @VAR_protected_environment@.items():
-            if @VAR_environment_was_cleared@ or @VAR_name@.upper() in {{@PYTHON_PROTECTED_ENVIRONMENT@}}:
-                @VAR_os@.environ[@VAR_name@] = @VAR_value@
+        @VAR_os@.environ.update(@VAR_protected_environment@)
         @VAR_prepend_shim@()
         @VAR_elapsed@ = max(1, round((@VAR_time@.perf_counter() - @VAR_started@) * 1000))
         if @VAR_session_exit@ and not @VAR_os@.environ.get("FUNCTERM_PARENT_SHELL"):

@@ -48,12 +48,7 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
 		    if (@VAR_exitCode@ !== undefined && !process.env.FUNCTERM_PARENT_SHELL) @VAR_writeFileSync@(@VAR_join@(@VAR_command@.directory, "{session_exit}"), "");
 	    @VAR_server@.writer = @VAR_command@.previousWriter;
 	    const @VAR_elapsed@ = `${{Math.max(1, Math.ceil(performance.now() - @VAR_command@.started))}}ms`;
-	    const @VAR_environmentWasCleared@ = Object.keys(process.env).length === 0;
-	    for (const [@VAR_name@, @VAR_value@] of Object.entries(@VAR_command@.protectedEnvironment)) {{
-		        if (@VAR_environmentWasCleared@ || [@BUN_PROTECTED_ENVIRONMENT@].includes(@VAR_name@.toUpperCase())) {{
-		            process.env[@VAR_name@] = @VAR_value@;
-		        }}
-		    }}
+            Object.assign(process.env, @VAR_command@.protectedEnvironment);
 		    @VAR_prependShimPath@();
 			    @VAR_streamBoundary@("end", @VAR_command@, {{ exitCode: @VAR_exitCode@ ?? (@VAR_command@.failed ? 1 : 0), elapsed: @VAR_elapsed@, cwd: process.cwd() }});
 	    @VAR_restoreEnvironment@("{command_id_env}", @VAR_command@.previousId);
@@ -126,7 +121,9 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
 		        const @VAR_workingDirectory@ = @VAR_receipt@.working_directory;
 	        const @VAR_previousId@ = process.env.{command_id_env};
 	        const @VAR_previousDirectory@ = process.env.{command_directory_env};
-	        const @VAR_protectedEnvironment@ = {{ ...process.env }};
+                const @VAR_protectedEnvironment@ = Object.fromEntries(
+                    Object.entries(process.env).filter(([@VAR_name@]) => [@BUN_PROTECTED_ENVIRONMENT@].includes(@VAR_name@.toUpperCase()))
+                );
 	        const @VAR_previousError@ = @VAR_server@.context._error;
 	        process.env.{command_id_env} = @VAR_commandId@;
 	        process.env.{command_directory_env} = @VAR_directory@;

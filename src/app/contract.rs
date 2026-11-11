@@ -7,6 +7,11 @@ pub(crate) const CLAIM_RECEIPT_FILE: &str = "claim";
 pub(crate) const DISPATCHER_COMMAND: &str = "f";
 pub(crate) const DONE_FILE: &str = "done.json";
 pub(crate) const EARLY_DONE_DIRECTORY: &str = ".early-done";
+pub(crate) const EXECUTABLE_NAME: &str = if cfg!(windows) {
+    concat!(env!("CARGO_PKG_NAME"), ".exe")
+} else {
+    env!("CARGO_PKG_NAME")
+};
 pub(crate) const HELPER_EXECUTABLE_ENV: &str = "FUNCTERM_HELPER_EXECUTABLE";
 pub(crate) const NUSHELL_SUBMISSION_FILE: &str = "submission.nu";
 pub(crate) const POWERSHELL_DISPATCHER_FUNCTION: &str = "Invoke-FuncTermDispatcher";

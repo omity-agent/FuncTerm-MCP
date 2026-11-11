@@ -59,7 +59,7 @@ $env.config.shell_integration = { osc2: false, osc7: false, osc8: false, osc9_9:
         ""
     };
     let initialization = format!(
-        "{}\n$env.{CURRENT_SHELL_ENV} = 'nu'\nconst {command_root} = {}\nlet @VAR_active_command@ = {}\nlet @VAR_helper_path@ = $env.FUNCTERM_HELPER_EXECUTABLE\n{}\nlet @VAR_recovery_environment@ = $env\n{}\ncd {}\nensure_nushell_shims\n$env.config.hooks.pre_execution = ($env.config.hooks.pre_execution | append {{ functerm_begin }})\n$env.config.hooks.pre_prompt = ($env.config.hooks.pre_prompt | append {{ functerm_finish }})\n'' | save --force --raw {}\n",
+        "{}\n$env.{CURRENT_SHELL_ENV} = 'nu'\nconst {command_root} = {}\nlet @VAR_active_command@ = {}\nlet @VAR_helper_path@ = $env.FUNCTERM_HELPER_EXECUTABLE\n{}\n{}\ncd {}\nensure_nushell_shims\n$env.config.hooks.pre_execution = ($env.config.hooks.pre_execution | append {{ functerm_begin }})\n$env.config.hooks.pre_prompt = ($env.config.hooks.pre_prompt | append {{ functerm_finish }})\n'' | save --force --raw {}\n",
         startup_environment(crate::shell::ShellChoice::NuShell, context.environment)?,
         quote::nushell_path(&commands)?,
         quote::nushell_path(&context.ready_file.with_file_name("active-command.nuon"))?,

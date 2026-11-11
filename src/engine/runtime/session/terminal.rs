@@ -118,10 +118,6 @@ impl TerminalState {
             .parse(chunk, |action| action.append_to(&mut actions));
         let mut pending = Vec::new();
         let mut applied = false;
-        #[expect(
-            clippy::iter_with_drain,
-            reason = "retain the parser allocation for subsequent PTY chunks"
-        )]
         for action in actions.drain(..) {
             if let Some(event) = markers::parse(&action)? {
                 applied |= self.apply(core::mem::take(&mut pending))?;

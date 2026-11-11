@@ -1,5 +1,5 @@
 use super::ShellChoice;
-use crate::contract::HELPER_EXECUTABLE_ENV;
+use crate::contract::{EXECUTABLE_NAME, HELPER_EXECUTABLE_ENV};
 use crate::runtime::config::{DAEMON_SERVICE_NAME_ENV, Settings};
 use crate::runtime::protocol::EnvironmentSnapshot;
 use anyhow::{Context as _, Result};
@@ -113,22 +113,19 @@ pub(crate) fn environment(
 pub(crate) fn ensure_directory(shim_dir: &Path) -> Result<()> {
     fs::create_dir_all(shim_dir)?;
     let current_exe = std::env::current_exe().context("failed to resolve current executable")?;
+    let entrypoint = shim_dir.join(EXECUTABLE_NAME);
     #[cfg(windows)]
-    let alias_source = {
-        let snapshot = shim_dir.join("dispatcher.exe");
-        crate::publication::copy_once(&current_exe, &snapshot)?;
-        snapshot
-    };
+    crate::publication::copy_once(&current_exe, &entrypoint)?;
     #[cfg(unix)]
-    let alias_source = current_exe;
+    create_executable_alias(&current_exe, &entrypoint, EXECUTABLE_NAME)?;
     for &shell in ShellChoice::all() {
         for alias in shell.shim_executable_names() {
-            create_shim_alias(&alias_source, &shim_dir.join(alias), alias)?;
+            create_executable_alias(&entrypoint, &shim_dir.join(alias), alias)?;
         }
     }
     Ok(())
 }
-fn create_shim_alias(current_exe: &Path, alias_path: &Path, alias: &str) -> Result<()> {
+fn create_executable_alias(current_exe: &Path, alias_path: &Path, alias: &str) -> Result<()> {
     #[cfg(unix)]
     let created = std::os::unix::fs::symlink(current_exe, alias_path);
     #[cfg(windows)]
@@ -138,11 +135,13 @@ fn create_shim_alias(current_exe: &Path, alias_path: &Path, alias: &str) -> Resu
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
             anyhow::ensure!(
                 same_file::is_same_file(current_exe, alias_path)?,
-                "shell shim {alias} does not reference the current executable"
+                "managed executable {alias} does not reference the current executable"
             );
             Ok(())
         }
-        Err(error) => Err(error).with_context(|| format!("failed to create shell shim {alias}")),
+        Err(error) => {
+            Err(error).with_context(|| format!("failed to create executable alias {alias}"))
+        }
     }
 }
 pub(crate) fn write_active_shell(path: &Path, shell: ShellChoice) -> Result<()> {

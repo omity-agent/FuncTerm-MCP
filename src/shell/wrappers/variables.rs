@@ -4,16 +4,14 @@ mod restoration;
 pub(in crate::shell) use namespace::VariableNamespace;
 pub(in crate::shell) use restoration::startup_environment;
 pub(super) fn posix_environment_snapshot() -> String {
-    let protected = crate::shell::shims::PROTECTED_ENVIRONMENT_NAMES
+    crate::shell::shims::PROTECTED_ENVIRONMENT_NAMES
         .iter()
         .format_with("\n", |name, format| {
             format(&format_args!(
                 "    local @VAR_protected_{name}@=\"${{{name}-}}\""
             ))
-        });
-    format!(
-        "    local @VAR_complete_environment@=\"$(export -p)\"\n    @VAR_complete_environment@=\"${{@VAR_complete_environment@/#declare -x /export }}\"\n    @VAR_complete_environment@=\"${{@VAR_complete_environment@//$'\\ndeclare -x '/$'\\nexport '}}\"\n{protected}"
-    )
+        })
+        .to_string()
 }
 pub(super) fn posix_environment_restore() -> String {
     let protected = crate::shell::shims::PROTECTED_ENVIRONMENT_NAMES
@@ -23,9 +21,7 @@ pub(super) fn posix_environment_restore() -> String {
                 "    export {name}=\"$@VAR_protected_{name}@\""
             ))
         });
-    format!(
-        "    if [ -z \"${{PATH+x}}\" ] && [ -z \"${{PWD+x}}\" ]; then\n        eval \"$@VAR_complete_environment@\"\n    fi\n{protected}\n    functerm_ensure_shim_path"
-    )
+    format!("{protected}\n    functerm_ensure_shim_path")
 }
 pub(super) fn nushell_protected_environment_names() -> String {
     protected_environment_names().join(" ")

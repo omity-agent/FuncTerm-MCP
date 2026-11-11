@@ -62,8 +62,8 @@ fn is_rejected_executable(
 fn is_inherited_shim(path: &Path, inherited_shim: Option<&OsStr>) -> Result<bool> {
     #[cfg(windows)]
     if let Some(parent) = path.parent() {
-        let dispatcher = parent.join("dispatcher.exe");
-        if dispatcher.try_exists()? && same_file::is_same_file(path, &dispatcher)? {
+        let entrypoint = parent.join(crate::contract::EXECUTABLE_NAME);
+        if entrypoint.try_exists()? && same_file::is_same_file(path, &entrypoint)? {
             return Ok(true);
         }
     }
@@ -108,10 +108,6 @@ fn is_windows_subsystem_bash(
     ))
 }
 #[cfg(not(windows))]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "Windows shell validation uses the same fallible interface"
-)]
 const fn is_windows_subsystem_bash(
     _choice: ShellChoice,
     _path: &Path,

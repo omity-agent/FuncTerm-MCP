@@ -38,10 +38,6 @@ struct McpServer {
     output_mode: Option<OutputMode>,
     tool_router: ToolRouter<Self>,
 }
-#[expect(
-    clippy::unused_async_trait_impl,
-    reason = "rmcp's tool_handler macro generates the async ServerHandler implementation"
-)]
 # [tool_handler (router = self . tool_router)]
 impl ServerHandler for McpServer {
     async fn call_tool(

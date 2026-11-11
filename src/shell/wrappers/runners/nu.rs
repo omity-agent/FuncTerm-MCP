@@ -11,7 +11,8 @@ pub(in crate::shell) fn wrapper() -> String {
         .replace("@STATE_DIRECTORY@", SESSION_STATE_DIRECTORY);
     template::render_command_function(&protected, "functerm_finish")
 }
-const TEMPLATE: &str = "def --wrapped functerm_helper [...@VAR_arguments@] {
+const TEMPLATE: &str = "let @VAR_protected_environment@ = ($env | select --optional @NUSHELL_PROTECTED_ENVIRONMENT@)
+def --wrapped functerm_helper [...@VAR_arguments@] {
     let @VAR_result@ = (^$@VAR_helper_path@ ...$@VAR_arguments@ | complete)
     if $@VAR_result@.exit_code != 0 {
         error make {msg: $@VAR_result@.stderr}
@@ -44,14 +45,7 @@ def --env functerm_finish [@VAR_requested_exit@: int = -1] {
     let @VAR_exit_code@ = if $@VAR_requested_exit@ >= 0 { $@VAR_requested_exit@ } else { $@VAR_status@ }
     let @VAR_elapsed@ = ((date now) - $@VAR_state@.started) | into string
     let @VAR_cwd@ = $env.PWD
-    if ($env.FUNCTERM_SESSION_ROOT? | is-empty) {
-        load-env ($@VAR_recovery_environment@ | reject --optional PWD FILE_PWD CURRENT_FILE config)
-        $env.config = $@VAR_recovery_environment@.config
-        $env.config.hooks.pre_execution = ($env.config.hooks.pre_execution | append { functerm_begin })
-        $env.config.hooks.pre_prompt = ($env.config.hooks.pre_prompt | append { functerm_finish })
-    } else {
-        load-env ($@VAR_recovery_environment@ | select --optional @NUSHELL_PROTECTED_ENVIRONMENT@)
-    }
+    load-env $@VAR_protected_environment@
     rm $@VAR_state_file@
     if ($@VAR_state@.previous_id | is-empty) {
         hide-env --ignore-errors @COMMAND_ID_ENV@

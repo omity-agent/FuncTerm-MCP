@@ -21,14 +21,6 @@ pub(super) fn adaptive(duration: Duration) -> String {
 pub(super) fn milliseconds(duration: Duration) -> String {
     scaled(duration.as_nanos(), NANOS_PER_MILLISECOND, "ms")
 }
-#[expect(
-    clippy::integer_division,
-    reason = "duration units require exact integer quotient and remainder formatting"
-)]
-#[expect(
-    clippy::integer_division_remainder_used,
-    reason = "duration units require exact integer quotient and remainder formatting"
-)]
 fn scaled(nanoseconds: u128, nanoseconds_per_unit: u128, suffix: &str) -> String {
     let whole = nanoseconds / nanoseconds_per_unit;
     let remainder = nanoseconds % nanoseconds_per_unit;

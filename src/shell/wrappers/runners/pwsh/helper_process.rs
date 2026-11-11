@@ -29,16 +29,16 @@ pub(super) const SOURCE: &str = r#"public sealed class FuncTermHelper {
     }
 }
 public sealed class FuncTermEnvironment {
-    readonly System.Collections.IDictionary snapshot = Environment.GetEnvironmentVariables();
-    readonly string[] protectedNames;
-    public FuncTermEnvironment(string[] protectedNames) { this.protectedNames = protectedNames; }
-    public void Restore() {
-        var cleared = Environment.GetEnvironmentVariables().Count == 0;
-        foreach (System.Collections.DictionaryEntry entry in snapshot) {
-            var name = (string)entry.Key;
-            if (cleared || protectedNames.Contains(name, StringComparer.OrdinalIgnoreCase))
-                Environment.SetEnvironmentVariable(name, (string)entry.Value);
+    readonly Dictionary<string, string> snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    public FuncTermEnvironment(string[] protectedNames) {
+        foreach (var name in protectedNames) {
+            var value = Environment.GetEnvironmentVariable(name);
+            if (value != null) snapshot[name] = value;
         }
+    }
+    public void Restore() {
+        foreach (var entry in snapshot)
+            Environment.SetEnvironmentVariable(entry.Key, entry.Value);
     }
     public static void EnsureShims() {
         var shim = Environment.GetEnvironmentVariable("FUNCTERM_SHIM_DIR");
