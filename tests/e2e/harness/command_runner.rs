@@ -70,19 +70,19 @@ pub(crate) fn create_tab_with_env(cwd: &Path, shell: &str, env: &[(String, Strin
     });
     created
 }
-pub(crate) fn send_command(tab_id: &str, command: &str, wait_timeout: f64) -> Output {
+pub(crate) fn run(tab_id: &str, command: &str, wait_timeout: f64) -> Output {
     let separate_output =
         TAB_SEPARATE_OUTPUT.with(|tabs| tabs.borrow().get(tab_id).copied().unwrap_or(true));
-    send_command_with_output(tab_id, command, separate_output, wait_timeout)
+    run_with_output(tab_id, command, separate_output, wait_timeout)
 }
-pub(crate) fn send_command_with_output(
+pub(crate) fn run_with_output(
     tab_id: &str,
     command: &str,
     separate_output: bool,
     wait_timeout: f64,
 ) -> Output {
     run_cli(&[
-        "send-command",
+        "run",
         tab_id,
         "--command",
         command,
@@ -114,7 +114,7 @@ pub(crate) fn wait_for_stdout(
     }
 }
 pub(crate) fn complete_command(tab_id: &str, command: &str) -> CommandResult {
-    wait_for_completion(&send_command(tab_id, command, 0.0))
+    wait_for_completion(&run(tab_id, command, 0.0))
 }
 pub(crate) fn wait_for_completion(accepted: &Output) -> CommandResult {
     let id = parse_command_id(accepted);
@@ -139,7 +139,7 @@ pub(crate) fn manual_write(tab_id: &str, bytes: &[u8], wait_timeout: f64) -> Out
     run_cli(&[
         "manual-write",
         tab_id,
-        "--base64",
+        "--bytes",
         &encoded,
         "--wait-timeout",
         &wait_timeout.to_string(),

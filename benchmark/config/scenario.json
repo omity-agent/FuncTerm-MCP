@@ -2,7 +2,7 @@
   "executable": "../target/x86_64-pc-windows-msvc/release/functerm.exe",
   "drivers": ["powershell", "bash", "nu", "cmd", "bun", "python"],
   "counts": {
-    "send_command": 1000,
+    "run": 1000,
     "view": 100,
     "new_tab": 50,
     "manual_write": 10

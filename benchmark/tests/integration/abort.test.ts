@@ -31,7 +31,7 @@ test("stops dispatch on a send timeout and persists the partial report", async (
   let sends = 0;
   const invoke: Invoke = (tool) =>
     Effect.suspend(() => {
-      if (tool === "send_command") {
+      if (tool === "run") {
         sends++;
         return Effect.fail(new BenchmarkFailure("commandTimeout", "injected"));
       }

@@ -118,10 +118,7 @@ impl McpSession {
             .iter()
             .map(|tab| json!({"tab_id": tab, "command": source, "separate_output": separate}))
             .collect::<Vec<_>>();
-        self.call(
-            "send_command",
-            json!({"commands": commands, "wait_timeout": wait}),
-        )
+        self.call("run", json!({"commands": commands, "wait_timeout": wait}))
     }
     pub(super) fn view(&mut self, queries: &[(&str, usize)], wait: f64) -> Value {
         let entries = queries

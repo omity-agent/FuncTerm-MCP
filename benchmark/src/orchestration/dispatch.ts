@@ -49,7 +49,7 @@ export function dispatch(
       );
     };
     while (
-      completed < plan.counts.send_command ||
+      completed < plan.counts.run ||
       pending > 0 ||
       admitted < plan.tabs.length ||
       viewed < plan.counts.view
@@ -100,7 +100,7 @@ export function dispatch(
         );
       }
       const dueViews = Math.floor(
-        (issued * plan.counts.view) / plan.counts.send_command,
+        (issued * plan.counts.view) / plan.counts.run,
       );
       while (viewed < dueViews && allTabs.length > 0) {
         const index = viewed++;
@@ -122,7 +122,7 @@ export function dispatch(
         );
       }
       if (pending === 0) {
-        if (completed === plan.counts.send_command) break;
+        if (completed === plan.counts.run) break;
         yield* Effect.fail(
           new BenchmarkFailure("stalled", { issued, admitted, completed }),
         );

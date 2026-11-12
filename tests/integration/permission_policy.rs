@@ -1,6 +1,5 @@
 use crate::support::{
-    create_tab, locked_with_env, parse_command_result, parse_tab_created, run_cli, send_command,
-    temp_dir,
+    create_tab, locked_with_env, parse_command_result, parse_tab_created, run, run_cli, temp_dir,
 };
 #[cfg(windows)]
 pub(crate) const SHELL: &str = "powershell";
@@ -48,7 +47,7 @@ fn cli_tabs_default_to_normal_and_require_daemon_permission_for_elevation() {
     }
 }
 fn assert_tab_permission(tab_id: &str, expected: bool) {
-    let result = parse_command_result(&send_command(tab_id, QUERY, 10.0));
+    let result = parse_command_result(&run(tab_id, QUERY, 10.0));
     assert_eq!(result.exit_code, Some(0_i32), "{}", result.stderr);
     assert!(result.finished);
     assert_eq!(

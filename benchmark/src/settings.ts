@@ -16,7 +16,7 @@ const definition = Schema.Struct({
   executable: Schema.NonEmptyString,
   drivers: Schema.Array(Schema.Literals(drivers)),
   counts: Schema.Struct({
-    send_command: positive,
+    run: positive,
     view: count,
     new_tab: positive,
     manual_write: count,
@@ -59,15 +59,12 @@ export function normalize(input: unknown): Settings {
     throw new BenchmarkFailure("configuration", JSON.stringify(input));
   }
   const counts: Counts = {
-    send_command: rounded(scenario.counts.send_command, 4),
+    run: rounded(scenario.counts.run, 4),
     view: rounded(scenario.counts.view, 2),
     new_tab: rounded(scenario.counts.new_tab, scenario.drivers.length * 4),
     manual_write: rounded(scenario.counts.manual_write, 2),
   };
-  if (
-    counts.manual_write > counts.send_command ||
-    counts.new_tab > counts.send_command
-  ) {
+  if (counts.manual_write > counts.run || counts.new_tab > counts.run) {
     throw new BenchmarkFailure("configuration", JSON.stringify(counts));
   }
   return {

@@ -1,6 +1,6 @@
 use crate::support::{
     complete_command, create_tab, manual_write, parse_command_id, parse_command_result,
-    parse_tab_view, run_cli, send_command, temp_dir, wait_for_completion, wait_for_stdout,
+    parse_tab_view, run, run_cli, temp_dir, wait_for_completion, wait_for_stdout,
 };
 #[test]
 fn python_captures_native_standard_streams() {
@@ -40,7 +40,7 @@ fn nushell_retains_lexical_variables_and_waits_for_input() {
     let query = complete_command(&tab, "$y = $y + (do $callback); print $y");
     assert_eq!(query.exit_code, Some(0_i32), "{query:?}");
     assert!(query.stdout.contains('3'), "{query:?}");
-    let started = send_command(&tab, "let answer = input '提示> '; print $answer", 0.5);
+    let started = run(&tab, "let answer = input '提示> '; print $answer", 0.5);
     assert!(!parse_command_result(&started).finished, "{started:?}");
     assert!(manual_write(&tab, b"USER_ANSWER\r\n", 0.5).status.success());
     let result = wait_for_completion(&started);
@@ -88,7 +88,7 @@ fn interrupted_shells_return_to_a_usable_prompt() {
         let cwd = complete_command(&tab, "echo CWD_READY").cwd;
         let announce = if shell == "nu" { "print" } else { "echo" };
         let synchronized = format!("{announce} INTERRUPT_READY\n{source}");
-        let accepted = send_command(&tab, &synchronized, 0.0);
+        let accepted = run(&tab, &synchronized, 0.0);
         let id = parse_command_id(&accepted);
         wait_for_stdout(&id, "INTERRUPT_READY", core::time::Duration::from_secs(15));
         let _interrupted = manual_write(&tab, &[3], 0.5);

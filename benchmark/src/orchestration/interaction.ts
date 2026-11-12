@@ -37,7 +37,7 @@ export function execute(
       ...(spec.interactive ? { readyPath } : {}),
     };
     const send = invoke(
-      "send_command",
+      "run",
       {
         commands: [
           {

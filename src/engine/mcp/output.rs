@@ -33,7 +33,7 @@ pub(super) struct ManualWriteOutput<'payload> {
     pub(super) note: &'payload str,
 }
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
-pub(super) struct SendCommandOutput<'payload> {
+pub(super) struct RunOutput<'payload> {
     pub(super) shell: ShellPresentation<'payload>,
     pub(super) command: CommandPresentation<'payload>,
     pub(super) note: &'payload str,
@@ -76,7 +76,7 @@ pub(super) fn manual_write(payload: Payload) -> Result<CallToolResult, String> {
         },
     )
 }
-pub(super) fn send_command(payload: Payload) -> Result<CallToolResult, String> {
+pub(super) fn run(payload: Payload) -> Result<CallToolResult, String> {
     let Payload::CommandAccepted {
         command_id,
         view:
@@ -92,7 +92,7 @@ pub(super) fn send_command(payload: Payload) -> Result<CallToolResult, String> {
     };
     tool_result(
         command_plain_text(&shell, &command, &note, false, Some(&command_id)),
-        &SendCommandOutput {
+        &RunOutput {
             shell: shell.presentation(false),
             command: command.presentation(Some(&command_id)),
             note: &note,

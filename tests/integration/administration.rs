@@ -1,6 +1,6 @@
 use crate::support::{
-    create_tab, create_tab_with_env, locked_with_env, parse_command_result, parse_tab_view,
-    run_cli, run_cli_with_env, send_command, temp_dir, temp_root,
+    create_tab, create_tab_with_env, locked_with_env, parse_command_result, parse_tab_view, run,
+    run_cli, run_cli_with_env, temp_dir, temp_root,
 };
 use core::time::Duration;
 use named_lock::NamedLock;
@@ -14,7 +14,7 @@ fn restart_discards_old_tabs_without_stopping_another_service() {
     let first = locked_with_env(&[]);
     let first_environment = first.env();
     let previous = create_tab(&temp_root(), SHELL);
-    let accepted = send_command(&previous.tab_id, "echo BEFORE_RESTART", 5.0);
+    let accepted = run(&previous.tab_id, "echo BEFORE_RESTART", 5.0);
     assert_eq!(parse_command_result(&accepted).exit_code, Some(0_i32));
     let _neighbor_service = locked_with_env(&[]);
     let other = create_tab(&temp_root(), SHELL);
@@ -27,7 +27,7 @@ fn restart_discards_old_tabs_without_stopping_another_service() {
     let fresh = create_tab_with_env(&temp_root(), SHELL, &first_environment);
     let recovered = run_cli_with_env(
         &[
-            "send-command",
+            "run",
             &fresh.tab_id,
             "--command",
             "echo AFTER_RESTART",
@@ -83,7 +83,7 @@ fn stop_terminates_running_commands_and_allows_automatic_startup() {
         "sleep 2\nprintf '%s\\n' UNEXPECTED_COMPLETION > {}",
         functerm::shell::quote::posix_string(marker.to_str().unwrap()),
     );
-    let running = parse_command_result(&send_command(&tab.tab_id, &command, 0.0));
+    let running = parse_command_result(&run(&tab.tab_id, &command, 0.0));
     assert!(!running.finished);
     let workspace = crate::support::command_directory(&tab.tab_id, "pending")
         .ancestors()

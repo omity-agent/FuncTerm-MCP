@@ -1,6 +1,6 @@
 use crate::support::{
-    complete_command, create_tab, parse_command_id, parse_command_result, parse_tab_view, run_cli,
-    send_command, send_command_with_output, temp_dir, wait_for_completion,
+    complete_command, create_tab, parse_command_id, parse_command_result, parse_tab_view, run,
+    run_cli, run_with_output, temp_dir, wait_for_completion,
 };
 use core::time::Duration;
 #[test]
@@ -22,7 +22,7 @@ fn powershell_top_level_return_keeps_state_and_does_not_exit() {
     let _guard = super::matrix::daemon();
     for separated in [false, true] {
         let tab = create_tab(&temp_dir("early-return"), "powershell").tab_id;
-        let output = send_command_with_output(
+        let output = run_with_output(
             &tab,
             "$retained = 42; function f { 'USER_F' }; function Get-Retained { $retained }; return 'RETURN_VALUE'; throw 'UNREACHABLE'",
             separated,
@@ -90,7 +90,7 @@ fn background_interpreter_exit_cleans_descendants_without_observation() {
                 )
             };
             let tab = create_tab(&cwd, shell).tab_id;
-            let accepted = send_command(&tab, &source, 0.0);
+            let accepted = run(&tab, &source, 0.0);
             assert!(!parse_command_result(&accepted).finished, "{accepted:?}");
             let command_id = parse_command_id(&accepted);
             let deadline = std::time::Instant::now() + Duration::from_secs(10);

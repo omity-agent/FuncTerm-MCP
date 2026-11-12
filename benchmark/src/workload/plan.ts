@@ -40,11 +40,11 @@ export function createPlan(settings: Settings) {
     const { counts } = settings;
     const interactions = new Set(
       Array.from({ length: counts.manual_write }, (_, index) =>
-        Math.floor(((index + 0.5) * counts.send_command) / counts.manual_write),
+        Math.floor(((index + 0.5) * counts.run) / counts.manual_write),
       ),
     );
     const commands: CommandSpec[] = [];
-    for (let ordinal = 0; ordinal < counts.send_command; ordinal++) {
+    for (let ordinal = 0; ordinal < counts.run; ordinal++) {
       commands.push({
         ordinal,
         lengthRatio: yield* Random.next,
@@ -59,7 +59,7 @@ export function createPlan(settings: Settings) {
     return {
       counts,
       commands,
-      tabs: tabPlan(settings.drivers, counts.new_tab, counts.send_command),
+      tabs: tabPlan(settings.drivers, counts.new_tab, counts.run),
     };
   }).pipe(Random.withSeed(settings.seed));
 }

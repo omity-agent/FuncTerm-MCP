@@ -20,7 +20,7 @@ impl Manager {
     ) -> Result<ViewResult> {
         self.tabs.manual_write(tab_id, input, wait_timeout).await
     }
-    pub(crate) async fn send_command(
+    pub(crate) async fn run(
         self: &Arc<Self>,
         tab_id: &str,
         command: &str,
@@ -28,7 +28,7 @@ impl Manager {
         wait_timeout: Duration,
     ) -> Result<(String, EndReason, ViewResult)> {
         self.tabs
-            .send_command(tab_id, command, separate_output, wait_timeout)
+            .run(tab_id, command, separate_output, wait_timeout)
             .await
     }
     pub(crate) async fn view(

@@ -1,7 +1,7 @@
 use crate::support::{
     complete_command, create_tab, locked_with_env, parse_command_id, parse_command_result,
-    parse_tab_view, run_cli, send_command_with_output, tagged_content, temp_dir,
-    wait_for_completion, wait_for_stdout,
+    parse_tab_view, run_cli, run_with_output, tagged_content, temp_dir, wait_for_completion,
+    wait_for_stdout,
 };
 #[test]
 fn bash_declarations_arguments_dispatch_and_status_survive_submissions() {
@@ -67,7 +67,7 @@ fn process_exit_preserves_codes_and_consistent_idle_state() {
         for code in [0_i32, 28_i32] {
             let tab = create_tab(&temp_dir("abrupt-exit"), shell).tab_id;
             let source = template.replace("EXIT_CODE", &code.to_string());
-            let accepted = crate::support::send_command(&tab, &source, 0.0);
+            let accepted = crate::support::run(&tab, &source, 0.0);
             let id = parse_command_id(&accepted);
             let finished = wait_for_completion(&accepted);
             assert_eq!(finished.exit_code, Some(code), "{finished:?}");
@@ -98,8 +98,7 @@ fn cmd_codepage_changes_do_not_fill_terminal_records_with_blanks() {
     assert!(previous.stdout.contains("PREVIOUS=28"), "{previous:?}");
     for codepage in [936_i32, 65_001_i32] {
         complete_command(&tab, &format!("chcp {codepage}"));
-        let result =
-            wait_for_completion(&send_command_with_output(&tab, "echo ONE_LINE", false, 5.0));
+        let result = wait_for_completion(&run_with_output(&tab, "echo ONE_LINE", false, 5.0));
         assert_eq!(result.stdout.trim(), "ONE_LINE", "{result:?}");
         assert!(result.stdout.len() < 30, "{result:?}");
     }
@@ -112,7 +111,7 @@ fn powershell_records_source_locations_native_status_prompts_and_releases_cwd() 
     let cwd = temp_dir("released-directory");
     let tab = create_tab(&cwd, "powershell").tab_id;
     for separate in [false, true] {
-        let failed = wait_for_completion(&send_command_with_output(
+        let failed = wait_for_completion(&run_with_output(
             &tab,
             "$ErrorView = 'NormalView'\nthrow 'SOURCE_ERROR'",
             separate,
@@ -139,7 +138,7 @@ fn powershell_records_source_locations_native_status_prompts_and_releases_cwd() 
     complete_command(&tab, "cmd /c exit 28");
     let previous = complete_command(&tab, "\"PREVIOUS=$LASTEXITCODE\"");
     assert!(previous.stdout.contains("PREVIOUS=28"), "{previous:?}");
-    let waiting = crate::support::send_command(&tab, "Read-Host 'VISIBLE_PROMPT'", 0.0);
+    let waiting = crate::support::run(&tab, "Read-Host 'VISIBLE_PROMPT'", 0.0);
     let id = parse_command_id(&waiting);
     wait_for_stdout(&id, "VISIBLE_PROMPT", core::time::Duration::from_secs(15));
     crate::support::manual_write(&tab, b"REPLY\r", 0.0);

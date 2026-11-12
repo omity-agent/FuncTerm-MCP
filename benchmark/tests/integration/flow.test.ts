@@ -43,7 +43,7 @@ test("interleaves balanced tools with serial tabs and concurrent input", async (
         yield* Effect.sleep(2);
         return { tab_id: `tab-${nextTab++}` };
       }
-      if (tool === "send_command") {
+      if (tool === "run") {
         const tab = context.tabId!;
         expect(busy.has(tab)).toBe(false);
         busy.add(tab);
@@ -87,7 +87,7 @@ test("rounds every tab combination and keeps deterministic random lengths", asyn
   const settings = normalize({
     ...scenario,
     drivers,
-    counts: { send_command: 1000, view: 100, new_tab: 50, manual_write: 10 },
+    counts: { run: 1000, view: 100, new_tab: 50, manual_write: 10 },
   });
   expect(settings.counts.new_tab).toBe(56);
   const first = await Effect.runPromise(createPlan(settings));

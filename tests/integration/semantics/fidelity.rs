@@ -1,5 +1,5 @@
 use crate::support::{
-    complete_command, create_tab, locked_with_env, parse_command_result, send_command_with_output,
+    complete_command, create_tab, locked_with_env, parse_command_result, run_with_output,
     tagged_content, temp_dir,
 };
 #[cfg(windows)]
@@ -9,9 +9,7 @@ fn powershell_submissions_preserve_interactive_engine_semantics() {
     for separated in [false, true] {
         let tab = create_tab(&temp_dir("interactive-engine"), "powershell").tab_id;
         let submit = |source: &str| {
-            crate::support::wait_for_completion(&send_command_with_output(
-                &tab, source, separated, 0.0,
-            ))
+            crate::support::wait_for_completion(&run_with_output(&tab, source, separated, 0.0))
         };
         assert_eq!(submit("$Error.Count").stdout.trim(), "0");
         for source in [
@@ -115,7 +113,7 @@ fn terminal_capture_preserves_spacing_and_wide_character_wraps() {
         } else {
             format!("console.log({})", sonic_rs::to_string(&text).unwrap())
         };
-        let response = send_command_with_output(&tab, &source, false, 5.0);
+        let response = run_with_output(&tab, &source, false, 5.0);
         let result = parse_command_result(&response);
         assert_eq!(result.exit_code, Some(0_i32), "{result:?}");
         let document = String::from_utf8(response.stdout).unwrap();

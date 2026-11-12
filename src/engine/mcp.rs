@@ -13,7 +13,7 @@ use crate::runtime::protocol::time_consumption;
 use anyhow::Result;
 use arguments::{
     FixedCommandInput, FixedNewTabOptions, ManualWriteRequest, NewTabOptions, NewTabRequest,
-    SendCommandInput, SendCommandRequest, ViewRequest,
+    RunInput, RunRequest, ViewRequest,
 };
 pub(crate) use batch::{WaitTimeoutMultiplier, WaitTimeoutSettings};
 use collection::BatchOutput;
@@ -115,10 +115,10 @@ impl McpServer {
         )
         .await
     }
-    # [tool (name = "send_command" , output_schema = schema_for_output ::< BatchOutput < output :: SendCommandOutput <'static >>> ())]
-    async fn send_command(
+    # [tool (name = "run" , output_schema = schema_for_output ::< BatchOutput < output :: RunOutput <'static >>> ())]
+    async fn run(
         &self,
-        Parameters(request): Parameters<SendCommandRequest<SendCommandInput>>,
+        Parameters(request): Parameters<RunRequest<RunInput>>,
     ) -> Result<CallToolResult, String> {
         batch::run(
             &self.settings,
@@ -128,10 +128,10 @@ impl McpServer {
         )
         .await
     }
-    #[tool(name = "fixed_send_command", output_schema = schema_for_output::<BatchOutput<output::SendCommandOutput<'static>>>())]
-    async fn fixed_send_command(
+    #[tool(name = "fixed_run", output_schema = schema_for_output::<BatchOutput<output::RunOutput<'static>>>())]
+    async fn fixed_run(
         &self,
-        Parameters(request): Parameters<SendCommandRequest<FixedCommandInput>>,
+        Parameters(request): Parameters<RunRequest<FixedCommandInput>>,
     ) -> Result<CallToolResult, String> {
         let mode = self.output_mode.ok_or("MCP output mode is not fixed")?;
         let entries = request

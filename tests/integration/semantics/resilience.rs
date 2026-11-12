@@ -1,6 +1,6 @@
 use crate::support::{
     complete_command, create_tab, locked_with_env, manual_write, parse_tab_view, run_cli,
-    send_command_with_output, tagged_content, temp_dir, wait_for_completion,
+    run_with_output, tagged_content, temp_dir, wait_for_completion,
 };
 #[test]
 fn bash_noclobber_preserves_dispatch_and_user_redirections() {
@@ -18,8 +18,7 @@ fn assert_environment_change(change: &str) {
             format!("{change}; printf 'CHANGED\\n'"),
             "printf 'NEXT_COMMAND\\n'; printf 'ERROR_STREAM\\n' >&2".to_owned(),
         ] {
-            let result =
-                wait_for_completion(&send_command_with_output(&tab, &source, separated, 0.0));
+            let result = wait_for_completion(&run_with_output(&tab, &source, separated, 0.0));
             let screen = parse_tab_view(&run_cli(&["view", &tab])).screen;
             assert_eq!(result.exit_code, Some(0_i32), "{result:?}\n{screen}");
             assert!(!screen.contains("command not found"), "{screen}");
@@ -53,7 +52,7 @@ fn window_title_persists_across_commands_and_tab_queries() {
     ] {
         let tab = create_tab(&temp_dir("persistent-title"), shell).tab_id;
         complete_command(&tab, source);
-        let accepted = crate::support::send_command(&tab, next, 0.0);
+        let accepted = crate::support::run(&tab, next, 0.0);
         let id = crate::support::parse_command_id(&accepted);
         wait_for_completion(&accepted);
         for response in [run_cli(&["view", &tab]), run_cli(&["view", &id])] {
@@ -71,7 +70,7 @@ fn bash_exit_replays_separated_streams_to_the_screen_once() {
     let _guard = locked_with_env(&[]);
     for separated in [true, false] {
         let tab = create_tab(&temp_dir("exit-streams"), "bash").tab_id;
-        let result = wait_for_completion(&send_command_with_output(
+        let result = wait_for_completion(&run_with_output(
             &tab,
             "printf 'LAST_STDOUT\\n'; printf 'LAST_STDERR\\n' >&2; exit 28",
             separated,
@@ -101,7 +100,7 @@ fn bash_keyboard_echo_preserves_supplementary_unicode() {
     let _guard = locked_with_env(&[]);
     let tab = create_tab(&temp_dir("unicode-echo"), "bash").tab_id;
     let source = "IFS= read -r answer; printf '\\nVALUE=<%s>\\n' \"$answer\"";
-    let accepted = send_command_with_output(&tab, source, false, 0.0);
+    let accepted = run_with_output(&tab, source, false, 0.0);
     assert!(manual_write(&tab, "🙂\n".as_bytes(), 0.0).status.success());
     let result = wait_for_completion(&accepted);
     assert!(result.stdout.contains("VALUE=<🙂>"), "{result:?}");

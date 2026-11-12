@@ -6,9 +6,7 @@ use anyhow::{Context as _, Result};
 use std::io::Write as _;
 #[derive(Debug, thiserror :: Error)]
 pub(in crate::engine::runtime::session::manager) enum KeyboardWriteFailure {
-    #[error(
-        "manual_write is unavailable while the prompt is idle; use send_command for prompt commands"
-    )]
+    #[error("manual_write is unavailable while the prompt is idle; use run for prompt commands")]
     IdlePrompt,
     #[error("manual_write target command ended before input could be written")]
     CommandEnded,

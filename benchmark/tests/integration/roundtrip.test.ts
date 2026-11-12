@@ -97,9 +97,7 @@ test(
     expect(state.samples.every((sample) => sample.outcome === "success")).toBe(
       true,
     );
-    const sends = state.samples.filter(
-      (sample) => sample.tool === "send_command",
-    );
+    const sends = state.samples.filter((sample) => sample.tool === "run");
     for (const sample of sends) {
       if (sample.driver === "nu") expect(sample.separateOutput).toBe(false);
       expect(sample.commandBytes).toBeGreaterThanOrEqual(

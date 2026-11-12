@@ -1,6 +1,6 @@
 use super::{
     McpServer, WaitTimeoutSettings,
-    arguments::{ManualWriteInput, NewTabOptions, SendCommandInput, ViewQuery},
+    arguments::{ManualWriteInput, NewTabOptions, RunInput, ViewQuery},
     operations::Operation as _,
 };
 use crate::engine::privileges::PrivilegeMode;
@@ -25,7 +25,7 @@ pub(super) fn router(
     let mut router = McpServer::tool_router();
     for (internal, public, fixed) in [
         ("fixed_new_tab", "new_tab", privilege_mode.is_some()),
-        ("fixed_send_command", "send_command", output_mode.is_some()),
+        ("fixed_run", "run", output_mode.is_some()),
     ] {
         let mut route = router
             .map
@@ -54,9 +54,9 @@ pub(super) fn apply(
     if fixed_privilege {
         new_tab.item_parameters.remove("elevated");
     }
-    let mut send_command = descriptions.send_command.clone();
+    let mut run = descriptions.run.clone();
     if fixed_output {
-        send_command.item_parameters.remove("separate_output");
+        run.item_parameters.remove("separate_output");
     }
     let tools = [
         ("new_tab", NewTabOptions::LIST_PARAMETER, &new_tab),
@@ -65,11 +65,7 @@ pub(super) fn apply(
             ManualWriteInput::LIST_PARAMETER,
             &descriptions.manual_write,
         ),
-        (
-            "send_command",
-            SendCommandInput::LIST_PARAMETER,
-            &send_command,
-        ),
+        ("run", RunInput::LIST_PARAMETER, &run),
         ("view", ViewQuery::LIST_PARAMETER, &descriptions.view),
     ];
     for (name, list_parameter, description) in tools {

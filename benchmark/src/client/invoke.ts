@@ -81,7 +81,7 @@ export function createInvoker(
             throw new BenchmarkFailure("unexpected", JSON.stringify(raw));
           }
           const result = parsed.structuredContent.results[0]!.result;
-          if (tool === "send_command") {
+          if (tool === "run") {
             const observed = Schema.decodeUnknownSync(command)(result).command;
             const output =
               "output" in observed

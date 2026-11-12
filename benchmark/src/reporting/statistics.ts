@@ -44,7 +44,7 @@ export function summarize(
   error: string | null,
 ) {
   const actual: Counts = {
-    send_command: 0,
+    run: 0,
     view: 0,
     new_tab: 0,
     manual_write: 0,
@@ -74,7 +74,7 @@ export function summarize(
         sample.elevated ? "elevated" : "normal",
       ),
       byOutput: group(
-        state.samples.filter((sample) => sample.tool === "send_command"),
+        state.samples.filter((sample) => sample.tool === "run"),
         (sample) => (sample.separateOutput ? "separated" : "terminal"),
       ),
       byCombination: group(state.samples, (sample) =>

@@ -13,13 +13,8 @@ export const drivers = [
 ] as const;
 export type Driver = (typeof drivers)[number];
 export type Transport = "stdio" | "http";
-export type Tool = "send_command" | "view" | "new_tab" | "manual_write";
-export const tools = [
-  "send_command",
-  "view",
-  "new_tab",
-  "manual_write",
-] as const;
+export type Tool = "run" | "view" | "new_tab" | "manual_write";
+export const tools = ["run", "view", "new_tab", "manual_write"] as const;
 export type Counts = Record<Tool, number>;
 export type Tab = { id: string; driver: Driver; elevated: boolean };
 export type Context = {

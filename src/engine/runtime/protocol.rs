@@ -37,7 +37,7 @@ pub(crate) enum Request {
         input: KeyboardInput,
         wait_timeout: Duration,
     },
-    SendCommand {
+    Run {
         tab_id: String,
         command: String,
         separate_output: bool,

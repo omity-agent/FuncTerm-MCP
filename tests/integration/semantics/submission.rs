@@ -49,7 +49,7 @@ fn cmd_submission_uses_interactive_percent_and_batch_return_semantics() {
     let tab = create_tab(&cwd, "cmd").tab_id;
     for source in ["cd /d C:\\", "cd /", "echo AFTER_ROOT"] {
         let result = wait_for_completion(&run_cli(&[
-            "send-command",
+            "run",
             &tab,
             "--command",
             source,

@@ -1,5 +1,5 @@
 use super::{
-    arguments::{ManualWriteInput, NewTabOptions, SendCommandInput, ViewQuery},
+    arguments::{ManualWriteInput, NewTabOptions, RunInput, ViewQuery},
     error_text, output,
 };
 use crate::runtime::config::Settings;
@@ -49,13 +49,13 @@ impl Operation for ManualWriteInput {
         output::manual_write(payload)
     }
 }
-impl Operation for SendCommandInput {
+impl Operation for RunInput {
     const LIST_PARAMETER: &'static str = "commands";
     fn tab_id(&self) -> Option<&str> {
         Some(&self.tab_id)
     }
     fn request(self, settings: &Settings, wait_timeout: Duration) -> Result<Request, String> {
-        Ok(Request::SendCommand {
+        Ok(Request::Run {
             tab_id: self.tab_id,
             command: self.command,
             separate_output: self
@@ -65,7 +65,7 @@ impl Operation for SendCommandInput {
         })
     }
     fn output(payload: Payload) -> Result<CallToolResult, String> {
-        output::send_command(payload)
+        output::run(payload)
     }
 }
 impl Operation for ViewQuery {

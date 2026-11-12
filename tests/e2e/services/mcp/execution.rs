@@ -31,7 +31,7 @@ fn mcp_batch_preserves_order_and_isolates_errors() {
     let [first, second] = create_tabs(&mut session);
     assert_ne!(first, second);
     let response = session.call(
-        "send_command",
+        "run",
         json!({
             "commands": [
                 {"tab_id": first, "command": "echo FIRST_BATCH_RESULT", "separate_output": true},

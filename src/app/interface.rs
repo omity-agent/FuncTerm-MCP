@@ -42,14 +42,14 @@ pub(super) enum CliCommand {
     },
     ManualWrite {
         tab_id: String,
-        #[arg(long, required_unless_present = "base64", conflicts_with = "base64")]
+        #[arg(long, required_unless_present = "bytes", conflicts_with = "bytes")]
         text: Option<String>,
         #[arg(long, required_unless_present = "text", conflicts_with = "text")]
-        base64: Option<String>,
+        bytes: Option<String>,
         #[arg(long, default_value_t = 0.0)]
         wait_timeout: f64,
     },
-    SendCommand {
+    Run {
         tab_id: String,
         #[arg(long)]
         command: String,

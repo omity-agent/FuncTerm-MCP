@@ -12,7 +12,7 @@
   "unexpected": "MCP 响应不符合预期",
   "missingTiming": "MCP 响应缺少内部计时",
   "missingOutput": "命令输出缺少预期负载",
-  "commandTimeout": "send_command 等待超时",
+  "commandTimeout": "运行命令等待超时",
   "commandFailed": "命令执行失败",
   "readyTimeout": "等待交互命令就绪超时",
   "startupFailed": "Daemon 启动失败",

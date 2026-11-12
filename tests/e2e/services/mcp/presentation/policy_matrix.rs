@@ -25,7 +25,7 @@ fn schema_and_rejections_cover_every_privilege_and_output_policy_combination() {
                 assert_references(tool);
                 let parameter = match text(tool, "/name") {
                     "new_tab" => "tabs",
-                    "send_command" => "commands",
+                    "run" => "commands",
                     "manual_write" => "inputs",
                     "view" => "queries",
                     name => panic!("unexpected tool {name}"),
@@ -41,12 +41,7 @@ fn schema_and_rejections_cover_every_privilege_and_output_policy_combination() {
             }
             for (name, parameter, property, fixed) in [
                 ("new_tab", "tabs", "elevated", privilege.is_some()),
-                (
-                    "send_command",
-                    "commands",
-                    "separate_output",
-                    output.is_some(),
-                ),
+                ("run", "commands", "separate_output", output.is_some()),
             ] {
                 let tool = tools
                     .iter()
@@ -127,7 +122,7 @@ fn wait_timeout_limits_apply_to_schemas_and_calls_before_the_multiplier() {
                     json!({"inputs": [{"tab_id": "missing", "text": "", "bytes": null}], "wait_timeout": wait}),
                 ),
                 (
-                    "send_command",
+                    "run",
                     json!({"commands": [{"tab_id": "missing", "command": "echo UNUSED"}], "wait_timeout": wait}),
                 ),
             ] {

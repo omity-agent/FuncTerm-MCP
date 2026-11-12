@@ -1,7 +1,7 @@
 use crate::support::{
     assert_powershell_primary_prompt, complete_command, create_tab, locked, manual_write,
-    parse_command_id, parse_command_result, parse_tab_view, required_executable, run_cli,
-    send_command, temp_root, wait_for_completion, wait_for_stdout,
+    parse_command_id, parse_command_result, parse_tab_view, required_executable, run, run_cli,
+    temp_root, wait_for_completion, wait_for_stdout,
 };
 use core::time::Duration;
 use functerm::shell::quote;
@@ -10,7 +10,7 @@ const PROBE_READY: &str = "FUNCTERM_CTRL_C_READY";
 fn ctrl_c_stops_native_process_and_returns_to_usable_shell() {
     let _guard = locked();
     let tab = create_tab(&temp_root(), "powershell");
-    let accepted = send_command(&tab.tab_id, &probe_command(), 0.0);
+    let accepted = run(&tab.tab_id, &probe_command(), 0.0);
     let command_id = parse_command_id(&accepted);
     let pending = parse_command_result(&accepted);
     assert!(!pending.finished, "native probe should still be running");

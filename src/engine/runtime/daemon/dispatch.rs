@@ -36,14 +36,14 @@ pub(crate) async fn execute(manager: &Arc<Manager>, request: Request) -> Result<
             let view = manager.manual_write(&tab_id, input, wait_timeout).await?;
             Ok(Payload::KeyboardWritten { view })
         }
-        Request::SendCommand {
+        Request::Run {
             tab_id,
             command,
             separate_output,
             wait_timeout,
         } => {
             let (command_id, end_reason, view) = manager
-                .send_command(&tab_id, &command, separate_output, wait_timeout)
+                .run(&tab_id, &command, separate_output, wait_timeout)
                 .await?;
             Ok(Payload::CommandAccepted {
                 command_id,

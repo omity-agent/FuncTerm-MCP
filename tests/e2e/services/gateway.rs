@@ -41,14 +41,11 @@ fn mcp_rejects_invalid_batches_before_dispatch() {
     let tab = text(entries(&creation).last().unwrap(), "/result/tab_id");
     for (name, arguments) in [
         ("new_tab", json!({"tabs": []})),
-        (
-            "send_command",
-            json!({"commands": [], "wait_timeout": 0_u64}),
-        ),
+        ("run", json!({"commands": [], "wait_timeout": 0_u64})),
         ("manual_write", json!({"inputs": [], "wait_timeout": 0_u64})),
         ("view", json!({"queries": [], "wait_timeout": 0_u64})),
         (
-            "send_command",
+            "run",
             json ! ({ "commands" : [{ "tab_id" : tab , "command" : "echo UNEXPECTED > rejected.txt" } , { "tab_id" : tab , "command" : "echo UNEXPECTED > rejected.txt" }] , "wait_timeout" : 0_u64 }),
         ),
         (
@@ -82,7 +79,7 @@ fn mcp_rejects_invalid_batches_before_dispatch() {
         );
     }
     let recovered = session.call(
-        "send_command",
+        "run",
         json!({
             "commands": [{"tab_id": tab, "command": "echo DISPATCH_RECOVERED", "separate_output": true}],
             "wait_timeout": 5_u64

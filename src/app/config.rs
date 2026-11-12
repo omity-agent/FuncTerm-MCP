@@ -83,7 +83,7 @@ pub(crate) struct McpSettings {
     pub(crate) http: HttpSettings,
     pub(crate) new_tab: ToolDescription,
     pub(crate) manual_write: ToolDescription,
-    pub(crate) send_command: ToolDescription,
+    pub(crate) run: ToolDescription,
     pub(crate) view: ToolDescription,
 }
 #[derive(Clone, Debug, Deserialize)]

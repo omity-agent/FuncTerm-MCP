@@ -1,7 +1,7 @@
 use crate::support::{
     complete_command, create_tab, locked_with_env, manual_write, parse_command_id,
-    parse_command_result, parse_tab_view, run_cli, send_command, send_command_with_output,
-    tagged_content, temp_dir, wait_for_completion, wait_for_stdout,
+    parse_command_result, parse_tab_view, run, run_cli, run_with_output, tagged_content, temp_dir,
+    wait_for_completion, wait_for_stdout,
 };
 use core::time::Duration;
 #[test]
@@ -17,7 +17,7 @@ fn terminal_mode_preserves_tty_and_switches_back_to_separated_output() {
         let query = tty_query(shell);
         let separated = complete_command(&tab, query);
         assert_eq!(separated.exit_code, Some(0_i32), "{shell}: {separated:?}");
-        let direct = send_command_with_output(&tab, query, false, 10.0);
+        let direct = run_with_output(&tab, query, false, 10.0);
         let terminal = wait_for_completion(&direct);
         let document = String::from_utf8(direct.stdout.clone()).unwrap();
         for tag in ["STDOUT", "STDERR"] {
@@ -49,13 +49,9 @@ fn terminal_mode_preserves_tty_and_switches_back_to_separated_output() {
 fn terminal_state_keeps_scrolled_unicode_output_and_command_boundaries() {
     let _guard = locked_with_env(&[]);
     let tab = create_tab(&temp_dir("rendered-unicode"), parent_shell()).tab_id;
-    assert!(
-        send_command(&tab, "echo BEFORE_CAPTURE", 10.0)
-            .status
-            .success()
-    );
+    assert!(run(&tab, "echo BEFORE_CAPTURE", 10.0).status.success());
     let command = "python -c \"import sys; sys.stdout.write(''.join('记录_%04d\\n' % i for i in range(4200))); print('FINAL_ERROR', file=sys.stderr); sys.exit(7)\"";
-    let accepted = send_command_with_output(&tab, command, false, 10.0);
+    let accepted = run_with_output(&tab, command, false, 10.0);
     let result = wait_for_completion(&accepted);
     for expected in ["记录_0000", "记录_4199", "FINAL_ERROR"] {
         assert!(result.stdout.contains(expected), "{result:?}");
@@ -67,12 +63,7 @@ fn terminal_state_keeps_scrolled_unicode_output_and_command_boundaries() {
     let screen = parse_tab_view(&run_cli(&["view", &tab])).screen;
     assert!(!screen.contains("记录_0000"), "{screen}");
     assert!(screen.contains("记录_4199"), "{screen}");
-    let next = wait_for_completion(&send_command_with_output(
-        &tab,
-        "echo AFTER_CAPTURE",
-        false,
-        10.0,
-    ));
+    let next = wait_for_completion(&run_with_output(&tab, "echo AFTER_CAPTURE", false, 10.0));
     assert!(next.stdout.contains("AFTER_CAPTURE"), "{next:?}");
     let saved = parse_command_result(&run_cli(&["view", &parse_command_id(&accepted)]));
     assert_eq!(saved.stdout, result.stdout);
@@ -85,7 +76,7 @@ fn terminal_mode_accepts_input_and_honors_user_redirection() {
     let tab = create_tab(&directory, parent_shell()).tab_id;
     let command =
         "python -c \"reply = input('INPUT_READY:'); print('INPUT_RECEIVED_' + reply, flush=True)\"";
-    let accepted = send_command_with_output(&tab, command, false, 0.3);
+    let accepted = run_with_output(&tab, command, false, 0.3);
     let id = parse_command_id(&accepted);
     let pending = wait_for_stdout(&id, "INPUT_READY:", Duration::from_secs(10));
     assert!(!pending.finished, "{pending:?}");
@@ -96,7 +87,7 @@ fn terminal_mode_accepts_input_and_honors_user_redirection() {
         "{finished:?}"
     );
     assert!(finished.finished, "{finished:?}");
-    let redirected = send_command_with_output(
+    let redirected = run_with_output(
         &tab,
         "python -c \"import sys; print('FILE_ONLY'); print('SCREEN_ONLY', file=sys.stderr)\" > user-output.txt",
         false,

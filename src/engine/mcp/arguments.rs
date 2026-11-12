@@ -63,7 +63,7 @@ impl ManualWriteInput {
 #[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[schemars(inline)]
-pub(super) struct SendCommandInput {
+pub(super) struct RunInput {
     pub(super) tab_id: String,
     pub(super) command: String,
     pub(super) separate_output: Option<bool>,
@@ -76,8 +76,8 @@ pub(super) struct FixedCommandInput {
     pub(super) command: String,
 }
 impl FixedCommandInput {
-    pub(super) fn with_output(self, separate_output: bool) -> SendCommandInput {
-        SendCommandInput {
+    pub(super) fn with_output(self, separate_output: bool) -> RunInput {
+        RunInput {
             tab_id: self.tab_id,
             command: self.command,
             separate_output: Some(separate_output),
@@ -92,7 +92,7 @@ pub(super) struct NewTabRequest<T> {
 }
 #[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub(super) struct SendCommandRequest<T> {
+pub(super) struct RunRequest<T> {
     #[schemars(length(min = 1))]
     pub(super) commands: Vec<T>,
     pub(super) wait_timeout: f64,

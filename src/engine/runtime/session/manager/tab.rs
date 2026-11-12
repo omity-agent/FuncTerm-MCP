@@ -51,7 +51,7 @@ impl TabDirectory {
             .manual_write(input, wait_timeout)
             .await
     }
-    pub(super) async fn send_command(
+    pub(super) async fn run(
         &self,
         tab_id: &str,
         command: &str,

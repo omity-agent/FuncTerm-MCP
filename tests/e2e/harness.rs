@@ -14,8 +14,8 @@ mod temp;
 mod test_environment;
 pub(crate) use command::run_cli_with_env;
 pub(crate) use command::{
-    complete_command, create_tab, create_tab_with_env, exe, manual_write, run_cli, send_command,
-    send_command_with_output, wait_for_completion, wait_for_stdout,
+    complete_command, create_tab, create_tab_with_env, exe, manual_write, run, run_cli,
+    run_with_output, wait_for_completion, wait_for_stdout,
 };
 #[cfg(windows)]
 pub(crate) use daemon::locked;

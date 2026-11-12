@@ -130,18 +130,18 @@ pub(crate) async fn run() -> Result<std::process::ExitCode> {
         CliCommand::ManualWrite {
             tab_id,
             text,
-            base64,
+            bytes,
             wait_timeout,
         } => {
             let settings = config::load()?;
-            let input = match (text, base64) {
+            let input = match (text, bytes) {
                 (Some(input_text), None) => KeyboardInput::Text(input_text),
                 (None, Some(encoded)) => KeyboardInput::Bytes(
                     STANDARD
                         .decode(&encoded)
-                        .context("invalid base64 keyboard input")?,
+                        .context("invalid bytes keyboard input")?,
                 ),
-                _ => anyhow::bail!("manual-write requires exactly one of --text or --base64"),
+                _ => anyhow::bail!("requires exactly one of --text or --bytes"),
             };
             let request = Request::ManualWrite {
                 tab_id,
@@ -150,14 +150,14 @@ pub(crate) async fn run() -> Result<std::process::ExitCode> {
             };
             print_result(interface::execute(&settings, request).await)
         }
-        CliCommand::SendCommand {
+        CliCommand::Run {
             tab_id,
             command: shell_command,
             separate_output,
             wait_timeout: wait_timeout_seconds,
         } => {
             let settings = config::load()?;
-            let request = Request::SendCommand {
+            let request = Request::Run {
                 tab_id,
                 command: shell_command,
                 separate_output: separate_output.unwrap_or(settings.command_separate_output),

@@ -18,7 +18,7 @@ impl RequestKind {
             Self::NewTab => PayloadKind::TabCreated,
             Self::Close => PayloadKind::TabClosed,
             Self::ManualWrite => PayloadKind::KeyboardWritten,
-            Self::SendCommand => PayloadKind::CommandAccepted,
+            Self::Run => PayloadKind::CommandAccepted,
             Self::View => PayloadKind::View,
         }
     }

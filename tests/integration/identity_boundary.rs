@@ -1,5 +1,5 @@
 use crate::permission_policy::{QUERY, privileged_output};
-use crate::support::{create_tab, locked_with_env, parse_command_result, send_command, temp_root};
+use crate::support::{create_tab, locked_with_env, parse_command_result, run, temp_root};
 use functerm::shell::quote;
 use named_lock::NamedLock;
 #[test]
@@ -19,7 +19,7 @@ fn ordinary_client_controls_a_daemon_and_mutex_created_by_the_test_process() {
     let instance = NamedLock::create(&name).unwrap();
     let _controller = locked_with_env(&[]);
     let tab = create_tab(&temp_root(), "powershell");
-    let identity = parse_command_result(&send_command(&tab.tab_id, QUERY, 10.0));
+    let identity = parse_command_result(&run(&tab.tab_id, QUERY, 10.0));
     assert_eq!(identity.exit_code, Some(0_i32), "{identity:?}");
     assert!(!privileged_output(&identity.stdout), "{identity:?}");
     let executable = quote::powershell_path(&crate::support::exe()).unwrap();
@@ -34,7 +34,7 @@ fn ordinary_client_controls_a_daemon_and_mutex_created_by_the_test_process() {
             "$env:FUNCTERM_DAEMON_SERVICE_NAME = {}\n& {executable} daemon {operation}",
             quote::powershell_string(service)
         );
-        let result = parse_command_result(&send_command(&tab.tab_id, &command, 10.0));
+        let result = parse_command_result(&run(&tab.tab_id, &command, 10.0));
         assert_eq!(result.exit_code, Some(0_i32), "{operation}: {result:?}");
         assert!(result.stdout.contains(message), "{operation}: {result:?}");
     }

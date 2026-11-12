@@ -1,6 +1,5 @@
 use crate::support::{
-    create_tab, locked_with_env, parse_command_result, parse_tab_created, run_cli, send_command,
-    temp_dir,
+    create_tab, locked_with_env, parse_command_result, parse_tab_created, run, run_cli, temp_dir,
 };
 use std::fs;
 #[test]
@@ -25,7 +24,7 @@ set -o history
     let _guard = locked_with_env(&[("HOME", home.path().to_str().unwrap())]);
     let cwd = temp_dir("bash-profile");
     let created = create_tab(&cwd, "bash");
-    let loaded = parse_command_result(&send_command(
+    let loaded = parse_command_result(&run(
         &created.tab_id,
         "profile_alias\nprintf '%s\\n' \"$FUNCTERM_LOAD_PROFILE\"\nbuiltin test -z \"${HISTFILE-}\" || exit 99\nfalse",
         10.0,
@@ -48,7 +47,7 @@ set -o history
     ]);
     assert!(disabled.status.success(), "{disabled:?}");
     let tab = parse_tab_created(&disabled);
-    let clean = parse_command_result(&send_command(
+    let clean = parse_command_result(&run(
         &tab.tab_id,
         "printf '%s\\n' \"${PROFILE_MARKER-unset}\" \"$FUNCTERM_LOAD_PROFILE\"",
         10.0,
@@ -77,7 +76,7 @@ export FUNCTERM_SESSION_ROOT=broken
     .unwrap();
     let _guard = locked_with_env(&[("HOME", home.path().to_str().unwrap())]);
     let created = create_tab(&temp_dir("zsh-profile"), "zsh");
-    let result = parse_command_result(&send_command(
+    let result = parse_command_result(&run(
         &created.tab_id,
         "profile_function\nprint -r -- \"$ZDOTDIR\"",
         10.0,
