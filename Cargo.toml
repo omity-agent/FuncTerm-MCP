@@ -116,7 +116,7 @@ futures-util = { version = "*", features = ["sink"] }
 humantime = "*"
 interprocess = { version = "*", features = ["tokio"] }
 itertools = "*"
-mimalloc = { git = "https://github.com/microsoft/mimalloc" }
+mimalloc = { git = "https://github.com/microsoft/mimalloc", default-features = false }
 named-lock = "*"
 nanoid = "*"
 notify = "*"
@@ -136,7 +136,9 @@ shell-words = "*"
 sonic-rs = { git = "https://github.com/cloudwego/sonic-rs" }
 strum = { version = "*", features = ["derive"] }
 sugar_path = "*"
-sysinfo = { git = "https://github.com/GuillaumeGomez/sysinfo", default-features = false, features = ["system"] }
+sysinfo = { git = "https://github.com/GuillaumeGomez/sysinfo", default-features = false, features = [
+    "system",
+] }
 tempfile = "*"
 thiserror = { git = "https://github.com/dtolnay/thiserror" }
 tokio = { version = "*", features = [
@@ -175,10 +177,14 @@ rustix = { version = "*", features = ["process"] }
 tokio = { version = "*", features = ["io-util", "process"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-gpuviewer-core = { git = "https://github.com/singhpratech/gpuviewer", default-features = false, features = ["nvidia"] }
+gpuviewer-core = { git = "https://github.com/singhpratech/gpuviewer", default-features = false, features = [
+    "nvidia",
+] }
 
 [target.'cfg(windows)'.dependencies]
-gpuviewer-core = { git = "https://github.com/singhpratech/gpuviewer", default-features = false, features = ["wddm"] }
+gpuviewer-core = { git = "https://github.com/singhpratech/gpuviewer", default-features = false, features = [
+    "wddm",
+] }
 os_pipe = "*"
 widestring = "*"
 windows-spawn = "*"

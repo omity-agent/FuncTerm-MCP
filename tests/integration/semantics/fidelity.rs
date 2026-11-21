@@ -97,6 +97,7 @@ fn terminal_capture_preserves_spacing_and_wide_character_wraps() {
         format!("{}界B", "A".repeat(119)),
         format!("{}界B", "A".repeat(239)),
         format!("{}A界B", "界".repeat(59)),
+        format!("{}界\nHARD_BREAK", "H".repeat(119)),
         "e\u{301} 中文 🧠🚀".to_owned(),
     ];
     let text = format!(

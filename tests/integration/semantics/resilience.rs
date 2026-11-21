@@ -99,15 +99,34 @@ fn bash_exit_replays_separated_streams_to_the_screen_once() {
     }
 }
 #[test]
-fn bash_keyboard_echo_preserves_supplementary_unicode() {
+fn keyboard_roundtrip_preserves_supplementary_unicode() {
     let _guard = locked_with_env(&[]);
-    let tab = create_tab(&temp_dir("unicode-echo"), "bash").tab_id;
-    let source = "IFS= read -r answer; printf '\\nVALUE=<%s>\\n' \"$answer\"";
-    let accepted = run_with_output(&tab, source, false, 0.0);
-    assert!(manual_write(&tab, "🙂\n".as_bytes(), 0.0).status.success());
-    let result = wait_for_completion(&accepted);
-    assert!(result.stdout.contains("VALUE=<🙂>"), "{result:?}");
-    let screen = parse_tab_view(&run_cli(&["view", &tab])).screen;
-    assert_eq!(screen.matches('🙂').count(), 2, "{screen}");
-    assert!(!screen.contains('\u{fffd}'), "{screen}");
+    for (shell, source, input, echoes) in [
+        (
+            "bash",
+            if cfg!(windows) {
+                "IFS= read -rs answer; printf '\\nVALUE=<%s>\\n' \"$answer\""
+            } else {
+                "IFS= read -r answer; printf '\\nVALUE=<%s>\\n' \"$answer\""
+            },
+            "🙂\n",
+            if cfg!(windows) { 1 } else { 2 },
+        ),
+        #[cfg(windows)]
+        (
+            "powershell",
+            "$answer = [Console]::ReadLine(); [Console]::WriteLine(\"VALUE=<{0}>\", $answer)",
+            "🙂\r",
+            2,
+        ),
+    ] {
+        let tab = create_tab(&temp_dir("unicode-input"), shell).tab_id;
+        let accepted = run_with_output(&tab, source, false, 0.0);
+        assert!(manual_write(&tab, input.as_bytes(), 0.0).status.success());
+        let result = wait_for_completion(&accepted);
+        assert!(result.stdout.contains("VALUE=<🙂>"), "{shell}: {result:?}");
+        let screen = parse_tab_view(&run_cli(&["view", &tab])).screen;
+        assert_eq!(screen.matches('🙂').count(), echoes, "{shell}: {screen}");
+        assert!(!screen.contains('\u{fffd}'), "{shell}: {screen}");
+    }
 }
