@@ -34,7 +34,7 @@ output_token_encoding = "o200k_base"
 unix_normal_user = ""
 
 # PowerShell 可执行文件候选
-powershell = ["pwsh", "powershell"]
+powershell = ["pwsh", "pwsh-preview"]
 
 # Bash 可执行文件候选。
 bash = ["bash"]
@@ -118,7 +118,7 @@ tabs = ""
 
 [mcp.new_tab.item_parameters]
 starting_directory = "初始位置。已有的 Tab 也可通过 run 改变 cwd（如 `cd` 命令）。"
-starting_shell = "启动时使用的交互式命令环境。在 Windows 系统，Bash 对应 MSYS2。"
+starting_shell = "启动时使用的交互式命令环境。在 Windows 系统上：Bash 对应 MSYS2 Bash 或 Git Bash；Z shell 不可用；不建议使用 CMD。"
 elevated = "默认为 false（普通权限）"
 
 [mcp.manual_write]

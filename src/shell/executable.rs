@@ -1,54 +1,63 @@
 mod choice;
+mod powershell_version;
 mod snapshot_system;
+#[cfg(windows)]
+mod windows_installations;
 pub(crate) use self::choice::ShellChoice;
 use self::snapshot_system::SnapshotSystem;
 use super::shims;
+use crate::engine::privileges::ShellIdentity;
 use crate::runtime::protocol::EnvironmentSnapshot;
 use anyhow::{Context as _, Result, bail};
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 pub(super) fn select_available_executable(
     choice: ShellChoice,
     candidates: &[String],
     environment: &EnvironmentSnapshot,
     cwd: &Path,
+    identity: &ShellIdentity,
 ) -> Result<PathBuf> {
     let inherited_shim = environment.value(shims::SHIM_DIR_ENV);
-    let mut errors = Vec::new();
-    for candidate in candidates {
-        match resolve_executable(
-            choice,
-            candidate,
-            cwd,
-            inherited_shim.as_deref(),
-            environment,
-        ) {
-            Ok(executable) => return Ok(executable),
-            Err(error) => errors.push(format!("{candidate}: {error:#}")),
-        }
+    let configured = candidates.iter().map(OsString::from);
+    #[cfg(windows)]
+    let lookup_names = configured.chain(
+        (choice == ShellChoice::PowerShell)
+            .then(|| windows_installations::discover(candidates, environment))
+            .into_iter()
+            .flatten(),
+    );
+    #[cfg(not(windows))]
+    let lookup_names = configured;
+    let mut matches = lookup_names
+        .flat_map(|candidate| {
+            which::WhichConfig::new_with_sys(SnapshotSystem::new(environment, cwd))
+                .binary_name(candidate.clone())
+                .all_results()
+                .inspect_err(|error| {
+                    tracing::debug!(?candidate, %error, "executable lookup failed");
+                })
+                .into_iter()
+                .flatten()
+        })
+        .filter(|path| {
+            match is_rejected_executable(choice, path, inherited_shim.as_deref(), environment) {
+                Ok(rejected) => !rejected,
+                Err(error) => {
+                    tracing::debug!(?path, %error, "executable inspection failed");
+                    false
+                }
+            }
+        });
+    if choice == ShellChoice::PowerShell {
+        return powershell_version::select(matches, cwd, environment, identity);
     }
-    bail!(
-        "none of the configured shell executables are available: {}; {}",
-        candidates.join(", "),
-        errors.join("; ")
-    )
-}
-fn resolve_executable(
-    choice: ShellChoice,
-    candidate: &str,
-    cwd: &Path,
-    inherited_shim: Option<&OsStr>,
-    environment: &EnvironmentSnapshot,
-) -> Result<PathBuf> {
-    let executables = which::WhichConfig::new_with_sys(SnapshotSystem::new(environment, cwd))
-        .binary_name(candidate.into())
-        .all_results()?;
-    for executable in executables {
-        if !is_rejected_executable(choice, &executable, inherited_shim, environment)? {
-            return Ok(executable);
-        }
-    }
-    bail!("all executable candidates for `{candidate}` are unsuitable")
+    matches.next().with_context(|| {
+        format!(
+            "none of the configured shell executables are available: {}",
+            candidates.join(", ")
+        )
+    })
 }
 fn is_rejected_executable(
     choice: ShellChoice,

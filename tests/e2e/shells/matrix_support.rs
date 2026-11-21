@@ -3,8 +3,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 pub(super) struct ShellCase {
     pub(super) name: &'static str,
-    pub(super) env_var: &'static str,
-    pub(super) executables: &'static [&'static str],
     pub(super) expected_exit_code: i32,
 }
 pub(super) const fn shell_cases() -> &'static [ShellCase] {
@@ -12,54 +10,31 @@ pub(super) const fn shell_cases() -> &'static [ShellCase] {
         #[cfg(windows)]
         ShellCase {
             name: "powershell",
-            env_var: "FUNCTERM_POWERSHELL",
-            executables: &["pwsh", "pwsh.exe", "powershell", "powershell.exe"],
             expected_exit_code: 7,
         },
         ShellCase {
             name: "bash",
-            env_var: "FUNCTERM_BASH",
-            executables: &["bash", "bash.exe"],
             expected_exit_code: 1,
         },
         #[cfg(windows)]
         ShellCase {
             name: "nu",
-            env_var: "FUNCTERM_NUSHELL",
-            executables: &["nu", "nu.exe"],
             expected_exit_code: 0,
         },
         #[cfg(windows)]
         ShellCase {
             name: "cmd",
-            env_var: "FUNCTERM_CMD",
-            executables: &["cmd", "cmd.exe"],
             expected_exit_code: 7,
         },
         #[cfg(not(windows))]
         ShellCase {
             name: "zsh",
-            env_var: "FUNCTERM_ZSH",
-            executables: &["zsh"],
             expected_exit_code: 1,
         },
     ]
 }
-pub(super) fn required_executable(case: &ShellCase) -> String {
-    crate::support::required_executable(case.executables)
-        .to_string_lossy()
-        .into_owned()
-}
 pub(super) fn daemon() -> crate::support::TestGuard {
-    let executables = shell_cases()
-        .iter()
-        .map(|case| (case.env_var, required_executable(case)))
-        .collect::<Vec<_>>();
-    let environment = executables
-        .iter()
-        .map(|pair| (pair.0, pair.1.as_str()))
-        .collect::<Vec<_>>();
-    crate::support::locked_with_env(&environment)
+    crate::support::locked_with_env(&[])
 }
 pub(super) fn case_dir(shell: &str, leaf: &str) -> PathBuf {
     let path = crate::support::temp_dir(shell)

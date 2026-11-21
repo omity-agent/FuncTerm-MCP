@@ -1,3 +1,4 @@
+use crate::engine::privileges::ShellIdentity;
 use crate::runtime::config::Settings;
 use crate::runtime::protocol::EnvironmentSnapshot;
 mod drivers;
@@ -21,12 +22,14 @@ impl ShellChoice {
         settings: &Settings,
         environment: &crate::runtime::protocol::EnvironmentSnapshot,
         cwd: &Path,
+        identity: &ShellIdentity,
     ) -> Result<std::path::PathBuf> {
         executable::select_available_executable(
             self,
             self.executable_candidates(settings),
             environment,
             cwd,
+            identity,
         )
     }
     pub(crate) fn startup(

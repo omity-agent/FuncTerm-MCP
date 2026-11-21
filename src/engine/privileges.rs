@@ -2,6 +2,7 @@
 mod access_token;
 #[cfg(windows)]
 pub(crate) mod desktop_host;
+pub(crate) mod query_process;
 #[cfg(windows)]
 mod relay_process;
 #[cfg(windows)]
@@ -25,7 +26,7 @@ use portable_pty::{Child, ChildKiller, MasterPty, SlavePty};
 #[cfg(windows)]
 pub(crate) use relay_process::spawn as spawn_normal_host;
 #[cfg(unix)]
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::io::{Read, Write};
 #[cfg(unix)]
 pub(crate) use unix_account::ShellIdentity;
@@ -53,16 +54,23 @@ pub(crate) struct PtyProcess {
 #[cfg(unix)]
 impl ShellIdentity {
     pub(crate) fn configure(&self, command: &mut CommandBuilder) -> Result<()> {
-        let Some(options) = self.helper_arguments() else {
-            return Ok(());
-        };
-        let executable = std::env::current_exe().context("failed to resolve shell launcher")?;
-        let mut arguments = vec![executable.into_os_string(), "internal-run-shell".into()];
-        arguments.extend(options);
-        arguments.push("--".into());
-        arguments.extend(command.get_argv().iter().cloned());
+        let arguments = self.command_line(command.get_argv())?;
         *command.get_argv_mut() = arguments;
         Ok(())
+    }
+    fn command_line(
+        &self,
+        arguments: impl IntoIterator<Item = impl AsRef<OsStr>>,
+    ) -> Result<Vec<OsString>> {
+        let mut argv = Vec::new();
+        if let Some(options) = self.helper_arguments() {
+            let executable = std::env::current_exe().context("failed to resolve shell launcher")?;
+            argv.extend([executable.into_os_string(), "internal-run-shell".into()]);
+            argv.extend(options);
+            argv.push("--".into());
+        }
+        argv.extend(arguments.into_iter().map(|arg| arg.as_ref().to_owned()));
+        Ok(argv)
     }
 }
 #[cfg(unix)]

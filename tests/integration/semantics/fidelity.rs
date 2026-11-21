@@ -12,6 +12,10 @@ fn powershell_submissions_preserve_interactive_engine_semantics() {
             crate::support::wait_for_completion(&run_with_output(&tab, source, separated, 0.0))
         };
         assert_eq!(submit("$Error.Count").stdout.trim(), "0");
+        assert_eq!(
+            submit("\"$PSCulture|$PSUICulture\"").stdout.trim(),
+            "en-US|en-US"
+        );
         for source in [
             "[datetime]::Parse('invalid-date')",
             "Invoke-MissingSubmissionCommand",

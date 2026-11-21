@@ -79,6 +79,14 @@ pub(super) enum CliCommand {
     },
     #[cfg(windows)]
     #[command(hide = true)]
+    InternalQueryShell {
+        #[arg(long)]
+        require_ordinary: bool,
+        #[arg(last = true, required = true)]
+        command: Vec<std::ffi::OsString>,
+    },
+    #[cfg(windows)]
+    #[command(hide = true)]
     InternalPtyHost {
         #[arg(long)]
         rows: u16,

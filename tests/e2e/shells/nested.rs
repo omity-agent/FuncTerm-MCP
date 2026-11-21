@@ -30,6 +30,10 @@ fn cli_keeps_nested_launch_result_stable_after_nested_shell_exits() {
         let marker = format!("MCP_PTY_NESTED_{}", case.name.to_ascii_uppercase());
         let nested = complete_command(&tab.tab_id, &nested_marker_command(case.name, &marker));
         assert!(nested.stdout.contains(&marker), "{nested:?}");
+        if case.name == "powershell" {
+            let culture = complete_command(&tab.tab_id, "\"$PSCulture|$PSUICulture\"");
+            assert_eq!(culture.stdout.trim(), "en-US|en-US", "{culture:?}");
+        }
         let exited = complete_command(&tab.tab_id, exit_command(case.name));
         if case.name == "cmd" {
             assert_eq!(exited.exit_code, Some(42_i32));

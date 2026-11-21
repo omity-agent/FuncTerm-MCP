@@ -95,6 +95,7 @@ impl ShellLauncher {
             starting_shell,
             client_environment,
             starting_directory,
+            &identity,
         )?;
         let executable =
             crate::text::path_text(&managed_environment.executable, "executable path")?;

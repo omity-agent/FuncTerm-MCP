@@ -1,5 +1,6 @@
 use super::ShellChoice;
 use crate::contract::{EXECUTABLE_NAME, HELPER_EXECUTABLE_ENV};
+use crate::engine::privileges::ShellIdentity;
 use crate::runtime::config::{DAEMON_SERVICE_NAME_ENV, Settings};
 use crate::runtime::protocol::EnvironmentSnapshot;
 use anyhow::{Context as _, Result};
@@ -47,8 +48,9 @@ pub(crate) fn environment(
     current_shell: ShellChoice,
     inherited: &EnvironmentSnapshot,
     cwd: &Path,
+    identity: &ShellIdentity,
 ) -> Result<ManagedEnvironment> {
-    let executable = current_shell.executable_path(settings, inherited, cwd)?;
+    let executable = current_shell.executable_path(settings, inherited, cwd, identity)?;
     let current_exe = std::env::current_exe().context("failed to resolve current executable")?;
     let inherited_shim = inherited.value(SHIM_DIR_ENV);
     let path = prepend_path(
@@ -90,7 +92,7 @@ pub(crate) fn environment(
         let resolved = if shell == current_shell {
             Ok(executable.clone())
         } else {
-            shell.executable_path(settings, inherited, cwd)
+            shell.executable_path(settings, inherited, cwd, identity)
         };
         if let Ok(resolved_path) = resolved {
             env.push((

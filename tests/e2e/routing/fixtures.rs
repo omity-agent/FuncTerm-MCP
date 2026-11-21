@@ -7,13 +7,10 @@ use std::path::PathBuf;
 pub(super) fn start_runtime(label: &str) -> (TestGuard, PathBuf, &'static str) {
     let python = required_executable(&["python3", "python"]);
     let bash = required_executable(&["bash"]);
-    let mut environment = vec![("FUNCTERM_PYTHON", python.to_str().unwrap())];
-    environment.push(("FUNCTERM_BASH", bash.to_str().unwrap()));
-    #[cfg(windows)]
-    let powershell = required_executable(&["pwsh", "powershell"]);
-    #[cfg(windows)]
-    environment.push(("FUNCTERM_POWERSHELL", powershell.to_str().unwrap()));
-    let guard = locked_with_env(&environment);
+    let guard = locked_with_env(&[
+        ("FUNCTERM_PYTHON", python.to_str().unwrap()),
+        ("FUNCTERM_BASH", bash.to_str().unwrap()),
+    ]);
     (guard, temp_dir(label), parent_shell())
 }
 const fn parent_shell() -> &'static str {

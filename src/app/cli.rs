@@ -22,6 +22,14 @@ pub(crate) async fn run() -> Result<std::process::ExitCode> {
             crate::engine::privileges::run_shell(uid, &command)
         }
         #[cfg(windows)]
+        CliCommand::InternalQueryShell {
+            require_ordinary,
+            command,
+        } => {
+            return crate::engine::privileges::query_process::execute(&command, require_ordinary)
+                .map(crate::shim::process_exit);
+        }
+        #[cfg(windows)]
         CliCommand::InternalPtyHost {
             rows,
             cols,
