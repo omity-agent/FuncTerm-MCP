@@ -1,5 +1,5 @@
 use super::{McpServer, invocation::Backend};
-use crate::runtime::{config::Settings, session::Manager};
+use crate::runtime::{config::Settings, daemon::dispatch::Dispatcher};
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use axum::Router;
@@ -15,7 +15,7 @@ pub(crate) struct HttpServer {
     task: Option<JoinHandle<Result<()>>>,
 }
 impl HttpServer {
-    pub(crate) async fn bind(settings: Settings, manager: Arc<Manager>) -> Result<Self> {
+    pub(crate) async fn bind(settings: Settings, dispatcher: Arc<Dispatcher>) -> Result<Self> {
         let http = &settings.mcp.http;
         let listener = TcpListener::bind(http.bind_address)
             .await
@@ -43,7 +43,7 @@ impl HttpServer {
             settings,
             privilege_mode,
             output_mode,
-            Backend::direct(manager),
+            Backend::direct(dispatcher),
         )?;
         let service =
             StreamableHttpService::new(move || Ok(handler.clone()), Arc::new(sessions), config);

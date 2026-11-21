@@ -20,7 +20,7 @@ impl ShellSession {
         let command_id = expected.id();
         tracing::debug!(%command_id, "delivering keyboard input to running command");
         let visible_revision = self.screen.visible_revision()?;
-        expected.deliver_input(|| self.write_keyboard(input))?;
+        expected.deliver_input(|| self.write_keyboard(command_id, input))?;
         tracing::debug!(%command_id, "keyboard input delivery completed");
         Ok(visible_revision)
     }
@@ -28,12 +28,16 @@ impl ShellSession {
         clippy::pattern_type_mismatch,
         reason = "borrow the request payload without cloning its text or bytes"
     )]
-    fn write_keyboard(&self, input: &KeyboardInput) -> Result<InputDelivery> {
+    fn write_keyboard(&self, command_id: &str, input: &KeyboardInput) -> Result<InputDelivery> {
         let shell_bytes = match input {
             KeyboardInput::Text(text) => self.current_choice().keyboard_bytes(text.as_bytes()),
             KeyboardInput::Bytes(bytes) => Cow::Borrowed(bytes.as_slice()),
         };
         let batch = InputBatch::from_bytes(&shell_bytes);
+        let delivery = batch.delivery();
+        if delivery.interrupted() {
+            self.screen.defer_window_titles(command_id);
+        }
         let mut writer = self.writer.lock();
         for segment in batch.segments() {
             writer
@@ -42,7 +46,7 @@ impl ShellSession {
         }
         writer.flush().context("failed to flush pty writer")?;
         drop(writer);
-        Ok(batch.delivery())
+        Ok(delivery)
     }
     pub(in crate::engine::runtime::session::manager) fn ensure_idle(
         &self,

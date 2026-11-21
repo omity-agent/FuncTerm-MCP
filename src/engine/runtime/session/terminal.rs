@@ -7,9 +7,9 @@ mod registry;
 mod rendering;
 mod transcript;
 pub(super) use self::capture::CommandCapture;
-use self::emulation::PtyResponder;
+use self::emulation::{PtyResponder, WindowTitleChanges};
 pub(super) use self::io::start_reader;
-use self::registry::CaptureRegistry;
+use self::registry::{CaptureEnd, CaptureRegistry};
 use self::rendering::CommandScreen;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result, bail};
@@ -22,7 +22,6 @@ use wezterm_escape_parser::{
     Action, CSI,
     csi::{Edit, EraseInDisplay},
     esc::{Esc, EscCode},
-    osc::OperatingSystemCommand,
     parser::Parser,
 };
 pub(super) struct Terminal {
@@ -32,7 +31,7 @@ pub(super) struct Terminal {
 struct TerminalState {
     screen: Arc<Mutex<CommandScreen>>,
     responder: PtyResponder,
-    screen_title: String,
+    window_titles: WindowTitleChanges,
     parser: Parser,
     actions: Vec<Action>,
     captures: CaptureRegistry,
@@ -54,12 +53,16 @@ impl Terminal {
         let responder = PtyResponder::new(writer);
         let mut screen = CommandScreen::new(size, Box::new(responder.clone()));
         screen.model.advance_bytes(initial_title.as_bytes());
+        let window_titles = WindowTitleChanges::default();
+        screen
+            .model
+            .set_notification_handler(Box::new(window_titles.clone()));
         let visible_contents = screen.visible_contents().into();
         Ok(Arc::new(Self {
             state: Mutex::new(TerminalState {
                 screen: Arc::new(Mutex::new(screen)),
                 responder,
-                screen_title: model_title.to_owned(),
+                window_titles,
                 parser: Parser::new(),
                 actions: Vec::new(),
                 captures: CaptureRegistry::new(model_title.to_owned()),
@@ -95,8 +98,11 @@ impl Terminal {
     pub(super) fn title(&self) -> String {
         self.state.lock().captures.title().to_owned()
     }
+    pub(super) fn defer_window_titles(&self, id: &str) {
+        self.state.lock().captures.defer_window_titles(id);
+    }
     pub(super) fn complete_at_prompt(&self, id: &str) -> Result<()> {
-        self.state.lock().captures.finish(id)
+        self.state.lock().captures.finish(id, CaptureEnd::Prompt)
     }
     pub(super) fn process(&self, chunk: &[u8]) -> Result<()> {
         let mut state = self.state.lock();
@@ -169,24 +175,10 @@ impl TerminalState {
         if actions.is_empty() {
             return Ok(false);
         }
-        let title_written = actions.iter().any(|action| {
-            matches!(
-                action,
-                Action::OperatingSystemCommand(command) if matches!(
-                    command.as_ref(),
-                    OperatingSystemCommand::SetIconNameAndWindowTitle(_)
-                        | OperatingSystemCommand::SetWindowTitle(_)
-                        | OperatingSystemCommand::SetWindowTitleSun(_)
-                )
-            )
-        });
-        let mut screen = self.screen.lock();
-        screen.apply(actions);
+        self.screen.lock().apply(actions);
         self.responder.check()?;
-        if title_written || self.screen_title != screen.model.get_title() {
-            screen.model.get_title().clone_into(&mut self.screen_title);
-            drop(screen);
-            self.captures.update(&self.screen_title)?;
+        if let Some(title) = self.window_titles.take() {
+            self.captures.record_window_title(title);
         }
         Ok(true)
     }

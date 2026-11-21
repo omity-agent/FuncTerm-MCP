@@ -5,7 +5,24 @@ use parking_lot::Mutex;
 pub(super) struct CaptureRegistry {
     title: String,
     captures: BTreeMap<String, Arc<CommandCapture>>,
-    active: Option<String>,
+    active: Option<ActiveCapture>,
+}
+struct ActiveCapture {
+    id: String,
+    capture: Arc<CommandCapture>,
+    titles: TitleUpdates,
+}
+#[derive(Default)]
+enum TitleUpdates {
+    #[default]
+    Live,
+    AwaitingEnd,
+    Deferred(String),
+}
+#[derive(Clone, Copy)]
+pub(super) enum CaptureEnd {
+    Marker,
+    Prompt,
 }
 impl CaptureRegistry {
     pub(super) const fn new(title: String) -> Self {
@@ -41,11 +58,11 @@ impl CaptureRegistry {
             }
             ProtocolEvent::End(id) => {
                 tracing::debug!(command_id = %id, "terminal command end marker");
-                self.finish(&id)
+                self.finish(&id, CaptureEnd::Marker)
             }
             ProtocolEvent::Prompt(cwd) => {
-                if let Some(id) = self.active.as_deref() {
-                    self.require(id)?.observe_prompt(cwd);
+                if let Some(active) = self.active.as_ref() {
+                    active.capture.observe_prompt(cwd);
                 }
                 Ok(())
             }
@@ -67,35 +84,57 @@ impl CaptureRegistry {
         Ok(())
     }
     fn start(&mut self, id: &str) -> Result<()> {
-        if let Some(active) = self.active.as_deref() {
-            bail!("command capture {id} started while {active} is active");
+        if let Some(active) = self.active.as_ref() {
+            bail!("command capture {id} started while {} is active", active.id);
         }
-        self.require(id)?.start()?;
-        self.active = Some(id.to_owned());
+        let capture = self.require(id)?;
+        capture.start()?;
+        self.active = Some(ActiveCapture {
+            id: id.to_owned(),
+            capture,
+            titles: TitleUpdates::Live,
+        });
         Ok(())
     }
-    pub(super) fn finish(&mut self, id: &str) -> Result<()> {
-        if let Some(active) = self.active.as_deref()
-            && active != id
-        {
-            bail!("command capture {id} ended while {active} is active");
+    pub(super) fn finish(&mut self, id: &str, end: CaptureEnd) -> Result<()> {
+        if let Some(active) = self.active.as_mut() {
+            if active.id != id {
+                bail!("command capture {id} ended while {} is active", active.id);
+            }
+            if matches!(end, CaptureEnd::Marker)
+                && let TitleUpdates::Deferred(title) = core::mem::take(&mut active.titles)
+                && active.capture.update_title(&title)
+            {
+                self.title = title;
+            }
         }
         drop(self.require(id)?.cancel()?);
         self.captures.remove(id);
-        if self.active.as_deref() == Some(id) {
-            self.active = None;
-        }
+        self.active = None;
         Ok(())
     }
     pub(super) fn title(&self) -> &str {
         &self.title
     }
-    pub(super) fn update(&mut self, title: &str) -> Result<()> {
-        if let Some(id) = self.active.as_deref() {
-            self.require(id)?.update(title);
-            title.clone_into(&mut self.title);
+    pub(super) fn defer_window_titles(&mut self, id: &str) {
+        if let Some(active) = self.active.as_mut()
+            && active.id == id
+            && matches!(active.titles, TitleUpdates::Live)
+        {
+            active.titles = TitleUpdates::AwaitingEnd;
         }
-        Ok(())
+    }
+    pub(super) fn record_window_title(&mut self, title: String) {
+        let Some(active) = self.active.as_mut() else {
+            return;
+        };
+        if matches!(active.titles, TitleUpdates::Live) {
+            if active.capture.update_title(&title) {
+                self.title = title;
+            }
+        } else {
+            active.titles = TitleUpdates::Deferred(title);
+        }
     }
     fn require(&self, id: &str) -> Result<Arc<CommandCapture>> {
         self.captures

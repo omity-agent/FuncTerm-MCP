@@ -136,6 +136,7 @@ shell-words = "*"
 sonic-rs = { git = "https://github.com/cloudwego/sonic-rs" }
 strum = { version = "*", features = ["derive"] }
 sugar_path = "*"
+sysinfo = { git = "https://github.com/GuillaumeGomez/sysinfo", default-features = false, features = ["system"] }
 tempfile = "*"
 thiserror = { git = "https://github.com/dtolnay/thiserror" }
 tokio = { version = "*", features = [
@@ -173,7 +174,11 @@ privdrop = "*"
 rustix = { version = "*", features = ["process"] }
 tokio = { version = "*", features = ["io-util", "process"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+gpuviewer-core = { git = "https://github.com/singhpratech/gpuviewer", default-features = false, features = ["nvidia"] }
+
 [target.'cfg(windows)'.dependencies]
+gpuviewer-core = { git = "https://github.com/singhpratech/gpuviewer", default-features = false, features = ["wddm"] }
 os_pipe = "*"
 widestring = "*"
 windows-spawn = "*"

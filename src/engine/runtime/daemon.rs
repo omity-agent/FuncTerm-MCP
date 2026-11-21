@@ -1,8 +1,8 @@
 use crate::runtime::config::Settings;
+use crate::runtime::daemon::dispatch::Dispatcher;
 use crate::runtime::daemon::report::StartupReporter;
 use crate::runtime::protocol::time_consumption::{self, ProcessingTime};
 use crate::runtime::protocol::{Payload, Request, RequestKind, RequestRejected, Response};
-use crate::runtime::session::Manager;
 use crate::runtime::transport::ServerConnection;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
@@ -13,6 +13,7 @@ use tokio::task::JoinSet;
 mod control_signal;
 pub(crate) mod dispatch;
 pub(crate) mod report;
+pub(crate) mod resource_alerts;
 pub(crate) async fn run(settings: Settings) -> Result<()> {
     crate::engine::init_diagnostics(&settings.diagnostics_filter)?;
     let mut startup_reporter = StartupReporter::from_env();
@@ -31,13 +32,12 @@ async fn run_inner(settings: Settings, startup_reporter: &mut StartupReporter) -
     let ipc = settings.ipc.clone();
     let measure_processing = settings.benchmark.processing_timing;
     let http_settings = settings.clone();
-    let manager = Arc::new(
-        tokio::task::spawn_blocking(move || Manager::new(settings))
-            .await
-            .context("daemon initialization worker failed")??,
-    );
+    let handler = tokio::task::spawn_blocking(move || Dispatcher::new(settings))
+        .await
+        .context("daemon initialization worker failed")??;
+    let dispatcher = Arc::new(handler);
     let listener = crate::runtime::transport::listener(&service_name, &ipc)?;
-    let mut http = crate::mcp::HttpServer::bind(http_settings, Arc::clone(&manager)).await?;
+    let mut http = crate::mcp::HttpServer::bind(http_settings, Arc::clone(&dispatcher)).await?;
     startup_reporter.ready(http.address())?;
     let mut workers = JoinSet::new();
     let (shutdown, mut shutdown_requests) = mpsc::channel(1);
@@ -47,7 +47,7 @@ async fn run_inner(settings: Settings, startup_reporter: &mut StartupReporter) -
                 Ok(stream) => {
                     let connection = ServerConnection::new(stream, &ipc);
                     workers.spawn(serve_connection(
-                        Arc::clone(&manager),
+                        Arc::clone(&dispatcher),
                         connection,
                         shutdown.clone(),
                         measure_processing,
@@ -72,7 +72,7 @@ async fn run_inner(settings: Settings, startup_reporter: &mut StartupReporter) -
         report_worker(result);
     }
     let (http_stopped, stopped) =
-        tokio::join!(http.stop(ipc.shutdown_timeout()?), manager.shutdown(),);
+        tokio::join!(http.stop(ipc.shutdown_timeout()?), dispatcher.shutdown());
     if let Err(error) = http_stopped.as_ref() {
         tracing::error!("MCP HTTP shutdown failed");
         tracing::debug!(
@@ -173,7 +173,7 @@ const fn recoverable_platform_accept_error(_error: &io::Error) -> bool {
     false
 }
 async fn serve_connection(
-    manager: Arc<Manager>,
+    dispatcher: Arc<Dispatcher>,
     mut connection: ServerConnection,
     shutdown: mpsc::Sender<ServerConnection>,
     measure_processing: bool,
@@ -189,8 +189,7 @@ async fn serve_connection(
         let kind = RequestKind::from(&request);
         tracing::trace!(%kind, "received IPC request");
         let (result, processing) =
-            time_consumption::capture(measure_processing, dispatch::execute(&manager, request))
-                .await;
+            time_consumption::capture(measure_processing, dispatcher.execute(request)).await;
         let response = response_from(result, processing);
         tracing::trace!(%kind, "sending IPC response");
         connection.send(response).await?;

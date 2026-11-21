@@ -1,5 +1,6 @@
 use crate::engine::mcp::WaitTimeoutSettings;
 use crate::engine::privileges::PrivilegeMode;
+use crate::runtime::daemon::resource_alerts::ResourceAlertSettings;
 use crate::runtime::protocol::OutputMode;
 use alloc::collections::BTreeMap;
 use anyhow::{Context as _, Result, ensure};
@@ -28,6 +29,7 @@ pub(crate) struct Settings {
     pub(crate) cmd: Vec<String>,
     pub(crate) bun: Vec<String>,
     pub(crate) python: Vec<String>,
+    pub(crate) resource_alerts: ResourceAlertSettings,
     pub(crate) ipc: IpcSettings,
     pub(crate) mcp: McpSettings,
 }
@@ -132,6 +134,7 @@ pub(crate) fn load() -> Result<Settings> {
     crate::contract::validate_window_title(&settings.terminal_model_title)?;
     settings.ipc.validate()?;
     settings.mcp.wait_timeout.validate()?;
+    settings.resource_alerts.apply_environment()?;
     apply_string_override(
         "FUNCTERM_DIAGNOSTICS_FILTER",
         &mut settings.diagnostics_filter,

@@ -54,6 +54,17 @@ bun = ["bun"]
 # Python 可执行文件候选。
 python = ["python3", "python"]
 
+[resource_alerts]
+# 在系统资源达到警戒值时警告。可通过 FUNCTERM_RESOURCE_ALERTS 覆盖
+enabled = false
+
+# 整数百分比，取值 0–100（包含边界）。
+# 可分别通过 FUNCTERM_RESOURCE_CPU_PERCENT、FUNCTERM_RESOURCE_RAM_PERCENT 和
+# FUNCTERM_RESOURCE_VRAM_PERCENT 覆盖。
+cpu_percent = 80
+ram_percent = 80
+vram_percent = 80
+
 [benchmark]
 # 请求路径累计活跃计时；通过 FUNCTERM_BENCHMARK_PROCESSING_TIMING 临时启用。
 processing_timing = false

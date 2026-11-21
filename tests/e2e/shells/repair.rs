@@ -1,6 +1,6 @@
 use crate::support::{
     complete_command, create_tab, manual_write, parse_command_id, parse_command_result,
-    parse_tab_view, run, run_cli, temp_dir, wait_for_completion, wait_for_stdout,
+    parse_tab_view, run, run_cli, tagged_content, temp_dir, wait_for_completion, wait_for_stdout,
 };
 #[test]
 fn python_captures_native_standard_streams() {
@@ -85,7 +85,12 @@ fn interrupted_shells_return_to_a_usable_prompt() {
         ("cmd", "ping -n 30 127.0.0.1", "echo AFTER_INTERRUPT"),
     ] {
         let tab = create_tab(&temp_dir(shell), shell).tab_id;
-        let cwd = complete_command(&tab, "echo CWD_READY").cwd;
+        let setup = if shell == "bash" {
+            r#"PROMPT_COMMAND='printf "\033]2;PROMPT_WINDOW\007"'; printf '\033]2;COMMAND_WINDOW\007'"#
+        } else {
+            "echo CWD_READY"
+        };
+        let cwd = complete_command(&tab, setup).cwd;
         let announce = if shell == "nu" { "print" } else { "echo" };
         let synchronized = format!("{announce} INTERRUPT_READY\n{source}");
         let accepted = run(&tab, &synchronized, 0.0);
@@ -113,6 +118,16 @@ fn interrupted_shells_return_to_a_usable_prompt() {
         let result = wait_for_completion(&accepted);
         assert_eq!(result.exit_code, Some(130_i32), "{shell}: {result:?}");
         assert_eq!(result.cwd, cwd, "{shell}: {result:?}");
+        if shell == "bash" {
+            for target in [&id, &tab] {
+                let document = String::from_utf8(run_cli(&["view", target]).stdout).unwrap();
+                assert_eq!(
+                    tagged_content(&document, "TITLE"),
+                    Some("\nCOMMAND_WINDOW\n"),
+                    "{document}"
+                );
+            }
+        }
         assert!(
             !matches!(result.time_consumption.as_str(), "0ns" | "0.00ms"),
             "{shell}: {result:?}"

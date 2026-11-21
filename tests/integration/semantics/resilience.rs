@@ -34,11 +34,7 @@ fn assert_environment_change(change: &str) {
 fn window_title_persists_across_commands_and_tab_queries() {
     let _guard = locked_with_env(&[]);
     for (shell, source, next) in [
-        (
-            "bash",
-            "PROMPT_COMMAND='printf \"\\033]2;SHELL_DEFAULT\\033\\\\\"'; printf '\\033]2;持久标题\\033\\\\'",
-            "printf NEXT",
-        ),
+        ("bash", r"printf '\033]2;持久标题\033\\'", "printf NEXT"),
         (
             "python",
             "print('\\x1b]2;持久标题\\x1b\\\\', end='')",
@@ -51,17 +47,24 @@ fn window_title_persists_across_commands_and_tab_queries() {
         ),
     ] {
         let tab = create_tab(&temp_dir("persistent-title"), shell).tab_id;
-        complete_command(&tab, source);
-        let accepted = crate::support::run(&tab, next, 0.0);
-        let id = crate::support::parse_command_id(&accepted);
-        wait_for_completion(&accepted);
-        for response in [run_cli(&["view", &tab]), run_cli(&["view", &id])] {
-            let document = String::from_utf8(response.stdout).unwrap();
-            assert_eq!(
-                tagged_content(&document, "TITLE").unwrap().trim(),
-                "持久标题",
-                "{document}"
+        if shell == "bash" {
+            complete_command(
+                &tab,
+                r#"PROMPT_COMMAND='printf "\033]1;PROMPT_ICON\007\033]2;PROMPT_WINDOW\007"'"#,
             );
+        }
+        for command in [source, next] {
+            let accepted = crate::support::run(&tab, command, 0.0);
+            let id = crate::support::parse_command_id(&accepted);
+            assert_eq!(wait_for_completion(&accepted).exit_code, Some(0_i32));
+            for response in [run_cli(&["view", &tab]), run_cli(&["view", &id])] {
+                let document = String::from_utf8(response.stdout).unwrap();
+                assert_eq!(
+                    tagged_content(&document, "TITLE"),
+                    Some("\n持久标题\n"),
+                    "{document}"
+                );
+            }
         }
     }
 }

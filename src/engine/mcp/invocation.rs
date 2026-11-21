@@ -1,46 +1,45 @@
 use crate::runtime::{
     client::DaemonClient,
     config::Settings,
-    daemon,
+    daemon::dispatch::Dispatcher,
     protocol::{Payload, Request},
-    session::Manager,
 };
 use alloc::sync::Arc;
 use anyhow::Result;
 use parking_lot::Mutex;
 #[derive(Clone)]
 pub(super) struct Backend {
-    manager: Option<Arc<Manager>>,
+    dispatcher: Option<Arc<Dispatcher>>,
 }
-pub(super) struct PreparedBackend<'manager> {
-    manager: Option<&'manager Arc<Manager>>,
+pub(super) struct PreparedBackend<'dispatcher> {
+    dispatcher: Option<&'dispatcher Dispatcher>,
     connection: Mutex<Option<DaemonClient>>,
 }
 impl Backend {
     pub(super) const fn ipc() -> Self {
-        Self { manager: None }
+        Self { dispatcher: None }
     }
-    pub(super) const fn direct(manager: Arc<Manager>) -> Self {
+    pub(super) const fn direct(dispatcher: Arc<Dispatcher>) -> Self {
         Self {
-            manager: Some(manager),
+            dispatcher: Some(dispatcher),
         }
     }
     pub(super) async fn prepare(&self, settings: &Settings) -> Result<PreparedBackend<'_>> {
-        let connection = if self.manager.is_none() {
+        let connection = if self.dispatcher.is_none() {
             Some(DaemonClient::connect_or_start(settings).await?)
         } else {
             None
         };
         Ok(PreparedBackend {
-            manager: self.manager.as_ref(),
+            dispatcher: self.dispatcher.as_deref(),
             connection: Mutex::new(connection),
         })
     }
 }
 impl PreparedBackend<'_> {
     pub(super) async fn execute(&self, settings: &Settings, request: Request) -> Result<Payload> {
-        if let Some(manager) = self.manager {
-            return daemon::dispatch::execute(manager, request).await;
+        if let Some(dispatcher) = self.dispatcher {
+            return dispatcher.execute(request).await;
         }
         let prepared = self.connection.lock().take();
         let mut connection = match prepared {

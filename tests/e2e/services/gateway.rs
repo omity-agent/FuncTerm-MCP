@@ -14,6 +14,8 @@ mod live_output;
 mod pagination;
 #[path = "mcp/presentation/policy_matrix.rs"]
 mod policy_matrix;
+#[path = "mcp/presentation/threshold_notes.rs"]
+mod threshold_notes;
 #[path = "mcp/wire/stdio_peer.rs"]
 mod wire;
 use rmcp::serde_json::json;

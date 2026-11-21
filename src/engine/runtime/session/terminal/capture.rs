@@ -108,11 +108,13 @@ impl CommandCapture {
         self.changed.notify(usize::MAX);
         Ok(())
     }
-    pub(super) fn update(&self, title: &str) {
+    pub(super) fn update_title(&self, title: &str) -> bool {
         let mut state = self.state.lock();
-        if state.phase == CapturePhase::Active {
-            title.clone_into(&mut state.title);
+        if state.phase != CapturePhase::Active {
+            return false;
         }
+        title.clone_into(&mut state.title);
+        true
     }
     pub(super) fn observe_prompt(&self, cwd: String) {
         let mut state = self.state.lock();

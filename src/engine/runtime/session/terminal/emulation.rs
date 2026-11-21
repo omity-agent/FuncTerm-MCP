@@ -4,7 +4,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use parking_lot::Mutex;
 use portable_pty::PtySize;
 use std::io::{self, Write};
-use wezterm_term::{TerminalConfiguration, TerminalSize, color::ColorPalette};
+use wezterm_term::{Alert, AlertHandler, TerminalConfiguration, TerminalSize, color::ColorPalette};
 #[derive(Debug, Default)]
 struct EmulatorConfiguration {
     history: AtomicUsize,
@@ -39,6 +39,20 @@ pub(super) fn emulator(size: PtySize, writer: Box<dyn Write + Send>) -> wezterm_
         Ordering::Relaxed,
     );
     model
+}
+#[derive(Clone, Default)]
+pub(super) struct WindowTitleChanges(Arc<Mutex<Option<String>>>);
+impl WindowTitleChanges {
+    pub(super) fn take(&self) -> Option<String> {
+        self.0.lock().take()
+    }
+}
+impl AlertHandler for WindowTitleChanges {
+    fn alert(&mut self, alert: Alert) {
+        if let Alert::WindowTitleChanged(title) = alert {
+            *self.0.lock() = Some(title);
+        }
+    }
 }
 #[derive(Clone)]
 pub(super) struct PtyResponder {
