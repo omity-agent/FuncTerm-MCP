@@ -5,12 +5,7 @@ use named_lock::NamedLock;
 #[test]
 fn ordinary_client_controls_a_daemon_and_mutex_created_by_the_test_process() {
     let target = locked_with_env(&[]);
-    let environment = target.env();
-    let service = &environment
-        .iter()
-        .find(|pair| pair.0 == "FUNCTERM_DAEMON_SERVICE_NAME")
-        .unwrap()
-        .1;
+    let service = target.service_name();
     let name = format!(
         "functerm-instance-{}",
         blake3::hash(service.as_bytes()).to_hex()

@@ -3,10 +3,10 @@ mod launcher;
 mod shell_session;
 mod tab;
 use crate::runtime::config::Settings;
-use crate::runtime::protocol::{EnvironmentSnapshot, OutputTokenizer};
+use crate::runtime::protocol::{EnvironmentSnapshot, OutputTokenizer, RequestRejected};
 use crate::shell::ShellChoice;
 use alloc::sync::Arc;
-use anyhow::{Context as _, Result, bail, ensure};
+use anyhow::{Context as _, Result, ensure};
 use parking_lot::RwLock;
 use shell_session::process;
 use std::path::{Path, PathBuf};
@@ -14,7 +14,7 @@ use tokio::sync::Semaphore;
 use tokio_util::task::TaskTracker;
 pub(crate) struct Manager {
     launcher: launcher::ShellLauncher,
-    tabs: tab::TabDirectory,
+    tabs: Arc<tab::TabDirectory>,
     blocking: BlockingExecutor,
     tokenizer: Arc<OutputTokenizer>,
     accepting_tabs: RwLock<bool>,
@@ -31,7 +31,7 @@ impl Manager {
         let shutdown_timeout = settings.ipc.shutdown_timeout()?;
         Ok(Self {
             launcher: launcher::ShellLauncher::new(settings)?,
-            tabs: tab::TabDirectory::default(),
+            tabs: Arc::default(),
             blocking,
             tokenizer,
             accepting_tabs: RwLock::new(true),
@@ -94,11 +94,20 @@ impl Manager {
     ) -> Result<String> {
         let accepting = self.accepting_tabs.read();
         ensure!(*accepting, "daemon is shutting down");
-        if !starting_directory.is_dir() {
-            bail!(
-                "starting_directory does not exist or is not a directory: {}",
-                starting_directory.display()
-            );
+        match starting_directory.metadata() {
+            Ok(metadata) if metadata.is_dir() => {}
+            Ok(_) => return Err(invalid_directory(starting_directory).into()),
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::NotFound
+                        | std::io::ErrorKind::NotADirectory
+                        | std::io::ErrorKind::InvalidInput
+                ) =>
+            {
+                return Err(invalid_directory(starting_directory).into());
+            }
+            Err(error) => return Err(error).context("failed to inspect starting_directory"),
         }
         let tab_id = self.tabs.next_tab_id();
         let session = self.launcher.launch(
@@ -119,6 +128,12 @@ impl Manager {
         drop(accepting);
         Ok(tab_id)
     }
+}
+fn invalid_directory(path: &Path) -> RequestRejected {
+    RequestRejected::new(format!(
+        "starting_directory does not exist or is not a directory: {}",
+        path.display()
+    ))
 }
 #[derive(Clone)]
 pub(super) struct BlockingExecutor {

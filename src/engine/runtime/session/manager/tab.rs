@@ -5,25 +5,26 @@ use self::snapshot::TabSnapshot;
 use super::BlockingExecutor;
 use super::command::ManagedCommand;
 use super::shell_session::ShellSession;
-use crate::runtime::protocol::{KeyboardInput, OutputTokenizer, ShellView, ViewResult};
+use crate::runtime::protocol::{
+    KeyboardInput, OutputTokenizer, RequestRejected, ShellView, ViewResult,
+};
 use alloc::sync::Arc;
-use anyhow::{Result, bail};
+use anyhow::Result;
 use dashmap::DashMap;
 use parking_lot::Mutex;
 use tokio_util::task::TaskTracker;
 #[derive(Default)]
 pub(super) struct TabDirectory {
     tabs: DashMap<String, Arc<Tab>>,
-    commands: DashMap<String, Arc<Tab>>,
+    commands: DashMap<String, (Arc<Tab>, Arc<ManagedCommand>)>,
 }
 pub(super) struct Tab {
     id: String,
-    pub(super) operation: tokio::sync::Mutex<()>,
+    operation: Arc<tokio::sync::Mutex<()>>,
     pub(super) blocking: BlockingExecutor,
     pub(super) tokenizer: Arc<OutputTokenizer>,
     pub(super) supervisors: TaskTracker,
     state: Mutex<TabState>,
-    commands: DashMap<String, Arc<ManagedCommand>>,
 }
 struct TabState {
     session: Option<Arc<ShellSession>>,
@@ -52,19 +53,28 @@ impl TabDirectory {
             .await
     }
     pub(super) async fn run(
-        &self,
+        self: &Arc<Self>,
         tab_id: &str,
         command: &str,
         separate_output: bool,
         wait_timeout: core::time::Duration,
-    ) -> Result<(String, crate::runtime::protocol::EndReason, ViewResult)> {
+    ) -> Result<(String, ViewResult)> {
         let command_id = self.next_command_id();
         let tab = self.require_tab(tab_id)?;
-        let started = tab
-            .start_command(command_id.clone(), command.to_owned(), separate_output)
+        let directory = Arc::clone(self);
+        let source = command.to_owned();
+        let managed = tab
+            .with_operation(move |owner| {
+                let started = owner.dispatch_command(command_id, &source, separate_output)?;
+                directory.commands.insert(
+                    started.id().to_owned(),
+                    (Arc::clone(owner), Arc::clone(&started)),
+                );
+                Ok(started)
+            })
             .await?;
-        self.commands.insert(command_id, Arc::clone(&tab));
-        started.wait(wait_timeout).await
+        let view = tab.command_view(&managed, wait_timeout).await?;
+        Ok((managed.id().to_owned(), view))
     }
     pub(super) async fn view(
         &self,
@@ -75,16 +85,16 @@ impl TabDirectory {
         if let Some(found_tab) = matching_tab {
             return found_tab.view(wait_timeout).await;
         }
-        let command_owner = self.commands.get(id).map(|entry| Arc::clone(entry.value()));
-        if let Some(owner_tab) = command_owner {
-            return owner_tab.command_view(id, wait_timeout).await;
+        let matching_command = self.commands.get(id).map(|entry| entry.value().clone());
+        if let Some((owner, command)) = matching_command {
+            return owner.command_view(&command, wait_timeout).await;
         }
-        bail!("unknown id {id}")
+        Err(RequestRejected::new(format!("unknown id {id}")).into())
     }
     pub(super) fn next_tab_id(&self) -> String {
         self.next_id("tab-")
     }
-    pub(super) fn next_command_id(&self) -> String {
+    fn next_command_id(&self) -> String {
         self.next_id("command-")
     }
     fn require_tab(&self, tab_id: &str) -> Result<Arc<Tab>> {
@@ -92,7 +102,10 @@ impl TabDirectory {
         if let Some(found_tab) = matching_tab {
             return Ok(found_tab);
         }
-        bail!("Unknown Tab ID \"{tab_id}\", The ID does not exist, or the Tab has been reclaimed.")
+        Err(RequestRejected::new(format!(
+            "Unknown Tab ID \"{tab_id}\", The ID does not exist, or the Tab has been reclaimed."
+        ))
+        .into())
     }
     fn next_id(&self, prefix: &str) -> String {
         loop {
@@ -117,7 +130,7 @@ impl Tab {
         let snapshot = TabSnapshot::from_session(&session)?;
         Ok(Self {
             id,
-            operation: tokio::sync::Mutex::new(()),
+            operation: Arc::default(),
             blocking,
             tokenizer,
             supervisors,
@@ -125,25 +138,47 @@ impl Tab {
                 session: Some(session),
                 snapshot,
             }),
-            commands: DashMap::new(),
         })
     }
     pub(super) fn id(&self) -> &str {
         &self.id
     }
+    pub(super) async fn with_operation<T>(
+        self: &Arc<Self>,
+        operation: impl FnOnce(&Arc<Self>) -> Result<T> + Send + 'static,
+    ) -> Result<T>
+    where
+        T: Send + 'static,
+    {
+        let guard = Arc::clone(&self.operation).lock_owned().await;
+        let tab = Arc::clone(self);
+        self.blocking
+            .run(move || {
+                let _guard = guard;
+                operation(&tab)
+            })
+            .await
+    }
+    pub(super) fn closed_tab(&self) -> RequestRejected {
+        RequestRejected::new(format!(
+            "\"{}\" exists in the records, but the tab has been closed. Did you run an exit command within it?",
+            self.id
+        ))
+    }
     pub(super) fn live_session(&self) -> Result<Arc<ShellSession>> {
-        let session = self.state.lock().session.clone();
-        session.map_or_else(
-            || bail!("\"{}\" exists in the records, but the tab has been closed. Did you run an exit command within it?", self.id),
-            Ok,
-        )
+        Ok(self.optional_session().ok_or_else(|| self.closed_tab())?)
     }
     pub(super) fn remember(&self, session: &ShellSession) -> Result<TabSnapshot> {
-        Ok(self.store_snapshot(TabSnapshot::from_session(session)?, false))
+        let snapshot = TabSnapshot::from_session(session)?;
+        self.state.lock().snapshot = snapshot.clone();
+        Ok(snapshot)
     }
-    pub(super) fn close_session(&self, session: &ShellSession) -> Result<()> {
-        session.terminate()?;
-        self.store_snapshot(TabSnapshot::from_session(session)?, true);
+    pub(super) fn record_closure(&self, session: &ShellSession) -> Result<()> {
+        let snapshot = TabSnapshot::from_session(session);
+        let mut state = self.state.lock();
+        state.session = None;
+        state.snapshot = snapshot?;
+        drop(state);
         Ok(())
     }
     pub(super) fn snapshot_view(&self) -> ViewResult {
@@ -154,30 +189,6 @@ impl Tab {
     }
     pub(super) fn optional_session(&self) -> Option<Arc<ShellSession>> {
         self.state.lock().session.clone()
-    }
-    pub(super) fn insert_command(&self, command: Arc<ManagedCommand>) {
-        self.commands.insert(command.id().to_owned(), command);
-    }
-    pub(super) fn remove_command(&self, command_id: &str) -> Option<Arc<ManagedCommand>> {
-        self.commands
-            .remove(command_id)
-            .map(|(_id, command)| command)
-    }
-    pub(super) fn find_command(&self, command_id: &str) -> Option<Arc<ManagedCommand>> {
-        self.commands
-            .get(command_id)
-            .map(|entry| Arc::clone(entry.value()))
-    }
-    fn store_snapshot(&self, mut snapshot: TabSnapshot, close: bool) -> TabSnapshot {
-        let mut state = self.state.lock();
-        if snapshot.screen.is_empty() && !state.snapshot.screen.is_empty() {
-            snapshot.screen.clone_from(&state.snapshot.screen);
-        }
-        state.snapshot = snapshot.clone();
-        if close {
-            state.session = None;
-        }
-        snapshot
     }
 }
 fn random_id_suffix() -> String {

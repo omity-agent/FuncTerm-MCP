@@ -1,6 +1,6 @@
 use super::endpoint::ClientConnection;
 use crate::runtime::config::Settings;
-use crate::runtime::protocol::{Payload, Request, RequestKind, Response};
+use crate::runtime::protocol::{Payload, Request, RequestKind, RequestRejected, Response};
 use anyhow::{Context as _, Result};
 use std::io;
 pub(crate) struct DaemonClient {
@@ -41,10 +41,16 @@ impl DaemonClient {
                 payload,
                 processing,
             } => (payload.ensure_matches(kind), processing),
-            Response::Err {
+            Response::Rejected {
                 message,
                 processing,
-            } => (Err(anyhow::anyhow!(message)), processing),
+            } => (Err(RequestRejected::new(message).into()), processing),
+            Response::Failed { processing } => (
+                Err(anyhow::anyhow!(
+                    "daemon could not complete the {kind} request"
+                )),
+                processing,
+            ),
         };
         if let Some(measurement) = processing {
             measurement.merge_current();

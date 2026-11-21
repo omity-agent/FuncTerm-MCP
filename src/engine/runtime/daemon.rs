@@ -1,7 +1,7 @@
 use crate::runtime::config::Settings;
 use crate::runtime::daemon::report::StartupReporter;
 use crate::runtime::protocol::time_consumption::{self, ProcessingTime};
-use crate::runtime::protocol::{Payload, Request, Response};
+use crate::runtime::protocol::{Payload, Request, RequestKind, RequestRejected, Response};
 use crate::runtime::session::Manager;
 use crate::runtime::transport::ServerConnection;
 use alloc::sync::Arc;
@@ -14,14 +14,7 @@ mod control_signal;
 pub(crate) mod dispatch;
 pub(crate) mod report;
 pub(crate) async fn run(settings: Settings) -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_new(&settings.diagnostics_filter)
-                .context("invalid diagnostics_filter")?,
-        )
-        .with_writer(std::io::stderr)
-        .try_init()
-        .map_err(|error| anyhow::anyhow!("failed to initialize daemon diagnostics: {error}"))?;
+    crate::engine::init_diagnostics(&settings.diagnostics_filter)?;
     let mut startup_reporter = StartupReporter::from_env();
     match run_inner(settings, &mut startup_reporter).await {
         Ok(()) => Ok(()),
@@ -81,10 +74,18 @@ async fn run_inner(settings: Settings, startup_reporter: &mut StartupReporter) -
     let (http_stopped, stopped) =
         tokio::join!(http.stop(ipc.shutdown_timeout()?), manager.shutdown(),);
     if let Err(error) = http_stopped.as_ref() {
-        tracing::error!(%error, "MCP HTTP shutdown failed");
+        tracing::error!("MCP HTTP shutdown failed");
+        tracing::debug!(
+            error = format!("{error:#}"),
+            "MCP HTTP shutdown failure details"
+        );
     }
     if let Err(error) = stopped.as_ref() {
-        tracing::error!(%error, "terminal session shutdown failed");
+        tracing::error!("terminal session shutdown failed");
+        tracing::debug!(
+            error = format!("{error:#}"),
+            "terminal session shutdown failure details"
+        );
     }
     let mut shutdown_connection = shutdown_reason?;
     let completion = http_stopped.and(stopped);
@@ -99,24 +100,44 @@ async fn run_inner(settings: Settings, startup_reporter: &mut StartupReporter) -
 fn report_worker(result: Result<Result<()>, tokio::task::JoinError>) {
     match result {
         Ok(Ok(())) => {}
-        Ok(Err(error)) => tracing::error!(error = format!("{error:#}"), "IPC connection failed"),
+        Ok(Err(error)) => {
+            tracing::error!("IPC connection failed");
+            tracing::debug!(
+                error = format!("{error:#}"),
+                "IPC connection failure details"
+            );
+        }
         Err(error) if error.is_cancelled() => {}
-        Err(error) => tracing::error!(%error, "IPC connection task failed"),
+        Err(error) => {
+            tracing::error!("IPC connection task failed");
+            tracing::debug!(%error, "IPC connection task failure details");
+        }
     }
 }
-fn response_from<E>(result: Result<Payload, E>, processing: Option<ProcessingTime>) -> Response
-where
-    E: core::fmt::Display,
-{
+fn response_from(
+    result: Result<Payload, impl core::borrow::Borrow<anyhow::Error>>,
+    processing: Option<ProcessingTime>,
+) -> Response {
     match result {
         Ok(payload) => Response::Ok {
             payload,
             processing,
         },
-        Err(error) => Response::Err {
-            message: format!("{error:#}"),
-            processing,
-        },
+        Err(error) => {
+            let failure = error.borrow();
+            if let Some(rejection) = failure.downcast_ref::<RequestRejected>() {
+                return Response::Rejected {
+                    message: rejection.to_string(),
+                    processing,
+                };
+            }
+            tracing::error!("daemon request failed");
+            tracing::debug!(
+                error = format!("{failure:#}"),
+                "daemon request failure details"
+            );
+            Response::Failed { processing }
+        }
     }
 }
 fn recoverable_accept_error(error: &io::Error) -> bool {
@@ -165,11 +186,15 @@ async fn serve_connection(
                 .map_err(|error| anyhow::anyhow!("failed to request daemon shutdown: {error}"))?;
             return Ok(());
         }
+        let kind = RequestKind::from(&request);
+        tracing::trace!(%kind, "received IPC request");
         let (result, processing) =
             time_consumption::capture(measure_processing, dispatch::execute(&manager, request))
                 .await;
         let response = response_from(result, processing);
+        tracing::trace!(%kind, "sending IPC response");
         connection.send(response).await?;
+        tracing::trace!(%kind, "sent IPC response");
     }
     Ok(())
 }

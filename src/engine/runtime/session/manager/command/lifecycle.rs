@@ -1,14 +1,17 @@
 mod buffering;
 mod history;
 use self::{buffering::SeparatedOutput, history::CommandInputHistory};
-use crate::runtime::protocol::{CommandOutput, CommandSnapshot, OutputTokenizer, OutputTokens};
+use crate::runtime::protocol::{
+    CommandOutput, CommandSnapshot, EndReason, OutputTokenizer, OutputTokens, RequestRejected,
+};
 use crate::runtime::session::keyboard::InputDelivery;
-use crate::runtime::session::observation::PathWatch;
+use crate::runtime::session::observation::{PathWatch, wait_until};
 use crate::runtime::session::records::{CommandRecord, DoneFile, read_command_result};
 use crate::runtime::session::terminal::CommandCapture;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use core::time::Duration;
+use event_listener::Event;
 use parking_lot::Mutex;
 use std::time::Instant;
 pub(in crate::engine::runtime::session::manager) struct ManagedCommand {
@@ -18,35 +21,24 @@ pub(in crate::engine::runtime::session::manager) struct ManagedCommand {
     pub(super) state: Mutex<ManagedCommandState>,
     pub(super) capture: Arc<CommandCapture>,
     pub(super) tokenizer: Arc<OutputTokenizer>,
+    pub(super) settled: Event,
 }
 pub(super) struct ManagedCommandState {
-    pub(super) wait: CommandWait,
-    pub(super) cached_view: Option<CommandSnapshot>,
+    pub(super) outcome: Option<Result<SettledCommand, String>>,
     pub(super) input: CommandInputHistory,
-    pub(super) session_exit: bool,
     separated: Option<SeparatedOutput>,
     terminal_tokens: OutputTokens,
 }
+pub(super) struct SettledCommand {
+    pub(super) reason: EndReason,
+    pub(super) view: CommandSnapshot,
+}
 impl ManagedCommandState {
-    pub(super) fn finish(&mut self, view: CommandSnapshot, wait: CommandWait) {
-        self.cached_view = Some(view);
-        self.wait = wait;
+    pub(super) fn finish(&mut self, outcome: Result<SettledCommand, String>) {
+        self.outcome = Some(outcome);
         self.separated = None;
         self.terminal_tokens = OutputTokens::default();
     }
-}
-#[derive(Clone, Copy)]
-pub(in crate::engine::runtime::session::manager) enum CommandWait {
-    Running,
-    Finished,
-    Failed,
-}
-#[derive(Debug, thiserror :: Error)]
-pub(in crate::engine::runtime::session::manager) enum CommandInputFailure {
-    #[error("manual_write target command ended before input could be written")]
-    CommandEnded,
-    #[error(transparent)]
-    Write(#[from] anyhow::Error),
 }
 impl ManagedCommand {
     pub(super) fn new(
@@ -61,15 +53,14 @@ impl ManagedCommand {
             record,
             started_at: Instant::now(),
             state: Mutex::new(ManagedCommandState {
-                wait: CommandWait::Running,
-                cached_view: None,
+                outcome: None,
                 input: CommandInputHistory::default(),
-                session_exit: false,
                 separated: None,
                 terminal_tokens: OutputTokens::default(),
             }),
             capture,
             tokenizer,
+            settled: Event::new(),
         }
     }
     pub(in crate::engine::runtime::session::manager) fn id(&self) -> &str {
@@ -81,10 +72,13 @@ impl ManagedCommand {
     pub(in crate::engine::runtime::session::manager) fn deliver_input(
         &self,
         write: impl FnOnce() -> Result<InputDelivery>,
-    ) -> Result<(), CommandInputFailure> {
+    ) -> Result<()> {
         let mut state = self.state.lock();
-        if !matches!(state.wait, CommandWait::Running) {
-            return Err(CommandInputFailure::CommandEnded);
+        if state.outcome.is_some() || !self.capture.active() || self.record.done.try_exists()? {
+            return Err(RequestRejected::new(
+                "manual_write target command ended before input could be written",
+            )
+            .into());
         }
         let delivery = write()?;
         state.input.observe(delivery);
@@ -94,22 +88,12 @@ impl ManagedCommand {
     pub(in crate::engine::runtime::session::manager) async fn wait(
         &self,
         limit: Duration,
-    ) -> Result<CommandWait> {
-        let initial = self.state.lock().wait;
-        if !matches!(initial, CommandWait::Running) {
-            return Ok(initial);
-        }
-        let result = self.capture.wait_ended(limit).await;
-        let current = self.state.lock().wait;
-        if !matches!(current, CommandWait::Running) {
-            return Ok(current);
-        }
-        match result {
-            Ok(true) => Ok(CommandWait::Finished),
-            Ok(false) if self.record.done.try_exists()? => Ok(CommandWait::Finished),
-            Ok(false) => Ok(CommandWait::Running),
-            Err(error) => Err(error),
-        }
+    ) -> Result<()> {
+        wait_until(&self.settled, limit, || Ok(self.is_settled())).await?;
+        Ok(())
+    }
+    pub(super) fn is_settled(&self) -> bool {
+        self.state.lock().outcome.is_some()
     }
     pub(in crate::engine::runtime::session::manager) async fn wait_started(
         &self,
@@ -161,18 +145,5 @@ impl ManagedCommand {
                 .read(&self.record, &self.tokenizer, finished)?
         };
         read_command_result(self.time_consumption(), title, output, tokens, done)
-    }
-    pub(super) fn requests_session_exit(&self) -> Result<bool> {
-        let state = self.state.lock();
-        if !matches!(state.wait, CommandWait::Running) {
-            return Ok(state.session_exit);
-        }
-        drop(state);
-        self.record.session_exit.try_exists().with_context(|| {
-            format!(
-                "failed to inspect session exit marker {}",
-                self.record.session_exit.display()
-            )
-        })
     }
 }

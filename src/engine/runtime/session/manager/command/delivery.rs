@@ -1,5 +1,6 @@
-use super::super::{shell_session::KeyboardWriteFailure, tab::Tab};
-use crate::runtime::protocol::{KeyboardInput, ViewResult};
+use super::super::tab::Tab;
+use super::SessionEnd;
+use crate::runtime::protocol::{KeyboardInput, RequestRejected, ViewResult};
 use alloc::sync::Arc;
 use anyhow::Result;
 use core::time::Duration;
@@ -9,54 +10,40 @@ impl Tab {
         input: KeyboardInput,
         wait_timeout: Duration,
     ) -> Result<ViewResult> {
-        let active_session = self.live_session()?;
-        let expected = active_session
-            .busy_command()
-            .ok_or(KeyboardWriteFailure::IdlePrompt)?;
-        active_session.wait_for_command_start(&expected).await?;
-        let expected_id = expected.id().to_owned();
-        let target_tab = Arc::clone(self);
-        let (session, delivery) = self
-            .blocking
-            .run(move || {
-                let session = target_tab.live_session()?;
-                if !session.is_alive()? {
-                    target_tab.close_session(&session)?;
-                    anyhow::bail!(
-                        "\"{}\" exists in the records, but the tab has been closed. Did you run an exit command within it?",
-                        target_tab.id()
-                    );
+        let session = self.live_session()?;
+        let expected = session.busy_command().ok_or_else(|| {
+            RequestRejected::new(
+                "manual_write is unavailable while the prompt is idle; use run for prompt commands",
+            )
+        })?;
+        session.wait_for_command_start(&expected).await?;
+        let target = Arc::clone(&session);
+        let revision = self
+            .with_operation(move |tab| {
+                tab.live_session()?;
+                if let Some(code) = target.exit_code()? {
+                    tab.end_session(&target, SessionEnd::Exited(code))?;
+                    return Err(tab.closed_tab().into());
                 }
-                session.refresh_choice()?;
-                let delivery = session.write_keyboard_for_running_command(&expected_id, &input);
-                Ok((session, delivery))
+                target.refresh_choice()?;
+                match target.write_keyboard_for_running_command(&expected, &input) {
+                    Err(error) if !error.is::<RequestRejected>() => {
+                        if let Err(cleanup) = tab.end_session(&target, SessionEnd::Failed) {
+                            tracing::error!(
+                                "failed to close the Tab after keyboard delivery failed"
+                            );
+                            tracing::debug!(
+                                error = format!("{cleanup:#}"),
+                                "shell shutdown failure details"
+                            );
+                        }
+                        Err(error)
+                    }
+                    result => result,
+                }
             })
             .await?;
-        match delivery {
-            Ok(revision) => {
-                session.wait_for_output(revision, wait_timeout).await?;
-                let observed_tab = Arc::clone(self);
-                self.blocking
-                    .run(move || {
-                        if session.is_alive()? {
-                            Ok(observed_tab.remember(&session)?.into_view(true))
-                        } else {
-                            observed_tab.close_session(&session)?;
-                            Ok(observed_tab.snapshot_view())
-                        }
-                    })
-                    .await
-            }
-            Err(
-                error @ (KeyboardWriteFailure::IdlePrompt | KeyboardWriteFailure::CommandEnded),
-            ) => Err(error.into()),
-            Err(KeyboardWriteFailure::Write(error)) => {
-                let failed_tab = Arc::clone(self);
-                self.blocking
-                    .run(move || failed_tab.close_session(&session))
-                    .await?;
-                Err(error)
-            }
-        }
+        session.wait_for_output(revision, wait_timeout).await?;
+        self.with_operation(|tab| tab.tab_view()).await
     }
 }

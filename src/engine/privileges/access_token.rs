@@ -1,5 +1,6 @@
 use super::desktop_host;
 use crate::runtime::config::Settings;
+use crate::runtime::protocol::RequestRejected;
 use anyhow::{Context as _, Result, ensure};
 use std::os::windows::io::{AsRawHandle as _, FromRawHandle as _, OwnedHandle};
 use windows::Win32::{
@@ -16,10 +17,12 @@ impl ShellIdentity {
     pub(crate) fn resolve(elevated: bool, _settings: &Settings) -> Result<Self> {
         let token = current_token()?;
         let privileged = is_elevated(&token)?;
-        ensure!(
-            !elevated || privileged,
-            "elevated Tab requires the Daemon to already have administrator permissions"
-        );
+        if elevated && !privileged {
+            return Err(RequestRejected::new(
+                "elevated Tab requires the Daemon to already have administrator permissions",
+            )
+            .into());
+        }
         let reduced = privileged && !elevated;
         if reduced {
             let _normal_parent = normal_parent()?;

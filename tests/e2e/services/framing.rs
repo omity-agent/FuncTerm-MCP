@@ -22,14 +22,12 @@ enum ProbePayload {
 async fn ipc_preserves_fragmented_and_pipelined_frames() {
     let guard = locked_with_env(&[]);
     let mut stream = connect(&guard).await;
-    let body = rmp_serde::to_vec(&ProbeRequest::Ping).unwrap();
-    let header = u32::try_from(body.len()).unwrap().to_be_bytes();
-    for byte in header.iter().chain(body.iter()) {
+    let frame = ping_frame();
+    for byte in &frame {
         stream.write_all(core::slice::from_ref(byte)).await.unwrap();
     }
     for _ in 0_usize..3 {
-        stream.write_all(&header).await.unwrap();
-        stream.write_all(&body).await.unwrap();
+        stream.write_all(&frame).await.unwrap();
     }
     for _ in 0_usize..4 {
         assert_pong(&mut stream).await;
@@ -52,23 +50,20 @@ async fn incomplete_and_oversized_ipc_frames_do_not_block_other_clients() {
         "oversized frame should close its connection"
     );
     let mut healthy = connect(&guard).await;
-    let body = rmp_serde::to_vec(&ProbeRequest::Ping).unwrap();
-    healthy
-        .write_all(&u32::try_from(body.len()).unwrap().to_be_bytes())
-        .await
-        .unwrap();
-    healthy.write_all(&body).await.unwrap();
+    healthy.write_all(&ping_frame()).await.unwrap();
     assert_pong(&mut healthy).await;
     drop(guard);
 }
+fn ping_frame() -> Vec<u8> {
+    let body = rmp_serde::to_vec(&ProbeRequest::Ping).unwrap();
+    let header = u32::try_from(body.len()).unwrap().to_be_bytes();
+    [header.as_slice(), &body].concat()
+}
 async fn connect(guard: &TestGuard) -> LocalSocketStream {
-    let environment = guard.env();
-    let service = &environment
-        .iter()
-        .find(|pair| pair.0 == "FUNCTERM_DAEMON_SERVICE_NAME")
-        .unwrap()
-        .1;
-    let socket = format!("functerm-ipc-{}", blake3::hash(service.as_bytes()).to_hex());
+    let socket = format!(
+        "functerm-ipc-{}",
+        blake3::hash(guard.service_name().as_bytes()).to_hex()
+    );
     let name = socket.as_str().to_ns_name::<GenericNamespaced>().unwrap();
     LocalSocketStream::connect(name).await.unwrap()
 }

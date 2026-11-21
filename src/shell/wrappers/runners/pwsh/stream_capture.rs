@@ -6,7 +6,7 @@ pub(super) const SOURCE: &str = r#"public sealed class FuncTermOutputCapture : I
         readonly IntPtr handle;
         readonly bool windows = Environment.OSVersion.Platform == PlatformID.Win32NT;
         public SharedFile(string path) {
-            file = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
+            file = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
             handle = file.SafeFileHandle.DangerousGetHandle();
         }
         public IntPtr Handle { get { return handle; } }

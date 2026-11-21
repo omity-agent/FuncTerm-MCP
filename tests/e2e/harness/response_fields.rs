@@ -18,10 +18,11 @@ pub(crate) struct TabView {
 }
 pub(crate) fn parse_command_result(output: &Output) -> CommandResult {
     let text = checked_stdout(output);
+    let code = element(&text, "EXIT_CODE");
     CommandResult {
         cwd: element(&text, "CWD"),
         finished: element(&text, "FINISHED").parse().unwrap(),
-        exit_code: parse_exit_code(&element(&text, "EXIT_CODE")),
+        exit_code: (!code.is_empty()).then(|| code.parse().unwrap()),
         time_consumption: element(&text, "TIME_CONSUMPTION"),
         stdout: tagged_content(&text, "STDOUT")
             .or_else(|| tagged_content(&text, "OUTPUT"))
@@ -72,9 +73,6 @@ fn checked_stdout(output: &Output) -> String {
 fn element(text: &str, name: &str) -> String {
     let content = tagged_content(text, name)
         .unwrap_or_else(|| panic!("response is missing <{name}>: {text}"));
-    if matches!(name, "STDOUT" | "STDERR") {
-        return content.to_owned();
-    }
     content
         .strip_prefix('\n')
         .unwrap()
@@ -89,10 +87,4 @@ pub(crate) fn tagged_content<'text>(text: &'text str, name: &str) -> Option<&'te
     let (_, after_open) = text.split_once(&format!("<{tag}>"))?;
     let (content, _) = after_open.rsplit_once(&format!("</{tag}>"))?;
     Some(content)
-}
-fn parse_exit_code(value: &str) -> Option<i32> {
-    match value {
-        "" => None,
-        code => Some(code.parse().unwrap()),
-    }
 }

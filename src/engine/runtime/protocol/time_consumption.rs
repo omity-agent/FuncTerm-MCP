@@ -13,23 +13,22 @@ pub(super) fn adaptive(duration: Duration) -> String {
     if nanoseconds < NANOS_PER_SECOND {
         milliseconds(duration)
     } else if nanoseconds < NANOS_PER_MINUTE {
-        scaled(nanoseconds, NANOS_PER_SECOND, "s")
+        scaled(duration, NANOS_PER_SECOND, "s")
     } else {
-        scaled(nanoseconds, NANOS_PER_MINUTE, "min")
+        scaled(duration, NANOS_PER_MINUTE, "min")
     }
 }
 pub(super) fn milliseconds(duration: Duration) -> String {
-    scaled(duration.as_nanos(), NANOS_PER_MILLISECOND, "ms")
+    scaled(duration, NANOS_PER_MILLISECOND, "ms")
 }
-fn scaled(nanoseconds: u128, nanoseconds_per_unit: u128, suffix: &str) -> String {
-    let whole = nanoseconds / nanoseconds_per_unit;
-    let remainder = nanoseconds % nanoseconds_per_unit;
-    let rounded_numerator = remainder * DECIMAL_SCALE + nanoseconds_per_unit / 2;
-    let fraction = rounded_numerator / nanoseconds_per_unit;
-    let (rounded_whole, normalized_fraction) = if fraction == DECIMAL_SCALE {
-        (whole + 1, 0)
-    } else {
-        (whole, fraction)
-    };
-    format!("{rounded_whole}.{normalized_fraction:0DECIMAL_WIDTH$}{suffix}")
+#[expect(
+    clippy::integer_division,
+    reason = "round the entire Duration range to hundredths without floating-point precision loss"
+)]
+fn scaled(duration: Duration, nanoseconds_per_unit: u128, suffix: &str) -> String {
+    let rounded =
+        (duration.as_nanos() * DECIMAL_SCALE + nanoseconds_per_unit / 2) / nanoseconds_per_unit;
+    let whole = rounded / DECIMAL_SCALE;
+    let fraction = rounded % DECIMAL_SCALE;
+    format!("{whole}.{fraction:0DECIMAL_WIDTH$}{suffix}")
 }

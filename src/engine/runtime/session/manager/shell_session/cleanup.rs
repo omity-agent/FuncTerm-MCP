@@ -14,8 +14,15 @@ impl ShellSession {
         tracing::debug!("closed shell process exited");
         drop(child);
         drop(self.slave.lock().take());
+        let joined = self.reader.lock().take().map_or(Ok(()), |reader| {
+            reader
+                .join()
+                .map_err(|_panic| anyhow::anyhow!("PTY reader thread panicked"))
+        });
         *terminated = true;
         drop(terminated);
+        self.screen.session_stopped();
+        joined?;
         Ok(())
     }
 }
@@ -28,10 +35,17 @@ impl Drop for ShellSession {
         process::cleanup(child.as_mut(), "shell child during cleanup");
         let slave = self.slave.get_mut();
         drop(slave.take());
-        if let Some(reader) = self.reader.take() {
+        if let Some(reader) = self.reader.get_mut().take() {
             tracing::debug!("joining closed shell PTY reader");
             process::join_reader(reader, "pty reader thread");
             tracing::debug!("closed shell PTY reader joined");
+        }
+        if let Err(error) = self.command_watch.unwatch(&self.command_root) {
+            tracing::error!("failed to release Tab workspace watch");
+            tracing::debug!(
+                error = format!("{error:#}"),
+                "Tab workspace watch cleanup failed"
+            );
         }
         if let Some(directory) = self.directory.take()
             && let Err(error) = directory.close()

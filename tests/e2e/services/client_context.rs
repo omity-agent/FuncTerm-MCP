@@ -48,6 +48,8 @@ fn new_tab_inherits_environment_from_each_client() {
         .collect::<Vec<_>>();
     for expected in ["first client = 中文", "second client = 独立", ""] {
         let mut client_environment = base_environment.clone();
+        #[cfg(windows)]
+        client_environment.push(("=ExitCode".to_owned(), "00000000".to_owned()));
         if !expected.is_empty() {
             client_environment.push(("FUNCTERM_CLIENT_ENV_PROBE".to_owned(), expected.to_owned()));
         }

@@ -21,13 +21,16 @@ pub(crate) fn exe() -> PathBuf {
     )
 }
 pub(crate) fn run_cli(arguments: &[&str]) -> Output {
+    run_cli_with_env(arguments, &daemon::active_env())
+}
+pub(crate) fn run_cli_with_env(arguments: &[&str], env: &[(String, String)]) -> Output {
     let mut command = Command::new(exe());
     command
         .args(arguments)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    daemon::apply_active_env(&mut command);
+    super::test_environment::apply(&mut command, env);
     command
         .spawn()
         .unwrap()
@@ -41,13 +44,6 @@ pub(crate) fn run_cli(arguments: &[&str]) -> Output {
             panic!("CLI command {command:?} timed out after {CLI_COMMAND_TIMEOUT:?}")
         })
         .into_std_lossy()
-}
-pub(crate) fn run_cli_with_env(arguments: &[&str], env: &[(String, String)]) -> Output {
-    let previous = daemon::active_env();
-    daemon::set_active_env(env);
-    let output = run_cli(arguments);
-    daemon::set_active_env(&previous);
-    output
 }
 pub(crate) fn create_tab(cwd: &Path, shell: &str) -> TabCreated {
     create_tab_with_env(cwd, shell, &daemon::active_env())

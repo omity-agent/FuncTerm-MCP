@@ -56,6 +56,9 @@ impl ShellLauncher {
         elevated: bool,
         client_environment: &EnvironmentSnapshot,
     ) -> Result<Arc<ShellSession>> {
+        let startup_timeout =
+            Duration::try_from_secs_f64(self.settings.shell_startup_timeout_seconds)
+                .context("shell_startup_timeout_seconds must be finite and non-negative")?;
         let identity = ShellIdentity::resolve(elevated, &self.settings)?;
         let directory = temp::create_tab_directory(&self.generation_root, tab_id)?;
         let tab_root = directory.path();
@@ -135,9 +138,6 @@ impl ShellLauncher {
                 return Err(error);
             }
         };
-        let startup_timeout =
-            Duration::try_from_secs_f64(self.settings.shell_startup_timeout_seconds)
-                .context("shell_startup_timeout_seconds must be finite and non-negative")?;
         let startup_events = startup::StartupEvents::new();
         let reader_worker = match start_reader(
             Arc::clone(&screen),
@@ -184,7 +184,7 @@ impl ShellLauncher {
                 .process_tree(process_tree)
                 .child(child)
                 .slave(retained_slave)
-                .reader(Some(reader_worker))
+                .reader(reader_worker)
                 .directory(Some(directory))
                 .build(),
         ))

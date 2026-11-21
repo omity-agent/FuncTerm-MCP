@@ -4,7 +4,7 @@ use anyhow::Result;
 use bytestring::ByteString;
 #[derive(Clone)]
 pub(in crate::engine::runtime::session::manager) struct TabSnapshot {
-    pub(super) screen: ByteString,
+    screen: ByteString,
     cwd: String,
     title: String,
     shell_type: crate::shell::ShellChoice,
@@ -25,7 +25,7 @@ impl TabSnapshot {
             cwd,
             title: session.title(),
             shell_type,
-            idle: session.busy_command_id().is_none(),
+            idle: !session.is_busy(),
         })
     }
     pub(in crate::engine::runtime::session::manager) fn into_view(self, alive: bool) -> ViewResult {

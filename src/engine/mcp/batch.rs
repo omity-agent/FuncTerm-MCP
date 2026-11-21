@@ -3,7 +3,10 @@ use crate::runtime::{config::Settings, protocol::wait_timeout_from_seconds};
 use anyhow::{Context as _, Result, ensure};
 use core::str::FromStr;
 use core::time::Duration;
-use rmcp::model::{CallToolResult, JsonObject};
+use rmcp::{
+    ErrorData,
+    model::{CallToolResult, ContentBlock, JsonObject},
+};
 use serde::Deserialize;
 use std::{collections::HashSet, time::Instant};
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -76,29 +79,36 @@ pub(super) async fn run<T>(
     backend: &Backend,
     entries: Vec<T>,
     wait_timeout: Option<f64>,
-) -> Result<CallToolResult, String>
+) -> Result<CallToolResult, ErrorData>
 where
     T: Operation,
 {
-    validate(&entries)?;
-    let budget = wait_timeout
+    if let Err(message) = validate(&entries) {
+        return Ok(input_error(message));
+    }
+    let budget = match wait_timeout
         .map(|seconds| settings.mcp.wait_timeout.scale(seconds))
         .transpose()
-        .map_err(super::error_text)?
-        .unwrap_or(Duration::ZERO);
-    let prepared = backend.prepare(settings).await.map_err(super::error_text)?;
+    {
+        Ok(timeout) => timeout.unwrap_or(Duration::ZERO),
+        Err(error) => return Ok(input_error(error.to_string())),
+    };
+    let prepared = backend
+        .prepare(settings)
+        .await
+        .map_err(super::internal_error)?;
     let execution = &prepared;
     let started = Instant::now();
     let operations = entries.into_iter().map(|entry| async move {
         let request = entry.request(settings, budget.saturating_sub(started.elapsed()))?;
-        let payload = execution
-            .execute(settings, request)
-            .await
-            .map_err(super::error_text)?;
+        let payload = execution.execute(settings, request).await?;
         T::output(payload)
     });
     let results = futures_util::future::join_all(operations).await;
     collection::combine(results)
+}
+fn input_error(message: String) -> CallToolResult {
+    CallToolResult::error(vec![ContentBlock::text(message)])
 }
 fn validate<T>(entries: &[T]) -> Result<(), String>
 where

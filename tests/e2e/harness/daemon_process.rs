@@ -11,6 +11,7 @@ thread_local! { static ACTIVE_CLI_ENV : RefCell < Vec < (String , String) >> = c
 pub(crate) struct TestGuard {
     _daemon: ChildGuard,
     env: Vec<(String, String)>,
+    service_name: String,
     http_address: String,
     previous_env: Vec<(String, String)>,
     _runtime: temp::TestRuntime,
@@ -21,6 +22,9 @@ impl TestGuard {
     }
     pub(crate) fn http_address(&self) -> &str {
         &self.http_address
+    }
+    pub(crate) fn service_name(&self) -> &str {
+        &self.service_name
     }
 }
 impl Drop for TestGuard {
@@ -67,18 +71,16 @@ pub(crate) fn locked_with_env(extra_env: &[(&str, &str)]) -> TestGuard {
     TestGuard {
         _daemon: child,
         env,
+        service_name,
         http_address,
         previous_env,
         _runtime: runtime,
     }
 }
-pub(crate) fn apply_active_env(command: &mut Command) {
-    ACTIVE_CLI_ENV.with(|env| super::test_environment::apply(command, &env.borrow()));
-}
 pub(crate) fn active_env() -> Vec<(String, String)> {
     ACTIVE_CLI_ENV.with(|env| env.borrow().clone())
 }
-pub(crate) fn set_active_env(env: &[(String, String)]) {
+fn set_active_env(env: &[(String, String)]) {
     ACTIVE_CLI_ENV.with(|active| active.replace(env.to_vec()));
 }
 fn unique_service_name() -> String {

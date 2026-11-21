@@ -1,5 +1,5 @@
-use super::{CommandOutput, ViewResult};
-use anyhow::{Context as _, Result, ensure};
+use super::{CommandOutput, RequestRejected, ViewResult};
+use anyhow::{Context as _, Result};
 use bytestring::ByteString;
 use core::num::NonZeroUsize;
 pub(crate) struct OutputTokenizer {
@@ -45,6 +45,7 @@ impl OutputTokenizer {
                 shell,
                 mut command,
                 note,
+                end_reason,
             } => {
                 command.output = match command.output {
                     CommandOutput::Terminal { output } => CommandOutput::Terminal {
@@ -54,10 +55,12 @@ impl OutputTokenizer {
                         stdout: _,
                         stderr: _,
                     } => {
-                        ensure!(
-                            start_token == NonZeroUsize::MIN,
-                            "start_token must be 1 for separated stdout/stderr output"
-                        );
+                        if start_token != NonZeroUsize::MIN {
+                            return Err(RequestRejected::new(
+                                "start_token must be 1 for separated stdout/stderr output",
+                            )
+                            .into());
+                        }
                         separated
                     }
                 };
@@ -65,6 +68,7 @@ impl OutputTokenizer {
                     shell,
                     command,
                     note,
+                    end_reason,
                 })
             }
         }

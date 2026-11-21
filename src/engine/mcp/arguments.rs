@@ -1,4 +1,4 @@
-use crate::runtime::protocol::KeyboardInput;
+use crate::runtime::protocol::{KeyboardInput, RequestRejected};
 use crate::shell::ShellChoice;
 use anyhow::{Result, bail};
 use core::num::NonZeroUsize;
@@ -54,8 +54,12 @@ impl ManualWriteInput {
         let input = match (text, bytes) {
             (Some(input_text), None) => KeyboardInput::Text(input_text),
             (None, Some(input_bytes)) => KeyboardInput::Bytes(input_bytes),
-            (Some(_), Some(_)) => bail!("text and bytes cannot be provided together"),
-            (None, None) => bail!("either text or bytes must be provided"),
+            (Some(_), Some(_)) => bail!(RequestRejected::new(
+                "text and bytes cannot be provided together",
+            )),
+            (None, None) => bail!(RequestRejected::new(
+                "either text or bytes must be provided"
+            )),
         };
         Ok((tab_id, input))
     }

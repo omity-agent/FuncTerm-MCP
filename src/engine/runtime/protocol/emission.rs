@@ -38,7 +38,7 @@ impl CommandOutput {
         clippy::pattern_type_mismatch,
         reason = "borrow output buffers without cloning or ref bindings"
     )]
-    pub(crate) fn is_empty(&self) -> bool {
+    pub(crate) const fn is_empty(&self) -> bool {
         match self {
             Self::Separated { stdout, stderr } => stdout.is_empty() && stderr.is_empty(),
             Self::Terminal { output } => output.is_empty(),

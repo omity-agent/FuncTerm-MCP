@@ -2,12 +2,14 @@ use anyhow::{Context as _, Result};
 #[cfg(not(windows))]
 use kill_tree::{Config, blocking::kill_tree_with_config};
 #[cfg(windows)]
-use std::os::windows::io::{AsRawHandle as _, FromRawHandle as _, OwnedHandle};
+use std::os::windows::io::{AsHandle as _, AsRawHandle as _};
 use std::process::{Child, Command};
+#[cfg(windows)]
+use windows_spawn::Job;
 pub(crate) struct ChildGuard {
     child: Child,
     #[cfg(windows)]
-    job: OwnedHandle,
+    job: Job,
 }
 impl ChildGuard {
     #[cfg(not(windows))]
@@ -20,8 +22,9 @@ impl ChildGuard {
     pub(crate) fn spawn(command: &mut Command) -> Result<Self> {
         use std::os::windows::process::{CommandExt as _, ProcThreadAttributeList};
         use windows::Win32::PROC_THREAD_ATTRIBUTE_JOB_LIST;
-        let job = create_test_job()?;
-        let handles = [job.as_raw_handle()];
+        let job = Job::create()?;
+        job.set_kill_on_close(true)?;
+        let handles = [job.as_handle().as_raw_handle()];
         let attribute = usize::try_from(PROC_THREAD_ATTRIBUTE_JOB_LIST)
             .context("test job attribute does not fit usize")?;
         let attributes = ProcThreadAttributeList::build()
@@ -38,13 +41,7 @@ impl ChildGuard {
     }
     pub(crate) fn terminate(&mut self) {
         #[cfg(windows)]
-        {
-            use windows::Win32::TerminateJobObject;
-            unsafe { TerminateJobObject(self.job.as_raw_handle(), 1_u32) }
-                .ok()
-                .context("failed to terminate test job")
-                .unwrap();
-        }
+        self.job.terminate(1).unwrap();
         #[cfg(not(windows))]
         if self.child.try_wait().unwrap().is_none() {
             let config = Config {
@@ -55,35 +52,6 @@ impl ChildGuard {
         }
         self.child.wait().unwrap();
     }
-}
-#[cfg(windows)]
-fn create_test_job() -> Result<OwnedHandle> {
-    use windows::Win32::{
-        CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-        JobObjectExtendedLimitInformation, SetInformationJobObject,
-    };
-    use windows::core::PCWSTR;
-    let raw_job = unsafe { CreateJobObjectW(None, PCWSTR::null()) };
-    if raw_job.is_null() {
-        return Err(std::io::Error::last_os_error()).context("failed to create test job");
-    }
-    let job = unsafe { OwnedHandle::from_raw_handle(raw_job) };
-    let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
-    limits.BasicLimitInformation.LimitFlags = u32::try_from(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)
-        .context("test job limit flags do not fit u32")?;
-    let size = u32::try_from(core::mem::size_of_val(&limits))
-        .context("test job information size does not fit u32")?;
-    unsafe {
-        SetInformationJobObject(
-            job.as_raw_handle(),
-            JobObjectExtendedLimitInformation,
-            core::ptr::from_mut(&mut limits).cast(),
-            size,
-        )
-    }
-    .ok()
-    .context("failed to configure test job")?;
-    Ok(job)
 }
 impl Drop for ChildGuard {
     fn drop(&mut self) {

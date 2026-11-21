@@ -7,11 +7,7 @@ impl Payload {
             Self::TabCreated { tab_id } => tab_created_plain_text(&tab_id),
             Self::TabClosed { tab_id } => element("TAB_CLOSED", &tab_id),
             Self::KeyboardWritten { view } => view.plain_text(false, None),
-            Self::CommandAccepted {
-                command_id,
-                end_reason: _,
-                view,
-            } => view.plain_text(false, Some(&command_id)),
+            Self::CommandAccepted { command_id, view } => view.plain_text(false, Some(&command_id)),
             Self::View(view) => view.into_plain_text(),
         }
     }
@@ -31,6 +27,7 @@ impl ViewResult {
                 shell,
                 command,
                 note,
+                end_reason: _,
             } => command_plain_text(&shell, &command, &note, include_alive, command_id),
         }
     }

@@ -7,7 +7,7 @@ use parking_lot::Mutex;
 use std::{path::Path, time::Instant};
 pub(in crate::engine::runtime::session) struct PathWatch {
     signal: Arc<Signal>,
-    _watcher: RecommendedWatcher,
+    watcher: RecommendedWatcher,
 }
 #[derive(Default)]
 struct Signal {
@@ -35,10 +35,12 @@ impl PathWatch {
         watcher
             .watch(directory, mode)
             .with_context(|| format!("failed to watch directory {}", directory.display()))?;
-        Ok(Self {
-            signal,
-            _watcher: watcher,
-        })
+        Ok(Self { signal, watcher })
+    }
+    pub(in crate::engine::runtime::session) fn unwatch(&mut self, path: &Path) -> Result<()> {
+        self.watcher
+            .unwatch(path)
+            .with_context(|| format!("failed to release filesystem watch on {}", path.display()))
     }
     pub(in crate::engine::runtime::session) async fn wait(
         &self,
@@ -77,6 +79,9 @@ pub(super) async fn wait_until(
     limit: Duration,
     mut ready: impl FnMut() -> Result<bool>,
 ) -> Result<bool> {
+    if limit.is_zero() {
+        return ready();
+    }
     let waiting = async {
         loop {
             let listener = changed.listen();

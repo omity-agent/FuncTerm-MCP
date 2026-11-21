@@ -1,6 +1,6 @@
 use super::{capture::CommandCapture, markers::ProtocolEvent, rendering::CommandScreen};
 use alloc::{collections::BTreeMap, sync::Arc};
-use anyhow::{Result, bail, ensure};
+use anyhow::{Result, bail};
 use parking_lot::Mutex;
 pub(super) struct CaptureRegistry {
     title: String,
@@ -32,15 +32,6 @@ impl CaptureRegistry {
         self.captures.insert(id.to_owned(), Arc::clone(&capture));
         tracing::trace!(command_id = %id, captures = self.captures.len(), "terminal command capture registered");
         Ok(capture)
-    }
-    pub(super) fn discard(&mut self, id: &str) -> Result<()> {
-        ensure!(
-            self.active.as_deref() != Some(id),
-            "cannot discard active command capture {id}"
-        );
-        drop(self.require(id)?.cancel()?);
-        self.captures.remove(id);
-        Ok(())
     }
     pub(super) fn handle(&mut self, event: ProtocolEvent) -> Result<()> {
         match event {

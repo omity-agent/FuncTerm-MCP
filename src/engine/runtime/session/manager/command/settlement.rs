@@ -1,100 +1,71 @@
 use super::super::{shell_session::ShellSession, tab::Tab};
-use super::{CommandWait, ManagedCommand};
+use super::{ManagedCommand, completion::Completion};
 use alloc::sync::Arc;
 use anyhow::Result;
+#[derive(Clone, Copy)]
+pub(in crate::engine::runtime::session::manager) enum SessionEnd {
+    Closed,
+    Exited(i32),
+    Failed,
+}
 impl Tab {
-    pub(in crate::engine::runtime::session::manager) async fn finish_done_command(
-        self: &Arc<Self>,
-        command: &Arc<ManagedCommand>,
-    ) -> Result<()> {
-        if !matches!(command.state.lock().wait, CommandWait::Running) {
-            return Ok(());
-        }
-        self.wait_done_capture(command).await?;
-        let _operation = self.operation.lock().await;
-        if !matches!(command.state.lock().wait, CommandWait::Running) {
-            return Ok(());
-        }
-        let tab = Arc::clone(self);
-        let managed = Arc::clone(command);
-        self.blocking
-            .run(move || tab.cache_done_command(&managed))
-            .await
-    }
-    pub(super) async fn wait_done_capture(
-        self: &Arc<Self>,
-        command: &Arc<ManagedCommand>,
-    ) -> Result<()> {
-        if !matches!(command.state.lock().wait, CommandWait::Running) {
-            return Ok(());
-        }
-        if let Some(session) = self.optional_session() {
-            tokio::select! {
-                captured = command.capture.wait_finished() => { captured?; }
-                exited = session.wait_for_exit() => {
-                    exited?;
-                    self.abort_if_shell_dead(&session, command).await?;
-                    return Ok(());
-                }
-            }
-        }
-        Ok(())
-    }
-    pub(in crate::engine::runtime::session::manager) fn cache_done_command(
+    pub(in crate::engine::runtime::session::manager) fn end_session(
         &self,
+        session: &ShellSession,
+        end: SessionEnd,
+    ) -> Result<()> {
+        if let Err(error) = session.terminate() {
+            if let Some(command) = session.busy_command() {
+                command.mark_unavailable(&error);
+            }
+            return Err(error);
+        }
+        let settlement = session.busy_command().map_or(Ok(()), |command| {
+            Self::settle_closing(session, &command, end)
+        });
+        let recorded = self.record_closure(session);
+        settlement.and(recorded)
+    }
+    fn settle_closing(
+        session: &ShellSession,
+        command: &ManagedCommand,
+        end: SessionEnd,
+    ) -> Result<()> {
+        let completion = match end {
+            SessionEnd::Closed => Completion::Closed,
+            SessionEnd::Exited(code) => Completion::Exited(code),
+            SessionEnd::Failed => Completion::Failed,
+        };
+        let settled = command.settle(completion, |cwd| session.set_cwd(cwd));
+        if let Err(error) = settled.as_ref() {
+            command.mark_unavailable(error);
+        }
+        session.release(command.id());
+        settled.map(|_| ())
+    }
+    pub(in crate::engine::runtime::session::manager) async fn stop_after_failure(
+        self: &Arc<Self>,
+        session: Arc<ShellSession>,
+        command: Arc<ManagedCommand>,
+    ) -> Result<()> {
+        self.with_operation(move |tab| {
+            if session.holds_command(&command) {
+                tab.end_session(&session, SessionEnd::Failed)?;
+            }
+            Ok(())
+        })
+        .await
+    }
+    pub(super) fn settle_reported(
+        &self,
+        session: &ShellSession,
         command: &ManagedCommand,
     ) -> Result<()> {
-        if !matches!(command.state.lock().wait, CommandWait::Running) {
-            return Ok(());
-        }
-        tracing::debug!(command_id = %command.id(), "publishing settled command");
-        let session = self.optional_session();
-        command.mark_finished(command.capture.current()?, |cwd| {
-            if let Some(active) = session.as_ref() {
-                active.set_cwd(cwd);
-            }
-        })?;
-        if let Some(active) = session {
-            active.release(command.id());
-            if command.requests_session_exit()? {
-                self.close_session(&active)?;
-            } else {
-                self.remember(&active)?;
-            }
+        let requests_exit = command.settle(Completion::Reported, |cwd| session.set_cwd(cwd))?;
+        session.release(command.id());
+        if requests_exit {
+            self.end_session(session, SessionEnd::Closed)?;
         }
         Ok(())
-    }
-    pub(in crate::engine::runtime::session::manager) async fn abort_if_shell_dead(
-        self: &Arc<Self>,
-        session: &Arc<ShellSession>,
-        command: &Arc<ManagedCommand>,
-    ) -> Result<bool> {
-        let _operation = self.operation.lock().await;
-        let exiting = Arc::clone(session);
-        let exit_status = self
-            .blocking
-            .run(move || {
-                let Some(code) = exiting.exit_code()? else {
-                    return Ok(None);
-                };
-                exiting.terminate()?;
-                Ok(Some(code))
-            })
-            .await?;
-        let Some(code) = exit_status else {
-            return Ok(false);
-        };
-        session.wait_for_terminal_drain().await?;
-        let tab = Arc::clone(self);
-        let active = Arc::clone(session);
-        let managed = Arc::clone(command);
-        self.blocking
-            .run(move || {
-                managed.mark_exited(code)?;
-                active.release(managed.id());
-                tab.close_session(&active)?;
-                Ok(true)
-            })
-            .await
     }
 }

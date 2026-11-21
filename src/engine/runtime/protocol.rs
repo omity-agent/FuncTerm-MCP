@@ -16,6 +16,14 @@ pub(crate) use emission::{CommandOutput, OutputMode, OutputPresentation};
 pub(crate) use environment::{EnvironmentSnapshot, environment_name_equals};
 pub(crate) use presentation::{CommandPresentation, ShellPresentation};
 pub(crate) use tokenization::{OutputTokenizer, OutputTokens};
+#[derive(Debug, thiserror::Error)]
+#[error("{0}")]
+pub(crate) struct RequestRejected(pub(crate) String);
+impl RequestRejected {
+    pub(crate) fn new(message: impl Into<String>) -> Self {
+        Self(message.into())
+    }
+}
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize, strum :: EnumDiscriminants)]
 #[strum_discriminants(name(RequestKind), derive(strum::Display))]
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
@@ -60,8 +68,11 @@ pub(crate) enum Response {
         payload: Payload,
         processing: Option<time_consumption::ProcessingTime>,
     },
-    Err {
+    Rejected {
         message: String,
+        processing: Option<time_consumption::ProcessingTime>,
+    },
+    Failed {
         processing: Option<time_consumption::ProcessingTime>,
     },
 }
@@ -82,7 +93,6 @@ pub(crate) enum Payload {
     },
     CommandAccepted {
         command_id: String,
-        end_reason: EndReason,
         view: ViewResult,
     },
     View(ViewResult),
@@ -91,6 +101,7 @@ pub(crate) enum Payload {
 pub(crate) enum EndReason {
     CommandEnded,
     WaitTimeout,
+    TabClosed,
     CommandFailed,
 }
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
@@ -126,6 +137,7 @@ pub(crate) enum ViewResult {
         shell: ShellView,
         command: CommandView,
         note: String,
+        end_reason: EndReason,
     },
 }
 pub(crate) fn wait_timeout_from_seconds(seconds: f64) -> Result<Duration> {

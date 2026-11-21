@@ -5,8 +5,7 @@ use crate::support::{TestGuard, locked_with_env};
 use alloc::rc::Rc;
 use core::time::Duration;
 pub(super) use replies::{
-    assert_field, assert_rejected, assert_saved, command_result, entries, field, result, text,
-    text_documents,
+    assert_field, assert_rejected, command_result, entries, field, result, text, text_documents,
 };
 use rmcp::serde_json::{Value, json};
 use std::{
@@ -71,19 +70,8 @@ impl McpSession {
             sequence: 0,
             _daemon: daemon,
         };
-        let initialized = session.request(
-            "initialize",
-            json!({
-                "protocolVersion": version,
-                "capabilities": {},
-                "clientInfo": {"name": "batch-contract-tests", "version": "1"}
-            }),
-        );
-        assert!(initialized.get("result").is_some(), "{initialized}");
-        assert_eq!(
-            initialized.pointer("/result/protocolVersion"),
-            Some(&json!(version))
-        );
+        let initialized = session.request("initialize", initialize_params(version));
+        assert_field(&initialized, "/result/protocolVersion", version);
         session.send(&json ! ({ "jsonrpc" : "2.0" , "method" : "notifications/initialized" }));
         session
     }
@@ -141,6 +129,13 @@ pub(super) fn tool_arguments(name: &str, arguments: Value) -> Value {
     let mut parameters = json!({"name": name, "arguments": null});
     *parameters.get_mut("arguments").unwrap() = arguments;
     parameters
+}
+pub(super) fn initialize_params(version: &str) -> Value {
+    json!({
+        "protocolVersion": version,
+        "capabilities": {},
+        "clientInfo": {"name": "contract-tests", "version": "1"}
+    })
 }
 impl Drop for McpSession {
     fn drop(&mut self) {

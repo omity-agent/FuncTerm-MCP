@@ -1,8 +1,7 @@
 use super::{
     execution::create_tabs,
     wire::{
-        McpSession, assert_field, assert_saved, command_result, entries, field, result, text,
-        text_documents,
+        McpSession, assert_field, command_result, entries, field, result, text, text_documents,
     },
 };
 use crate::support::tagged_content;
@@ -43,8 +42,17 @@ fn token_offsets_preserve_unicode_totals_and_saved_command_and_screen_output() {
         assert_field(saved, "/finished", true);
         assert_field(saved, "/exit_code", 0_i32);
     }
-    let restored = session.view(&[(id, 1)], 0.0);
-    assert_saved(&accepted, &restored);
+    let mut expected = command.clone();
+    expected
+        .as_object_mut()
+        .unwrap()
+        .remove("command_id")
+        .unwrap();
+    assert_field(
+        &batched,
+        "/result/structuredContent/results/0/result/command",
+        expected,
+    );
     let full = session.view(&[(&tab, 1)], 0.1);
     let screen = text(result(&full), "/screen");
     assert!(screen.contains("TAIL"), "{full}");

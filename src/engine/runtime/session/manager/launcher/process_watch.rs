@@ -22,7 +22,7 @@ pub(super) fn monitor_child(
             match result.as_ref() {
                 Ok(&()) => screen.process_exited(),
                 Err(error) => {
-                    screen.reader_failed(&format!("shell process monitor failed: {error:#}"));
+                    screen.process_failed(format!("shell process monitor failed: {error:#}"));
                 }
             }
             let _sent = sender.send(StartupEvent::ProcessExited(result));

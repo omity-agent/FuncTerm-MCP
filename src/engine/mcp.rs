@@ -18,14 +18,18 @@ use arguments::{
 pub(crate) use batch::{WaitTimeoutMultiplier, WaitTimeoutSettings};
 use collection::BatchOutput;
 use invocation::Backend;
+use output::internal_error;
 use rmcp::{
-    ServerHandler, ServiceExt as _,
+    ErrorData, ServerHandler, ServiceExt as _,
     handler::server::{
         router::tool::ToolRouter,
         tool::{ToolCallContext, schema_for_output},
         wrapper::Parameters,
     },
-    model::{CallToolRequestParams, CallToolResponse, CallToolResult, ProtocolVersion},
+    model::{
+        CacheScope, CallToolRequestParams, CallToolResponse, CallToolResult, ListToolsResult,
+        PaginatedRequestParams, ProtocolVersion, ResultType,
+    },
     service::RequestContext,
     tool, tool_handler, tool_router,
 };
@@ -40,6 +44,23 @@ struct McpServer {
 }
 # [tool_handler (router = self . tool_router)]
 impl ServerHandler for McpServer {
+    fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        context: RequestContext<rmcp::RoleServer>,
+    ) -> impl Future<Output = Result<ListToolsResult, ErrorData>> + Send + '_ {
+        let cache_hints = context
+            .protocol_version()
+            .is_some_and(|version| version >= ProtocolVersion::V_2026_07_28);
+        core::future::ready(Ok(ListToolsResult {
+            result_type: Some(ResultType::COMPLETE),
+            tools: self.tool_router.list_all(),
+            meta: None,
+            next_cursor: None,
+            ttl_ms: cache_hints.then_some(0),
+            cache_scope: cache_hints.then_some(CacheScope::Public),
+        }))
+    }
     async fn call_tool(
         &self,
         request: CallToolRequestParams,
@@ -84,17 +105,17 @@ impl McpServer {
     async fn new_tab(
         &self,
         Parameters(request): Parameters<NewTabRequest<NewTabOptions>>,
-    ) -> Result<CallToolResult, String> {
+    ) -> Result<CallToolResult, ErrorData> {
         batch::run(&self.settings, &self.backend, request.tabs, None).await
     }
     # [tool (name = "fixed_new_tab" , output_schema = schema_for_output ::< BatchOutput < output :: NewTabOutput <'static >>> ())]
     async fn fixed_new_tab(
         &self,
         Parameters(request): Parameters<NewTabRequest<FixedNewTabOptions>>,
-    ) -> Result<CallToolResult, String> {
+    ) -> Result<CallToolResult, ErrorData> {
         let mode = self
             .privilege_mode
-            .ok_or("MCP privilege mode is not fixed")?;
+            .ok_or_else(|| internal_error("MCP privilege mode is not fixed"))?;
         let entries = request
             .tabs
             .into_iter()
@@ -106,7 +127,7 @@ impl McpServer {
     async fn manual_write(
         &self,
         Parameters(request): Parameters<ManualWriteRequest>,
-    ) -> Result<CallToolResult, String> {
+    ) -> Result<CallToolResult, ErrorData> {
         batch::run(
             &self.settings,
             &self.backend,
@@ -119,7 +140,7 @@ impl McpServer {
     async fn run(
         &self,
         Parameters(request): Parameters<RunRequest<RunInput>>,
-    ) -> Result<CallToolResult, String> {
+    ) -> Result<CallToolResult, ErrorData> {
         batch::run(
             &self.settings,
             &self.backend,
@@ -132,8 +153,10 @@ impl McpServer {
     async fn fixed_run(
         &self,
         Parameters(request): Parameters<RunRequest<FixedCommandInput>>,
-    ) -> Result<CallToolResult, String> {
-        let mode = self.output_mode.ok_or("MCP output mode is not fixed")?;
+    ) -> Result<CallToolResult, ErrorData> {
+        let mode = self
+            .output_mode
+            .ok_or_else(|| internal_error("MCP output mode is not fixed"))?;
         let entries = request
             .commands
             .into_iter()
@@ -151,7 +174,7 @@ impl McpServer {
     async fn view(
         &self,
         Parameters(request): Parameters<ViewRequest>,
-    ) -> Result<CallToolResult, String> {
+    ) -> Result<CallToolResult, ErrorData> {
         batch::run(
             &self.settings,
             &self.backend,
@@ -166,12 +189,10 @@ pub(crate) async fn run(
     privilege_mode: Option<PrivilegeMode>,
     output_mode: Option<OutputMode>,
 ) -> Result<()> {
+    super::init_diagnostics(&settings.diagnostics_filter)?;
     let service = McpServer::new(settings, privilege_mode, output_mode, Backend::ipc())?
         .serve(rmcp::transport::stdio())
         .await?;
     service.waiting().await?;
     Ok(())
-}
-fn error_text(error: impl core::fmt::Display) -> String {
-    error.to_string()
 }

@@ -41,6 +41,8 @@ struct TerminalState {
     reader_closed: bool,
     reader_failure: Option<String>,
     process_exited: bool,
+    process_failure: Option<String>,
+    session_stopped: bool,
 }
 impl Terminal {
     pub(super) fn new(
@@ -66,6 +68,8 @@ impl Terminal {
                 reader_closed: false,
                 reader_failure: None,
                 process_exited: false,
+                process_failure: None,
+                session_stopped: false,
             }),
             changed: Event::new(),
         }))
@@ -94,9 +98,6 @@ impl Terminal {
     pub(super) fn complete_at_prompt(&self, id: &str) -> Result<()> {
         self.state.lock().captures.finish(id)
     }
-    pub(super) fn discard_capture(&self, id: &str) -> Result<()> {
-        self.state.lock().captures.discard(id)
-    }
     pub(super) fn process(&self, chunk: &[u8]) -> Result<()> {
         let mut state = self.state.lock();
         let processed = state.process(chunk);
@@ -116,9 +117,22 @@ impl TerminalState {
         let mut actions = core::mem::take(&mut self.actions);
         self.parser
             .parse(chunk, |action| action.append_to(&mut actions));
+        #[expect(
+            clippy::iter_with_drain,
+            reason = "retain the parser buffer between PTY reads"
+        )]
+        let applied = self.apply_parsed(actions.drain(..));
+        self.actions = actions;
+        if matches!(applied, Ok(false)) {
+            return Ok(());
+        }
+        let refreshed = self.refresh_visible();
+        applied.and(refreshed)
+    }
+    fn apply_parsed(&mut self, actions: impl Iterator<Item = Action>) -> Result<bool> {
         let mut pending = Vec::new();
         let mut applied = false;
-        for action in actions.drain(..) {
+        for action in actions {
             if let Some(event) = markers::parse(&action)? {
                 applied |= self.apply(core::mem::take(&mut pending))?;
                 self.captures.handle(event)?;
@@ -137,11 +151,10 @@ impl TerminalState {
                 }
             }
         }
-        self.actions = actions;
         applied |= self.apply(pending)?;
-        if !applied {
-            return Ok(());
-        }
+        Ok(applied)
+    }
+    fn refresh_visible(&mut self) -> Result<()> {
         let contents = self.screen.lock().visible_contents();
         if self.visible_contents != contents {
             self.visible_revision = self

@@ -8,7 +8,7 @@ use alloc::rc::Rc;
 use rmcp::serde_json::json;
 #[test]
 fn both_versions_share_tools_terminal_state_and_errors_across_transports() {
-    let daemon = Rc::new(locked_with_env(&[]));
+    let daemon = Rc::new(locked_with_env(&[("FUNCTERM_ZSH", "")]));
     for version in ["2025-06-18", "2025-11-25"] {
         let mut http = HttpSession::new(&daemon, version);
         let mut stdio =
@@ -57,11 +57,25 @@ fn both_versions_share_tools_terminal_state_and_errors_across_transports() {
                 assert!(response.get("error").is_none(), "{response}");
             }
         }
-        for response in [
-            http.call("missing_tool", json!({})),
-            stdio.call("missing_tool", json!({})),
+        for (name, params, code) in [
+            ("missing_tool", json!({}), -32_602_i32),
+            (
+                "new_tab",
+                json!({"tabs": [{"starting_shell": "zsh"}]}),
+                -32_603_i32,
+            ),
         ] {
-            assert_field(&response, "/error/code", -32_602_i32);
+            for response in [http.call(name, params.clone()), stdio.call(name, params)] {
+                assert_field(&response, "/error/code", code);
+                assert!(response.get("result").is_none(), "{response}");
+                if code == -32_603_i32 {
+                    assert_field(
+                        &response,
+                        "/error/message",
+                        "FuncTerm could not complete the tool call",
+                    );
+                }
+            }
         }
         drop(stdio);
         assert_field(&http.request("ping", json!({})), "/result", json!({}));

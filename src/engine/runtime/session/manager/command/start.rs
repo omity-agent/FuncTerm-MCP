@@ -1,53 +1,32 @@
-use super::super::{shell_session::ShellSession, tab::Tab};
-use super::supervision::ShellReservation;
-use super::{CommandWait, ManagedCommand};
-use crate::runtime::protocol::{EndReason, ViewResult};
+use super::super::tab::Tab;
+use super::{ManagedCommand, SessionEnd};
+use crate::runtime::protocol::RequestRejected;
 use crate::runtime::session::records::{create_record, discard_record};
+use crate::shell::ShellChoice;
 use alloc::sync::Arc;
 use anyhow::Result;
-use core::time::Duration;
-pub(in crate::engine::runtime::session::manager) struct StartedCommand {
-    command: Arc<ManagedCommand>,
-    tab: Arc<Tab>,
-}
 impl Tab {
-    pub(in crate::engine::runtime::session::manager) async fn start_command(
-        self: &Arc<Self>,
-        command_id: String,
-        command_text: String,
-        separate_output: bool,
-    ) -> Result<StartedCommand> {
-        let _operation = self.operation.lock().await;
-        let tab = Arc::clone(self);
-        self.blocking
-            .run(move || tab.dispatch_command(command_id, &command_text, separate_output))
-            .await
-    }
-    fn dispatch_command(
+    pub(in crate::engine::runtime::session::manager) fn dispatch_command(
         self: &Arc<Self>,
         command_id: String,
         command_text: &str,
         separate_output: bool,
-    ) -> Result<StartedCommand> {
+    ) -> Result<Arc<ManagedCommand>> {
         let session = self.live_session()?;
-        if !session.is_alive()? {
-            self.close_session(&session)?;
-            anyhow::bail!(
-                "\"{}\" exists in the records, but the tab has been closed. Did you run an exit command within it?",
-                self.id()
-            );
+        if let Some(code) = session.exit_code()? {
+            self.end_session(&session, SessionEnd::Exited(code))?;
+            return Err(self.closed_tab().into());
         }
+        session.ensure_idle(self.id())?;
         session.refresh_choice()?;
-        anyhow::ensure!(
-            session.current_choice() != crate::shell::ShellChoice::NuShell || !separate_output,
-            "NuShell does not support separate_output=true; use separate_output=false"
-        );
-        self.remember(&session)?;
-        let record = create_record(
-            session.command_root(),
-            &command_id,
-            session.current_choice(),
-        )?;
+        let choice = session.current_choice();
+        if choice == ShellChoice::NuShell && separate_output {
+            return Err(RequestRejected::new(
+                "NuShell does not support separate_output=true; use separate_output=false",
+            )
+            .into());
+        }
+        let record = create_record(session.command_root(), &command_id, choice)?;
         let capture = session
             .capture_command(&command_id, separate_output)
             .inspect_err(|_error| discard_record(&record))?;
@@ -57,64 +36,23 @@ impl Tab {
             capture,
             Arc::clone(&self.tokenizer),
         ));
-        let reservation = match ShellReservation::new(&session, self.id(), Arc::clone(&managed)) {
-            Ok(reservation) => reservation,
-            Err(error) => {
-                if let Err(capture_error) = session.discard_capture(managed.id()) {
-                    tracing::error!(
-                        error = format!("{capture_error:#}"),
-                        "failed to discard command capture"
-                    );
-                }
-                discard_record(managed.record());
-                return Err(error);
-            }
-        };
-        self.insert_command(Arc::clone(&managed));
+        session.reserve(Arc::clone(&managed));
         if let Err(error) = session.write_invocation(
             managed.id(),
             command_text,
             managed.record(),
             separate_output,
         ) {
-            self.abandon_start(&managed, &session)?;
+            if let Err(cleanup) = self.end_session(&session, SessionEnd::Failed) {
+                tracing::error!("failed to close the Tab after command submission failed");
+                tracing::debug!(
+                    error = format!("{cleanup:#}"),
+                    "shell shutdown failure details"
+                );
+            }
             return Err(error);
         }
-        self.supervise(Arc::clone(&managed), reservation);
-        Ok(StartedCommand {
-            command: managed,
-            tab: Arc::clone(self),
-        })
-    }
-    fn abandon_start(&self, command: &ManagedCommand, session: &ShellSession) -> Result<()> {
-        session.terminate()?;
-        command.mark_failed("shell failed to start command")?;
-        drop(self.remove_command(command.id()));
-        discard_record(command.record());
-        self.close_session(session)
-    }
-}
-impl StartedCommand {
-    pub(in crate::engine::runtime::session::manager) async fn wait(
-        self,
-        wait_timeout: Duration,
-    ) -> Result<(String, EndReason, ViewResult)> {
-        let observed = self
-            .tab
-            .observe_command(&self.command, wait_timeout)
-            .await?;
-        let reason = match observed {
-            CommandWait::Finished => EndReason::CommandEnded,
-            CommandWait::Running => {
-                tracing::debug!(command_id = %self.command.id(), "command wait timed out");
-                EndReason::WaitTimeout
-            }
-            CommandWait::Failed => EndReason::CommandFailed,
-        };
-        let result = self
-            .tab
-            .command_view_result(&self.command, observed)
-            .await?;
-        Ok((self.command.id().to_owned(), reason, result))
+        self.supervise(session, Arc::clone(&managed));
+        Ok(managed)
     }
 }

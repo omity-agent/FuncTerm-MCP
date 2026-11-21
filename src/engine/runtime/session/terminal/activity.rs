@@ -37,18 +37,28 @@ impl Terminal {
         self.state.lock().process_exited = true;
         self.changed.notify(usize::MAX);
     }
+    pub(in crate::engine::runtime::session) fn process_failed(&self, message: String) {
+        self.state.lock().process_failure = Some(message);
+        self.changed.notify(usize::MAX);
+    }
     pub(in crate::engine::runtime::session) async fn wait_for_exit(&self) -> Result<()> {
         wait_until(&self.changed, Duration::MAX, || {
             let state = self.state.lock();
-            Ok(state.process_exited)
+            if let Some(message) = state.process_failure.as_deref() {
+                bail!("{message}");
+            }
+            Ok(state.process_exited || state.session_stopped)
         })
         .await?;
         Ok(())
     }
-    pub(in crate::engine::runtime::session) async fn wait_reader_closed(&self) -> Result<()> {
+    pub(in crate::engine::runtime::session) fn session_stopped(&self) {
+        self.state.lock().session_stopped = true;
+        self.changed.notify(usize::MAX);
+    }
+    pub(in crate::engine::runtime::session) async fn wait_for_shutdown(&self) -> Result<()> {
         wait_until(&self.changed, Duration::MAX, || {
-            let state = self.state.lock();
-            Ok(state.reader_closed)
+            Ok(self.state.lock().session_stopped)
         })
         .await?;
         Ok(())

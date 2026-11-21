@@ -1,4 +1,4 @@
-use super::wire::{request_message, tool_arguments};
+use super::wire::{assert_field, initialize_params, request_message, tool_arguments};
 use crate::support::TestGuard;
 use core::time::Duration;
 use reqwest::{
@@ -28,16 +28,7 @@ impl HttpSession {
             .post(&endpoint)
             .header("Accept", "application/json, text/event-stream")
             .header("Content-Type", "application/json")
-            .body(
-                json!({
-                    "jsonrpc": "2.0", "id": 0_u64, "method": "initialize",
-                    "params": {
-                        "protocolVersion": version, "capabilities": {},
-                        "clientInfo": {"name": "http-contract-tests", "version": "1"}
-                    }
-                })
-                .to_string(),
-            )
+            .body(request_message("initialize", initialize_params(version), 0).to_string())
             .send()
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
@@ -49,10 +40,7 @@ impl HttpSession {
             .unwrap()
             .to_owned();
         let initialized = decode(response, 0);
-        assert_eq!(
-            initialized.pointer("/result/protocolVersion"),
-            Some(&json!(version))
-        );
+        assert_field(&initialized, "/result/protocolVersion", version);
         assert!(initialized.pointer("/result/capabilities/tools").is_some());
         let session = Self {
             client,

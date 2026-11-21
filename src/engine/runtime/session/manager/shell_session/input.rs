@@ -1,45 +1,27 @@
+use super::super::command::ManagedCommand;
 use super::ShellSession;
-use crate::runtime::protocol::KeyboardInput;
+use crate::runtime::protocol::{KeyboardInput, RequestRejected};
 use crate::runtime::session::keyboard::{InputBatch, InputDelivery};
 use alloc::{borrow::Cow, sync::Arc};
 use anyhow::{Context as _, Result};
 use std::io::Write as _;
-#[derive(Debug, thiserror :: Error)]
-pub(in crate::engine::runtime::session::manager) enum KeyboardWriteFailure {
-    #[error("manual_write is unavailable while the prompt is idle; use run for prompt commands")]
-    IdlePrompt,
-    #[error("manual_write target command ended before input could be written")]
-    CommandEnded,
-    #[error(transparent)]
-    Write(#[from] anyhow::Error),
-}
 impl ShellSession {
     pub(in crate::engine::runtime::session::manager) fn write_keyboard_for_running_command(
         &self,
-        command_id: &str,
+        expected: &Arc<ManagedCommand>,
         input: &KeyboardInput,
-    ) -> Result<u64, KeyboardWriteFailure> {
-        let busy = self.busy.lock();
-        let Some(command) = busy.as_ref() else {
-            return Err(KeyboardWriteFailure::IdlePrompt);
-        };
-        if command.id() != command_id {
-            return Err(KeyboardWriteFailure::CommandEnded);
+    ) -> Result<u64> {
+        if !self.holds_command(expected) {
+            return Err(RequestRejected::new(
+                "manual_write target command ended before input could be written",
+            )
+            .into());
         }
+        let command_id = expected.id();
         tracing::debug!(%command_id, "delivering keyboard input to running command");
         let visible_revision = self.screen.visible_revision()?;
-        let write_result = command.deliver_input(|| self.write_keyboard(input));
-        drop(busy);
-        tracing::debug!(%command_id, succeeded = write_result.is_ok(), "keyboard input delivery completed");
-        match write_result {
-            Ok(()) => {}
-            Err(super::super::command::CommandInputFailure::CommandEnded) => {
-                return Err(KeyboardWriteFailure::CommandEnded);
-            }
-            Err(super::super::command::CommandInputFailure::Write(error)) => {
-                return Err(KeyboardWriteFailure::Write(error));
-            }
-        }
+        expected.deliver_input(|| self.write_keyboard(input))?;
+        tracing::debug!(%command_id, "keyboard input delivery completed");
         Ok(visible_revision)
     }
     #[expect(
@@ -62,21 +44,24 @@ impl ShellSession {
         drop(writer);
         Ok(batch.delivery())
     }
-    pub(in crate::engine::runtime::session::manager) fn reserve(
+    pub(in crate::engine::runtime::session::manager) fn ensure_idle(
         &self,
         tab_id: &str,
-        command: Arc<super::super::command::ManagedCommand>,
     ) -> Result<()> {
-        let mut busy = self.busy.lock();
-        if let Some(existing) = busy.as_ref() {
-            anyhow::bail!(
+        if let Some(existing) = self.busy.lock().as_ref() {
+            return Err(RequestRejected::new(format!(
                 "The command was not executed because `{tab_id}` is busy with `{}`",
                 existing.id()
-            );
+            ))
+            .into());
         }
-        *busy = Some(command);
-        drop(busy);
         Ok(())
+    }
+    pub(in crate::engine::runtime::session::manager) fn reserve(
+        &self,
+        command: Arc<ManagedCommand>,
+    ) {
+        *self.busy.lock() = Some(command);
     }
     pub(in crate::engine::runtime::session::manager) fn release(&self, command_id: &str) {
         let mut busy = self.busy.lock();
@@ -84,15 +69,21 @@ impl ShellSession {
             *busy = None;
         }
     }
-    pub(in crate::engine::runtime::session::manager) fn busy_command_id(&self) -> Option<String> {
+    pub(in crate::engine::runtime::session::manager) fn is_busy(&self) -> bool {
+        self.busy.lock().is_some()
+    }
+    pub(in crate::engine::runtime::session::manager) fn holds_command(
+        &self,
+        expected: &Arc<ManagedCommand>,
+    ) -> bool {
         self.busy
             .lock()
             .as_ref()
-            .map(|command| command.id().to_owned())
+            .is_some_and(|command| Arc::ptr_eq(command, expected))
     }
     pub(in crate::engine::runtime::session::manager) fn busy_command(
         &self,
-    ) -> Option<Arc<super::super::command::ManagedCommand>> {
+    ) -> Option<Arc<ManagedCommand>> {
         self.busy.lock().clone()
     }
 }

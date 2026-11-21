@@ -1,5 +1,6 @@
 use super::workspace_acl;
 use crate::runtime::config::Settings;
+use crate::runtime::protocol::RequestRejected;
 use anyhow::{Context as _, Result, ensure};
 use nix::unistd::{Uid, User};
 use std::ffi::OsString;
@@ -11,10 +12,12 @@ pub(crate) struct ShellIdentity {
 impl ShellIdentity {
     pub(crate) fn resolve(elevated: bool, settings: &Settings) -> Result<Self> {
         let privileged = Uid::effective().is_root();
-        ensure!(
-            !elevated || privileged,
-            "elevated Tab requires the Daemon to already run as Root"
-        );
+        if elevated && !privileged {
+            return Err(RequestRejected::new(
+                "elevated Tab requires the Daemon to already run as Root",
+            )
+            .into());
+        }
         let account = if elevated {
             Some(account_by_uid(Uid::from_raw(0))?)
         } else if privileged {

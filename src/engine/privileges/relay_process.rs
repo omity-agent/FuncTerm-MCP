@@ -29,7 +29,11 @@ pub(crate) fn spawn(
             executable,
         ])
         .args(startup.args);
-    command.env_clear().envs(startup.env).current_dir(
+    let environment = startup
+        .env
+        .into_iter()
+        .filter(|entry| !entry.0.as_encoded_bytes().starts_with(b"="));
+    command.env_clear().envs(environment).current_dir(
         starting_directory
             .ancestors()
             .last()

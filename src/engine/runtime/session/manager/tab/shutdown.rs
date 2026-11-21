@@ -1,13 +1,13 @@
 use super::{Tab, TabDirectory};
-use crate::runtime::session::manager::command::CommandWait;
+use crate::runtime::session::manager::command::SessionEnd;
 use alloc::sync::Arc;
-use anyhow::{Context as _, Result, bail};
-use core::time::Duration;
+use anyhow::{Result, bail};
 impl TabDirectory {
     pub(in crate::engine::runtime::session::manager) async fn close_all(&self) -> Result<()> {
         let tabs: Vec<_> = self
             .tabs
             .iter()
+            .filter(|entry| entry.value().optional_session().is_some())
             .map(|entry| Arc::clone(entry.value()))
             .collect();
         let results = futures_util::future::join_all(tabs.iter().map(Tab::close)).await;
@@ -28,43 +28,12 @@ impl Tab {
     pub(in crate::engine::runtime::session::manager) async fn close(
         self: &Arc<Self>,
     ) -> Result<()> {
-        tracing::debug!(tab_id = %self.id(), "waiting for tab operation before close");
-        let _operation = self.operation.lock().await;
-        tracing::debug!(tab_id = %self.id(), "closing tab session");
-        let Some(session) = self.optional_session() else {
-            return Ok(());
-        };
-        let command = if let Some(id) = session.busy_command_id() {
-            Some(
-                self.find_command(&id)
-                    .with_context(|| format!("Tab is missing its running command {id}"))?,
-            )
-        } else {
-            None
-        };
-        let target = Arc::clone(&session);
-        self.blocking.run(move || target.terminate()).await?;
-        session.wait_for_terminal_drain().await?;
-        let observed = match command.as_ref() {
-            Some(active) => active.wait(Duration::ZERO).await,
-            None => Ok(CommandWait::Finished),
-        };
-        let tab = Arc::clone(self);
-        self.blocking
-            .run(move || {
-                if let Some(active) = command {
-                    match observed {
-                        Ok(CommandWait::Finished) => tab.cache_done_command(&active)?,
-                        Ok(CommandWait::Running) => active.mark_failed("Tab was closed")?,
-                        Ok(CommandWait::Failed) => {}
-                        Err(error) => active.mark_failed(format!(
-                            "Tab was closed after command observation failed: {error:#}"
-                        ))?,
-                    }
-                    session.release(active.id());
-                }
-                tab.close_session(&session)
-            })
-            .await
+        self.with_operation(|tab| {
+            if let Some(session) = tab.optional_session() {
+                tab.end_session(&session, SessionEnd::Closed)?;
+            }
+            Ok(())
+        })
+        .await
     }
 }

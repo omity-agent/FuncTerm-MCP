@@ -1,6 +1,7 @@
 use crate::support::{
     command_directory, create_tab, locked_with_env, parse_command_id, parse_command_result,
     parse_tab_view, run, run_cli, run_cli_with_env, temp_root, wait_for_completion,
+    wait_for_stdout,
 };
 #[cfg(windows)]
 const SHELL: &str = "powershell";
@@ -19,6 +20,17 @@ fn close_and_reader_failure_preserve_history_and_other_tabs() {
         .nth(2)
         .unwrap()
         .to_path_buf();
+    #[cfg(windows)]
+    let source = "Write-Output BEFORE_CLOSE; $null = [Console]::In.ReadLine()";
+    #[cfg(unix)]
+    let source = "echo BEFORE_CLOSE; read -r ignored";
+    let running = run(&target.tab_id, source, 0.0);
+    let running_id = parse_command_id(&running);
+    wait_for_stdout(
+        &running_id,
+        "BEFORE_CLOSE",
+        core::time::Duration::from_secs(10),
+    );
     let closed = run_cli(&["close", "--tab-id", &target.tab_id]);
     assert!(closed.status.success(), "{closed:?}");
     assert!(String::from_utf8_lossy(&closed.stdout).contains(&target.tab_id));
@@ -35,6 +47,12 @@ fn close_and_reader_failure_preserve_history_and_other_tabs() {
     let history = parse_command_result(&run_cli(&["view", &command_id]));
     assert!(history.finished);
     assert!(history.stdout.contains("CLOSE_HISTORY"));
+    let interrupted = wait_for_completion(&running);
+    assert_eq!(interrupted.exit_code, Some(1_i32), "{interrupted:?}");
+    assert!(
+        interrupted.stdout.contains("BEFORE_CLOSE"),
+        "{interrupted:?}"
+    );
     let rejected = run(&target.tab_id, "echo unreachable", 0.0);
     assert!(!rejected.status.success(), "{rejected:?}");
     let repeated = run_cli(&["close", "--tab-id", &target.tab_id]);

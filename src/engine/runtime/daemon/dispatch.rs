@@ -42,14 +42,10 @@ pub(crate) async fn execute(manager: &Arc<Manager>, request: Request) -> Result<
             separate_output,
             wait_timeout,
         } => {
-            let (command_id, end_reason, view) = manager
+            let (command_id, view) = manager
                 .run(&tab_id, &command, separate_output, wait_timeout)
                 .await?;
-            Ok(Payload::CommandAccepted {
-                command_id,
-                end_reason,
-                view,
-            })
+            Ok(Payload::CommandAccepted { command_id, view })
         }
         Request::View {
             id,

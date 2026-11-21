@@ -116,6 +116,7 @@ futures-util = { version = "*", features = ["sink"] }
 humantime = "*"
 interprocess = { version = "*", features = ["tokio"] }
 itertools = "*"
+mimalloc = { git = "https://github.com/microsoft/mimalloc" }
 named-lock = "*"
 nanoid = "*"
 notify = "*"
@@ -132,10 +133,6 @@ same-file = "*"
 serde = { version = "*", features = ["derive", "unstable"] }
 serde_bytes = "*"
 shell-words = "*"
-snmalloc-rs = { git = "https://github.com/microsoft/snmalloc", features = [
-    "native-cpu",
-    "lto",
-] }
 sonic-rs = { git = "https://github.com/cloudwego/sonic-rs" }
 strum = { version = "*", features = ["derive"] }
 sugar_path = "*"

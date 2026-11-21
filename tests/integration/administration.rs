@@ -95,7 +95,7 @@ fn stop_terminates_running_commands_and_allows_automatic_startup() {
         !workspace.exists(),
         "daemon workspace remained after shutdown"
     );
-    assert_stopped(&guard.env());
+    assert_stopped(guard.service_name());
     thread::sleep(Duration::from_secs(3));
     assert!(!marker.exists(), "stopped command continued running");
     let fresh = create_tab(&temp_root(), SHELL);
@@ -109,12 +109,7 @@ fn assert_lifecycle(command: &str, expected: &str) {
         "{output:?}"
     );
 }
-fn assert_stopped(environment: &[(String, String)]) {
-    let service = &environment
-        .iter()
-        .find(|pair| pair.0 == "FUNCTERM_DAEMON_SERVICE_NAME")
-        .unwrap()
-        .1;
+fn assert_stopped(service: &str) {
     let name = format!(
         "functerm-instance-{}",
         blake3::hash(service.as_bytes()).to_hex()

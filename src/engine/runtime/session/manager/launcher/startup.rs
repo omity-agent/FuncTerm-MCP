@@ -109,7 +109,13 @@ fn startup_result(
             startup_screen(screen)
         );
     }
-    Ok(ready_file.exists().then_some(()))
+    if !ready_file.try_exists()? {
+        return Ok(None);
+    }
+    screen
+        .visible_revision()
+        .context("shell terminal is not available after startup")?;
+    Ok(Some(()))
 }
 fn reader_closed_result(child: &mut Box<dyn Child + Send + Sync>, screen: &Terminal) -> Result<()> {
     if let Some(status) = child.try_wait().context("failed to inspect closed shell")? {

@@ -4,13 +4,13 @@ mod settlement;
 mod start;
 mod supervision;
 use super::Manager;
-use crate::runtime::protocol::{EndReason, KeyboardInput, ViewResult};
+use crate::runtime::protocol::{KeyboardInput, ViewResult};
 use alloc::sync::Arc;
 use anyhow::Result;
 use core::num::NonZeroUsize;
 use core::time::Duration;
-pub(in crate::engine::runtime::session::manager) use lifecycle::CommandInputFailure;
-pub(super) use lifecycle::{CommandWait, ManagedCommand};
+pub(super) use lifecycle::ManagedCommand;
+pub(super) use settlement::SessionEnd;
 impl Manager {
     pub(crate) async fn manual_write(
         &self,
@@ -26,7 +26,7 @@ impl Manager {
         command: &str,
         separate_output: bool,
         wait_timeout: Duration,
-    ) -> Result<(String, EndReason, ViewResult)> {
+    ) -> Result<(String, ViewResult)> {
         self.tabs
             .run(tab_id, command, separate_output, wait_timeout)
             .await

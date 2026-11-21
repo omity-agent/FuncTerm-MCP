@@ -1,52 +1,39 @@
+use super::super::command::SessionEnd;
 use super::Tab;
-use crate::runtime::protocol::ViewResult;
+use crate::runtime::protocol::{RequestRejected, ViewResult};
 use alloc::sync::Arc;
 use anyhow::Result;
+use core::time::Duration;
 impl Tab {
-    pub(super) async fn view(
-        self: &Arc<Self>,
-        wait_timeout: core::time::Duration,
-    ) -> Result<ViewResult> {
-        let Ok(session) = self.live_session() else {
+    pub(super) async fn view(self: &Arc<Self>, wait_timeout: Duration) -> Result<ViewResult> {
+        let Some(session) = self.optional_session() else {
             return Ok(self.snapshot_view());
         };
-        let busy_command_id = session.busy_command_id();
-        let Some(command_id) = busy_command_id else {
+        if let Some(command) = session.busy_command() {
+            command.wait(wait_timeout).await?;
+        } else if !wait_timeout.is_zero() {
             let deadline = tokio::time::Instant::now()
                 .checked_add(wait_timeout)
-                .ok_or_else(|| anyhow::anyhow!("wait_timeout exceeds the supported timer range"))?;
-            tokio::time::sleep_until(deadline).await;
-            let _operation = self.operation.lock().await;
-            let idle_tab = Arc::clone(self);
-            return self.blocking.run(move || idle_tab.tab_view(&session)).await;
-        };
-        if let Some(command) = self.find_command(&command_id) {
-            match self.observe_command(&command, wait_timeout).await? {
-                super::super::command::CommandWait::Finished => {
-                    self.finish_done_command(&command).await?;
-                }
-                super::super::command::CommandWait::Running
-                | super::super::command::CommandWait::Failed => {}
+                .ok_or_else(|| {
+                    RequestRejected::new("wait_timeout exceeds the supported timer range")
+                })?;
+            tokio::select! {
+                () = tokio::time::sleep_until(deadline) => {}
+                exited = session.wait_for_exit() => { exited?; }
             }
         }
-        let observed_tab = Arc::clone(self);
-        let _operation = self.operation.lock().await;
-        self.blocking
-            .run(move || observed_tab.tab_view(&session))
-            .await
+        drop(session);
+        self.with_operation(|tab| tab.tab_view()).await
     }
-    fn tab_view(&self, session: &super::super::shell_session::ShellSession) -> Result<ViewResult> {
-        let alive = session.is_alive()?;
-        session.refresh_choice()?;
-        if alive {
-            let snapshot = self.remember(session)?;
-            Ok(snapshot.into_view(true))
-        } else {
-            if session.busy_command_id().is_some() {
-                return Ok(self.remember(session)?.into_view(false));
+    pub(in crate::engine::runtime::session::manager) fn tab_view(&self) -> Result<ViewResult> {
+        if let Some(session) = self.optional_session() {
+            session.refresh_choice()?;
+            if let Some(code) = session.exit_code()? {
+                self.end_session(&session, SessionEnd::Exited(code))?;
+            } else {
+                return Ok(self.remember(&session)?.into_view(true));
             }
-            self.close_session(session)?;
-            Ok(self.snapshot_view())
         }
+        Ok(self.snapshot_view())
     }
 }

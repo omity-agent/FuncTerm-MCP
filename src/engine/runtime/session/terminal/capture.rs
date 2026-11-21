@@ -41,12 +41,19 @@ impl CommandCapture {
             changed: Event::new(),
         }
     }
-    pub(in crate::engine::runtime::session) fn current(&self) -> Result<String> {
-        let state = self.state.lock();
-        if let CapturePhase::Failed(message) = state.phase.clone() {
-            bail!("{message}");
+    pub(in crate::engine::runtime::session) fn title(&self) -> String {
+        self.state.lock().title.clone()
+    }
+    pub(in crate::engine::runtime::session) fn active(&self) -> bool {
+        self.state.lock().phase == CapturePhase::Active
+    }
+    pub(in crate::engine::runtime::session) fn finished(&self) -> Result<bool> {
+        let phase = self.state.lock().phase.clone();
+        match phase {
+            CapturePhase::Finished => Ok(true),
+            CapturePhase::Pending | CapturePhase::Active => Ok(false),
+            CapturePhase::Failed(message) => bail!("{message}"),
         }
-        Ok(state.title.clone())
     }
     pub(in crate::engine::runtime::session) fn output(&self) -> Result<Option<ByteString>> {
         self.state
@@ -56,34 +63,21 @@ impl CommandCapture {
             .map(RenderedOutput::contents)
             .transpose()
     }
-    pub(in crate::engine::runtime::session) async fn wait_finished(&self) -> Result<String> {
-        self.wait_ended(Duration::MAX).await?;
-        self.current()
-    }
-    pub(in crate::engine::runtime::session) async fn wait_ended(
-        &self,
-        limit: Duration,
-    ) -> Result<bool> {
-        let ended = wait_until(&self.changed, limit, || {
-            Ok(!matches!(
-                self.state.lock().phase,
-                CapturePhase::Pending | CapturePhase::Active
-            ))
-        })
-        .await?;
-        let phase = self.state.lock().phase.clone();
-        match phase {
-            CapturePhase::Finished => Ok(ended),
-            CapturePhase::Pending | CapturePhase::Active => Ok(false),
-            CapturePhase::Failed(message) => bail!("{message}"),
-        }
+    pub(in crate::engine::runtime::session) async fn wait_finished(&self) -> Result<()> {
+        wait_until(&self.changed, Duration::MAX, || self.finished()).await?;
+        Ok(())
     }
     pub(in crate::engine::runtime::session) async fn wait_started(
         &self,
         limit: Duration,
     ) -> Result<bool> {
         wait_until(&self.changed, limit, || {
-            Ok(self.state.lock().phase != CapturePhase::Pending)
+            let phase = self.state.lock().phase.clone();
+            match phase {
+                CapturePhase::Pending => Ok(false),
+                CapturePhase::Active | CapturePhase::Finished => Ok(true),
+                CapturePhase::Failed(message) => bail!("{message}"),
+            }
         })
         .await
     }

@@ -38,12 +38,11 @@ pub(super) struct ShellSession {
     child: Mutex<Box<dyn Child + Send + Sync>>,
     #[builder(with = |value: Option<Box<dyn SlavePty + Send>>| Mutex::new(value))]
     slave: Mutex<Option<Box<dyn SlavePty + Send>>>,
-    #[builder(required)]
-    reader: Option<JoinHandle<()>>,
+    #[builder(with = |value: JoinHandle<()>| Mutex::new(Some(value)))]
+    reader: Mutex<Option<JoinHandle<()>>>,
     #[builder(required)]
     directory: Option<tempfile::TempDir>,
 }
-pub(in crate::engine::runtime::session::manager) use input::KeyboardWriteFailure;
 impl ShellSession {
     pub(super) fn cwd(&self) -> PathBuf {
         self.cwd.lock().clone()
@@ -69,9 +68,6 @@ impl ShellSession {
         separate_output: bool,
     ) -> Result<Arc<CommandCapture>> {
         self.screen.capture_command(command_id, separate_output)
-    }
-    pub(super) fn discard_capture(&self, command_id: &str) -> Result<()> {
-        self.screen.discard_capture(command_id)
     }
     pub(super) fn current_choice(&self) -> ShellChoice {
         *self.choice.lock()
@@ -142,8 +138,8 @@ impl ShellSession {
     pub(super) async fn wait_for_exit(&self) -> Result<()> {
         self.screen.wait_for_exit().await
     }
-    pub(super) async fn wait_for_terminal_drain(&self) -> Result<()> {
-        self.screen.wait_reader_closed().await
+    pub(super) async fn wait_for_shutdown(&self) -> Result<()> {
+        self.screen.wait_for_shutdown().await
     }
     pub(super) fn complete_interruption(&self, command: &ManagedCommand, cwd: &str) -> Result<()> {
         command.publish_interruption(cwd)?;

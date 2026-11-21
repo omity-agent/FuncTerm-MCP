@@ -1,8 +1,9 @@
 use crate::runtime::protocol::{
-    CommandPresentation, Payload, ShellPresentation, ViewResult,
+    CommandPresentation, EndReason, Payload, ShellPresentation, ViewResult,
     format::{command_plain_text, tab_created_plain_text, tab_plain_text},
 };
-use rmcp::model::{CallToolResult, ContentBlock};
+use anyhow::{Result, bail, ensure};
+use rmcp::serde_json::Value;
 use serde::Serialize;
 pub(super) fn processing(
     response: rmcp::model::CallToolResponse,
@@ -12,8 +13,7 @@ pub(super) fn processing(
         return Ok(response);
     };
     if let Some(data) = measurement {
-        let value = rmcp::serde_json::to_value(data)
-            .map_err(|error| rmcp::ErrorData::internal_error(error.to_string(), None))?;
+        let value = rmcp::serde_json::to_value(data).map_err(internal_error)?;
         result
             .meta
             .get_or_insert_default()
@@ -21,6 +21,11 @@ pub(super) fn processing(
             .insert("functerm/processing".to_owned(), value);
     }
     Ok(result.into())
+}
+pub(super) fn internal_error(error: impl core::fmt::Display) -> rmcp::ErrorData {
+    tracing::error!("MCP runtime failed to complete the tool call");
+    tracing::debug!(error = format!("{error:#}"), "MCP runtime failure details");
+    rmcp::ErrorData::internal_error("FuncTerm could not complete the tool call", None)
 }
 #[derive(Debug, Serialize, rmcp :: schemars :: JsonSchema)]
 pub(super) struct NewTabOutput<'payload> {
@@ -47,16 +52,20 @@ pub(super) struct ViewOutput<'payload> {
     pub(super) command: Option<CommandPresentation<'payload>>,
     pub(super) note: &'payload str,
 }
-pub(super) fn new_tab(payload: Payload) -> Result<CallToolResult, String> {
+pub(super) struct EntryOutput {
+    pub(super) text: String,
+    pub(super) value: Value,
+}
+pub(super) fn new_tab(payload: Payload) -> Result<EntryOutput> {
     let Payload::TabCreated { tab_id } = payload else {
-        return Err(unexpected_response());
+        bail!("daemon returned a response other than TabCreated");
     };
     tool_result(
         tab_created_plain_text(&tab_id),
         &NewTabOutput { tab_id: &tab_id },
     )
 }
-pub(super) fn manual_write(payload: Payload) -> Result<CallToolResult, String> {
+pub(super) fn manual_write(payload: Payload) -> Result<EntryOutput> {
     let Payload::KeyboardWritten {
         view: ViewResult::Tab {
             shell,
@@ -65,7 +74,7 @@ pub(super) fn manual_write(payload: Payload) -> Result<CallToolResult, String> {
         },
     } = payload
     else {
-        return Err(unexpected_response());
+        bail!("daemon returned a response other than a keyboard write with a Tab view");
     };
     tool_result(
         tab_plain_text(&shell, &screen, &note, false),
@@ -76,7 +85,7 @@ pub(super) fn manual_write(payload: Payload) -> Result<CallToolResult, String> {
         },
     )
 }
-pub(super) fn run(payload: Payload) -> Result<CallToolResult, String> {
+pub(super) fn run(payload: Payload) -> Result<EntryOutput> {
     let Payload::CommandAccepted {
         command_id,
         view:
@@ -84,12 +93,16 @@ pub(super) fn run(payload: Payload) -> Result<CallToolResult, String> {
                 shell,
                 command,
                 note,
+                end_reason,
             },
-        end_reason: _,
     } = payload
     else {
-        return Err(unexpected_response());
+        bail!("daemon returned a response other than a command result");
     };
+    ensure!(
+        end_reason != EndReason::CommandFailed,
+        "command was stopped after a runtime failure"
+    );
     tool_result(
         command_plain_text(&shell, &command, &note, false, Some(&command_id)),
         &RunOutput {
@@ -99,9 +112,9 @@ pub(super) fn run(payload: Payload) -> Result<CallToolResult, String> {
         },
     )
 }
-pub(super) fn view(payload: Payload) -> Result<CallToolResult, String> {
+pub(super) fn view(payload: Payload) -> Result<EntryOutput> {
     let Payload::View(view) = payload else {
-        return Err(unexpected_response());
+        bail!("daemon returned a response other than a view");
     };
     match view {
         ViewResult::Tab {
@@ -121,27 +134,28 @@ pub(super) fn view(payload: Payload) -> Result<CallToolResult, String> {
             shell,
             command,
             note,
-        } => tool_result(
-            command_plain_text(&shell, &command, &note, true, None),
-            &ViewOutput {
-                shell: shell.presentation(true),
-                screen: None,
-                command: Some(command.presentation(None)),
-                note: &note,
-            },
-        ),
+            end_reason,
+        } => {
+            ensure!(
+                end_reason != EndReason::CommandFailed,
+                "command was stopped after a runtime failure"
+            );
+            tool_result(
+                command_plain_text(&shell, &command, &note, true, None),
+                &ViewOutput {
+                    shell: shell.presentation(true),
+                    screen: None,
+                    command: Some(command.presentation(None)),
+                    note: &note,
+                },
+            )
+        }
     }
 }
-fn tool_result<T>(content: String, structured_content: &T) -> Result<CallToolResult, String>
+fn tool_result<T>(text: String, structured_content: &T) -> Result<EntryOutput>
 where
     T: Serialize + ?Sized,
 {
-    let value = rmcp::serde_json::to_value(structured_content)
-        .map_err(|error| format!("failed to serialize structured content: {error}"))?;
-    let mut result = CallToolResult::success(vec![ContentBlock::text(content)]);
-    result.structured_content = Some(value);
-    Ok(result)
-}
-fn unexpected_response() -> String {
-    "daemon returned an unexpected response".to_owned()
+    let value = rmcp::serde_json::to_value(structured_content)?;
+    Ok(EntryOutput { text, value })
 }

@@ -35,15 +35,6 @@ pub(crate) fn assert_rejected(response: &Value) {
         "{response}"
     );
 }
-pub(crate) fn assert_saved(sent: &Value, viewed: &Value) {
-    let mut expected = command_result(sent).clone();
-    expected
-        .as_object_mut()
-        .unwrap()
-        .remove("command_id")
-        .unwrap();
-    assert_eq!(&expected, command_result(viewed), "{viewed}");
-}
 pub(crate) fn text_documents(response: &Value) -> Vec<&str> {
     let blocks = field(response, "/result/content").as_array().unwrap();
     assert_eq!(blocks.len(), entries(response).len());
