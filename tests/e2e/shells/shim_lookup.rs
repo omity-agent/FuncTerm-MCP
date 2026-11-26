@@ -1,9 +1,9 @@
-use super::matrix::{case_dir, shell_cases};
+use super::matrix::{SHELL_CASES, case_dir};
 use crate::support::{complete_command, create_tab};
 #[test]
 fn cli_is_available_with_only_shim_path() {
     let _guard = super::matrix::daemon();
-    for shell in shell_cases()
+    for shell in SHELL_CASES
         .iter()
         .map(|case| case.name)
         .chain(["python", "bun"])
@@ -68,12 +68,11 @@ fn powershell_lookup_ranks_all_path_hits_and_packaged_previews() {
 fn assert_cli_lookup(shell: &str) {
     let directory = case_dir(shell, "shim lookup");
     let created = create_tab(&directory, shell);
-    let initial = complete_command(&created.tab_id, &executable_probe_command(shell, false));
-    assert_eq!(initial.exit_code, Some(0_i32), "{shell}: {initial:?}");
-    assert!(initial.stdout.contains("Usage:"), "{shell}: {initial:?}");
-    let next = complete_command(&created.tab_id, &executable_probe_command(shell, true));
-    assert_eq!(next.exit_code, Some(0_i32), "{shell}: {next:?}");
-    assert!(next.stdout.contains("Usage:"), "{next:?}");
+    for isolated in [false, true] {
+        let result = complete_command(&created.tab_id, &executable_probe_command(shell, isolated));
+        assert_eq!(result.exit_code, Some(0_i32), "{shell}: {result:?}");
+        assert!(result.stdout.contains("Usage:"), "{shell}: {result:?}");
+    }
     assert!(!directory.join("done.json").exists());
 }
 fn executable_probe_command(shell: &str, isolated: bool) -> String {

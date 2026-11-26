@@ -6,46 +6,90 @@ use crate::runtime::{
 };
 use alloc::sync::Arc;
 use anyhow::Result;
-use parking_lot::Mutex;
+use std::time::Instant;
 #[derive(Clone)]
-pub(super) struct Backend {
-    dispatcher: Option<Arc<Dispatcher>>,
+pub(super) enum Backend {
+    Ipc,
+    Direct(Arc<Dispatcher>),
 }
-pub(super) struct PreparedBackend<'dispatcher> {
-    dispatcher: Option<&'dispatcher Dispatcher>,
-    connection: Mutex<Option<DaemonClient>>,
+pub(super) enum PreparedBackend<'dispatcher> {
+    Ipc(Option<DaemonClient>),
+    Direct(&'dispatcher Dispatcher),
 }
 impl Backend {
-    pub(super) const fn ipc() -> Self {
-        Self { dispatcher: None }
-    }
-    pub(super) const fn direct(dispatcher: Arc<Dispatcher>) -> Self {
-        Self {
-            dispatcher: Some(dispatcher),
-        }
-    }
+    #[expect(
+        clippy::pattern_type_mismatch,
+        reason = "reuse the dispatcher without cloning its Arc"
+    )]
     pub(super) async fn prepare(&self, settings: &Settings) -> Result<PreparedBackend<'_>> {
-        let connection = if self.dispatcher.is_none() {
-            Some(DaemonClient::connect_or_start(settings).await?)
-        } else {
-            None
-        };
-        Ok(PreparedBackend {
-            dispatcher: self.dispatcher.as_deref(),
-            connection: Mutex::new(connection),
-        })
+        match self {
+            Self::Ipc => Ok(PreparedBackend::Ipc(Some(
+                DaemonClient::connect_or_start(settings).await?,
+            ))),
+            Self::Direct(dispatcher) => Ok(PreparedBackend::Direct(dispatcher)),
+        }
     }
 }
-impl PreparedBackend<'_> {
-    pub(super) async fn execute(&self, settings: &Settings, request: Request) -> Result<Payload> {
-        if let Some(dispatcher) = self.dispatcher {
-            return dispatcher.execute(request).await;
-        }
-        let prepared = self.connection.lock().take();
-        let mut connection = match prepared {
-            Some(client) => client,
-            None => DaemonClient::connect(settings).await?,
+impl<'dispatcher> PreparedBackend<'dispatcher> {
+    pub(super) fn dispatch(
+        &mut self,
+        settings: &'dispatcher Settings,
+        mut request: Request,
+        batch_started: Instant,
+    ) -> impl Future<Output = Result<Payload>> + use<'dispatcher> {
+        #[expect(
+            clippy::pattern_type_mismatch,
+            reason = "move the initial connection without taking ownership of the batch"
+        )]
+        let transport = match self {
+            Self::Ipc(connection) => Self::Ipc(connection.take()),
+            Self::Direct(dispatcher) => Self::Direct(dispatcher),
         };
-        connection.call(request).await
+        async move {
+            #[expect(
+                clippy::pattern_type_mismatch,
+                reason = "adjust the budget without rebuilding the request or moving its input"
+            )]
+            match &mut request {
+                Request::ManualWrite {
+                    wait_timeout,
+                    tab_id: _,
+                    input: _,
+                }
+                | Request::Run {
+                    wait_timeout,
+                    tab_id: _,
+                    command: _,
+                    separate_output: _,
+                }
+                | Request::View {
+                    wait_timeout,
+                    id: _,
+                    start_token: _,
+                } => {
+                    *wait_timeout = wait_timeout.saturating_sub(batch_started.elapsed());
+                }
+                Request::Ping
+                | Request::Shutdown
+                | Request::NewTab {
+                    starting_directory: _,
+                    starting_shell: _,
+                    load_profile: _,
+                    elevated: _,
+                    environment: _,
+                }
+                | Request::Close { tab_id: _ } => {}
+            }
+            match transport {
+                Self::Direct(dispatcher) => dispatcher.execute(request).await,
+                Self::Ipc(initial) => {
+                    let mut connection = match initial {
+                        Some(client) => client,
+                        None => DaemonClient::connect(settings).await?,
+                    };
+                    connection.call(request).await
+                }
+            }
+        }
     }
 }

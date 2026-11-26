@@ -1,30 +1,66 @@
-use super::{Tab, TabDirectory};
+use super::Tab;
 use crate::runtime::session::manager::command::SessionEnd;
+use crate::runtime::session::manager::shell_session::ShellSession;
+use crate::runtime::session::terminal::Terminal;
 use alloc::sync::Arc;
 use anyhow::{Result, bail};
-impl TabDirectory {
-    pub(in crate::engine::runtime::session::manager) async fn close_all(&self) -> Result<()> {
-        let tabs: Vec<_> = self
-            .tabs
-            .iter()
-            .filter(|entry| entry.value().optional_session().is_some())
-            .map(|entry| Arc::clone(entry.value()))
-            .collect();
-        let results = futures_util::future::join_all(tabs.iter().map(Tab::close)).await;
-        let failures: Vec<_> = results
-            .into_iter()
-            .zip(&tabs)
-            .filter_map(|(result, tab)| {
-                result.err().map(|error| format!("{}: {error:#}", tab.id()))
-            })
-            .collect();
-        if !failures.is_empty() {
-            bail!("failed to close daemon Tabs: {}", failures.join("; "));
-        }
-        Ok(())
-    }
-}
 impl Tab {
+    pub(in crate::engine::runtime::session::manager) fn supervise_lifetime(
+        self: &Arc<Self>,
+        terminal: Arc<Terminal>,
+    ) {
+        let owner = Arc::clone(self);
+        self.supervisors.spawn(async move {
+            let exited = match terminal.wait_for_exit().await {
+                Ok(false) => return,
+                Ok(true) => true,
+                Err(error) => {
+                    tracing::error!(tab_id = owner.id(), "shell process observation failed");
+                    tracing::debug!(
+                        error = format!("{error:#}"),
+                        "shell observation failure details"
+                    );
+                    false
+                }
+            };
+            if let Err(error) = owner
+                .with_operation(move |tab| tab.close_after_observation(exited))
+                .await
+            {
+                tracing::error!(tab_id = owner.id(), "failed to close Tab after shell exit");
+                tracing::debug!(error = format!("{error:#}"), "Tab closure failure details");
+            }
+        });
+    }
+    fn close_after_observation(&self, exited: bool) -> Result<()> {
+        let Some(session) = self.optional_session() else {
+            return Ok(());
+        };
+        let end = match session.exit_code()? {
+            Some(code) => SessionEnd::Exited(code),
+            None if exited => bail!("shell exit was observed without an exit status"),
+            None => SessionEnd::Failed,
+        };
+        self.end_session(&session, end)
+    }
+    pub(in crate::engine::runtime::session::manager) fn active_session(
+        &self,
+    ) -> Result<Option<Arc<ShellSession>>> {
+        let Some(session) = self.optional_session() else {
+            return Ok(None);
+        };
+        if let Some(code) = session.exit_code()? {
+            self.end_session(&session, SessionEnd::Exited(code))?;
+            return Ok(None);
+        }
+        Ok(Some(session))
+    }
+    pub(in crate::engine::runtime::session::manager) fn live_session(
+        &self,
+    ) -> Result<Arc<ShellSession>> {
+        self.active_session()?
+            .ok_or_else(|| self.closed_tab().into())
+    }
     pub(in crate::engine::runtime::session::manager) async fn close(
         self: &Arc<Self>,
     ) -> Result<()> {

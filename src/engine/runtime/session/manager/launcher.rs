@@ -24,7 +24,6 @@ pub(super) struct ShellLauncher {
     generation_root: std::path::PathBuf,
     shim_dir: std::path::PathBuf,
     shim_ready: (OnceLock<()>, OnceLock<()>),
-    #[cfg(unix)]
     runtime_root: std::path::PathBuf,
 }
 impl ShellLauncher {
@@ -40,12 +39,11 @@ impl ShellLauncher {
             generation_root,
             shim_dir,
             shim_ready: (OnceLock::new(), OnceLock::new()),
-            #[cfg(unix)]
             runtime_root: root,
         })
     }
     pub(super) fn cleanup(&self) -> Result<()> {
-        temp::clear_service_runtime(&temp::daemon_root()?, &self.settings.daemon_service_name)
+        temp::clear_service_runtime(&self.runtime_root, &self.settings.daemon_service_name)
     }
     pub(super) fn launch(
         &self,
@@ -151,43 +149,32 @@ impl ShellLauncher {
                 return Err(error).context("failed to start pty reader");
             }
         };
-        let initialized = startup_events
-            .wait(&mut child, &ready_file, &screen, startup_timeout)
+        let mut session = ShellSession::builder()
+            .choice(starting_shell)
+            .cwd(starting_directory.to_path_buf())
+            .writer(writer)
+            .screen(Arc::clone(&screen))
+            .command_root(command_root)
+            .command_watch(command_watch)
+            .dispatch_file(tab_state.join(DISPATCH_FILE))
+            .active_shell_file(tab_state.join("active-shell.txt"))
+            .command_start_timeout(startup_timeout)
+            .process_tree(process_tree)
+            .child(child)
+            .slave(retained_slave)
+            .reader(reader_worker)
+            .directory(Some(directory))
+            .build();
+        let _startup_master = spawned.master;
+        startup_events
+            .wait(session.startup_child(), &ready_file, &screen, startup_timeout)
             .with_context(|| {
                 format!(
                     "failed to initialize {} at {executable}",
                     starting_shell.canonical_name(),
                 )
-            });
-        if let Err(error) = initialized {
-            tracing::debug!(shim_dir = %shim_dir.display(), "shell initialization failed");
-            if let Err(failure) = process_tree.terminate() {
-                tracing::error!(%failure, "failed to terminate unready shell process tree");
-            }
-            process::cleanup(child.as_mut(), "unregistered shell child");
-            drop(retained_slave);
-            drop(spawned.master);
-            process::join_reader(reader_worker, "pty reader thread");
-            return Err(error);
-        }
-        let active_shell_file = tab_state.join("active-shell.txt");
-        Ok(Arc::new(
-            ShellSession::builder()
-                .choice(starting_shell)
-                .cwd(starting_directory.to_path_buf())
-                .writer(writer)
-                .screen(screen)
-                .command_root(command_root)
-                .command_watch(command_watch)
-                .dispatch_file(tab_state.join(DISPATCH_FILE))
-                .active_shell_file(active_shell_file)
-                .command_start_timeout(startup_timeout)
-                .process_tree(process_tree)
-                .child(child)
-                .slave(retained_slave)
-                .reader(reader_worker)
-                .directory(Some(directory))
-                .build(),
-        ))
+            })
+            .inspect_err(|_error| tracing::debug!(shim_dir = %shim_dir.display(), "shell initialization failed"))?;
+        Ok(Arc::new(session))
     }
 }

@@ -1,13 +1,12 @@
-use crate::engine::mcp::WaitTimeoutSettings;
-use crate::engine::privileges::PrivilegeMode;
-use crate::runtime::daemon::resource_alerts::ResourceAlertSettings;
-use crate::runtime::protocol::OutputMode;
+use crate::engine::{mcp::WaitTimeoutSettings, privileges::PrivilegeMode};
+use crate::runtime::{daemon::resource_alerts::ResourceAlertSettings, protocol::OutputMode};
 use alloc::collections::BTreeMap;
 use anyhow::{Context as _, Result, ensure};
-use core::time::Duration;
+use core::{str::FromStr, time::Duration};
 use serde::Deserialize;
 const SETTINGS: &str = include_str!("../../settings.toml");
 pub(crate) const DAEMON_SERVICE_NAME_ENV: &str = "FUNCTERM_DAEMON_SERVICE_NAME";
+pub(crate) const MCP_SINGLE_PARAMETER_RUN_ENV: &str = "FUNCTERM_MCP_SINGLE_PARAMETER_RUN";
 #[derive(Clone, Debug, Deserialize)]
 pub(crate) struct Settings {
     pub(crate) daemon_service_name: String,
@@ -82,10 +81,12 @@ impl IpcSettings {
 pub(crate) struct McpSettings {
     #[serde(flatten)]
     pub(crate) wait_timeout: WaitTimeoutSettings,
+    pub(crate) single_parameter_run: bool,
     pub(crate) http: HttpSettings,
     pub(crate) new_tab: ToolDescription,
     pub(crate) manual_write: ToolDescription,
     pub(crate) run: ToolDescription,
+    pub(crate) script_run: ToolDescription,
     pub(crate) view: ToolDescription,
 }
 #[derive(Clone, Debug, Deserialize)]
@@ -133,13 +134,13 @@ pub(crate) fn load() -> Result<Settings> {
     );
     crate::contract::validate_window_title(&settings.terminal_model_title)?;
     settings.ipc.validate()?;
-    settings.mcp.wait_timeout.validate()?;
     settings.resource_alerts.apply_environment()?;
-    apply_string_override(
+    apply_parsed_override(
         "FUNCTERM_DIAGNOSTICS_FILTER",
         &mut settings.diagnostics_filter,
-    );
-    apply_string_override(DAEMON_SERVICE_NAME_ENV, &mut settings.daemon_service_name);
+    )?;
+    apply_parsed_override(DAEMON_SERVICE_NAME_ENV, &mut settings.daemon_service_name)?;
+    let mcp = &mut settings.mcp;
     for (name, value) in [
         (
             "FUNCTERM_SHELL_LOAD_PROFILE",
@@ -149,22 +150,18 @@ pub(crate) fn load() -> Result<Settings> {
             "FUNCTERM_BENCHMARK_PROCESSING_TIMING",
             &mut settings.benchmark.processing_timing,
         ),
+        (MCP_SINGLE_PARAMETER_RUN_ENV, &mut mcp.single_parameter_run),
     ] {
-        if let Ok(setting) = std::env::var(name) {
-            *value = setting
-                .parse()
-                .with_context(|| format!("invalid boolean in {name}"))?;
-        }
+        apply_parsed_override(name, value)?;
     }
-    if let Some(address) = std::env::var_os("FUNCTERM_MCP_HTTP_BIND") {
-        settings.mcp.http.bind_address = address
-            .to_str()
-            .context("FUNCTERM_MCP_HTTP_BIND is not valid Unicode")?
-            .parse()
-            .context("invalid FUNCTERM_MCP_HTTP_BIND socket address")?;
-    }
-    settings.mcp.http.validate()?;
-    apply_string_override("FUNCTERM_UNIX_NORMAL_USER", &mut settings.unix_normal_user);
+    apply_parsed_override("FUNCTERM_MCP_HTTP_BIND", &mut mcp.http.bind_address)?;
+    apply_parsed_override(
+        "FUNCTERM_MCP_WAIT_TIMEOUT_DEFAULT",
+        &mut mcp.wait_timeout.default_seconds,
+    )?;
+    mcp.wait_timeout.validate()?;
+    mcp.http.validate()?;
+    apply_parsed_override("FUNCTERM_UNIX_NORMAL_USER", &mut settings.unix_normal_user)?;
     for (name, candidates) in [
         ("FUNCTERM_POWERSHELL", &mut settings.powershell),
         ("FUNCTERM_BASH", &mut settings.bash),
@@ -178,6 +175,20 @@ pub(crate) fn load() -> Result<Settings> {
     }
     Ok(settings)
 }
+fn apply_parsed_override<T>(name: &str, value: &mut T) -> Result<()>
+where
+    T: FromStr,
+    T::Err: core::error::Error + Send + Sync + 'static,
+{
+    if let Some(setting) = std::env::var_os(name) {
+        *value = setting
+            .to_str()
+            .with_context(|| format!("{name} is not valid Unicode"))?
+            .parse()
+            .with_context(|| format!("invalid {name}"))?;
+    }
+    Ok(())
+}
 fn apply_list_override(name: &str, value: &mut Vec<String>) {
     if let Ok(override_value) = std::env::var(name) {
         *value = override_value
@@ -186,10 +197,5 @@ fn apply_list_override(name: &str, value: &mut Vec<String>) {
             .filter(|part| !part.is_empty())
             .map(str::to_owned)
             .collect();
-    }
-}
-fn apply_string_override(name: &str, value: &mut String) {
-    if let Ok(override_value) = std::env::var(name) {
-        *value = override_value;
     }
 }

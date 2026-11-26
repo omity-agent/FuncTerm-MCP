@@ -24,22 +24,32 @@ impl StartupEvents {
     }
     pub(super) fn wait(
         self,
-        child: &mut Box<dyn Child + Send + Sync>,
+        child: &mut (dyn Child + Send + Sync),
         ready_file: &Path,
         screen: &Arc<Terminal>,
         timeout: Duration,
     ) -> Result<()> {
-        super::process_watch::monitor_child(
-            child.as_ref(),
-            self.sender.clone(),
-            Arc::clone(screen),
-        )?;
+        super::process_watch::monitor_child(child, self.sender.clone(), Arc::clone(screen))?;
         let parent = ready_file
             .parent()
             .context("shell ready path has no parent")?;
         let sender = self.sender.clone();
+        let ready_name = ready_file
+            .file_name()
+            .context("shell ready path has no file name")?
+            .to_owned();
         let mut watcher = RecommendedWatcher::new(
             move |event: notify::Result<notify::Event>| {
+                if let Ok(change) = event.as_ref()
+                    && !change.need_rescan()
+                    && !change.paths.is_empty()
+                    && !change
+                        .paths
+                        .iter()
+                        .any(|path| path.file_name() == Some(ready_name.as_os_str()))
+                {
+                    return;
+                }
                 let _sent = sender.send(StartupEvent::Filesystem(event.map(|_| ())));
             },
             Config::default(),
@@ -55,7 +65,7 @@ impl StartupEvents {
     }
     fn wait_for_event(
         &self,
-        child: &mut Box<dyn Child + Send + Sync>,
+        child: &mut (dyn Child + Send + Sync),
         ready_file: &Path,
         screen: &Terminal,
         timeout: Duration,
@@ -76,11 +86,8 @@ impl StartupEvents {
                 Ok(StartupEvent::Filesystem(Err(error))) => {
                     return Err(error).context("shell startup watcher failed");
                 }
-                Ok(StartupEvent::ReaderClosed) => {
-                    return reader_closed_result(child, screen);
-                }
-                Ok(StartupEvent::ProcessExited(Ok(()))) => {
-                    return process_exited_result(child, screen);
+                Ok(StartupEvent::ReaderClosed | StartupEvent::ProcessExited(Ok(()))) => {
+                    return startup_ended(child, screen);
                 }
                 Ok(StartupEvent::ProcessExited(Err(error))) => {
                     return Err(error).context("shell process monitor failed");
@@ -96,7 +103,7 @@ impl StartupEvents {
     }
 }
 fn startup_result(
-    child: &mut Box<dyn Child + Send + Sync>,
+    child: &mut (dyn Child + Send + Sync),
     ready_file: &Path,
     screen: &Terminal,
 ) -> Result<Option<()>> {
@@ -117,7 +124,7 @@ fn startup_result(
         .context("shell terminal is not available after startup")?;
     Ok(Some(()))
 }
-fn reader_closed_result(child: &mut Box<dyn Child + Send + Sync>, screen: &Terminal) -> Result<()> {
+fn startup_ended(child: &mut (dyn Child + Send + Sync), screen: &Terminal) -> Result<()> {
     if let Some(status) = child.try_wait().context("failed to inspect closed shell")? {
         bail!(
             "shell exited during startup with status {status}; screen: {}",
@@ -129,14 +136,8 @@ fn reader_closed_result(child: &mut Box<dyn Child + Send + Sync>, screen: &Termi
         startup_screen(screen)
     );
 }
-fn process_exited_result(
-    child: &mut Box<dyn Child + Send + Sync>,
-    screen: &Terminal,
-) -> Result<()> {
-    reader_closed_result(child, screen)
-}
 fn startup_timeout(
-    child: &mut Box<dyn Child + Send + Sync>,
+    child: &mut (dyn Child + Send + Sync),
     ready_file: &Path,
     screen: &Terminal,
     timeout: Duration,
@@ -144,7 +145,6 @@ fn startup_timeout(
     if startup_result(child, ready_file, screen)?.is_some() {
         return Ok(());
     }
-    child.kill().context("failed to kill unready shell")?;
     bail!(
         "shell did not report startup readiness within {timeout:?}; screen: {}",
         startup_screen(screen)

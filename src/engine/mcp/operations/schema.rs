@@ -1,11 +1,9 @@
-use super::{
+use super::Operation as _;
+use crate::mcp::{
     McpServer, WaitTimeoutSettings,
     arguments::{ManualWriteInput, NewTabOptions, RunInput, ViewQuery},
-    operations::Operation as _,
 };
-use crate::engine::privileges::PrivilegeMode;
 use crate::runtime::config::{McpSettings, ToolDescription};
-use crate::runtime::protocol::OutputMode;
 use alloc::{borrow::Cow, collections::BTreeMap, sync::Arc};
 use anyhow::{Context as _, Result, bail};
 use rmcp::{
@@ -17,33 +15,6 @@ use schemars::{
     Schema,
     transform::{RecursiveTransform, RestrictFormats, Transform as _},
 };
-pub(super) fn router(
-    settings: &McpSettings,
-    privilege_mode: Option<PrivilegeMode>,
-    output_mode: Option<OutputMode>,
-) -> Result<ToolRouter<McpServer>> {
-    let mut router = McpServer::tool_router();
-    for (internal, public, fixed) in [
-        ("fixed_new_tab", "new_tab", privilege_mode.is_some()),
-        ("fixed_run", "run", output_mode.is_some()),
-    ] {
-        let mut route = router
-            .map
-            .remove(internal)
-            .with_context(|| format!("MCP route {internal} is missing"))?;
-        if fixed {
-            route.attr.name = public.to_owned().into();
-            router.map.insert(public.to_owned().into(), route);
-        }
-    }
-    apply(
-        &mut router,
-        settings,
-        privilege_mode.is_some(),
-        output_mode.is_some(),
-    )?;
-    Ok(router)
-}
 pub(super) fn apply(
     router: &mut ToolRouter<McpServer>,
     descriptions: &McpSettings,
@@ -58,15 +29,20 @@ pub(super) fn apply(
     if fixed_output {
         run.item_parameters.remove("separate_output");
     }
+    let (run_parameter, run_description) = if descriptions.single_parameter_run {
+        (None, &descriptions.script_run)
+    } else {
+        (Some(RunInput::LIST_PARAMETER), &run)
+    };
     let tools = [
-        ("new_tab", NewTabOptions::LIST_PARAMETER, &new_tab),
+        ("new_tab", Some(NewTabOptions::LIST_PARAMETER), &new_tab),
         (
             "manual_write",
-            ManualWriteInput::LIST_PARAMETER,
+            Some(ManualWriteInput::LIST_PARAMETER),
             &descriptions.manual_write,
         ),
-        ("run", RunInput::LIST_PARAMETER, &run),
-        ("view", ViewQuery::LIST_PARAMETER, &descriptions.view),
+        ("run", run_parameter, run_description),
+        ("view", Some(ViewQuery::LIST_PARAMETER), &descriptions.view),
     ];
     for (name, list_parameter, description) in tools {
         let route = router
@@ -85,7 +61,7 @@ pub(super) fn apply(
 }
 fn apply_to_route(
     name: &str,
-    list_parameter: &str,
+    list_parameter: Option<&str>,
     tool: &mut Tool,
     description: &ToolDescription,
     timing: WaitTimeoutSettings,
@@ -103,18 +79,20 @@ fn apply_to_route(
             .with_context(|| format!("MCP tool {name} wait_timeout schema is not an object"))?;
         timing.apply_schema(schema);
     }
-    let item_properties = properties
-        .get_mut(list_parameter)
-        .and_then(|schema| schema.pointer_mut("/items/properties"))
-        .and_then(Value::as_object_mut)
-        .with_context(|| {
-            format!("MCP tool {name} {list_parameter} item schema has no properties object")
-        })?;
-    apply_parameters(
-        &format!("{name}.{list_parameter}"),
-        item_properties,
-        &description.item_parameters,
-    )?;
+    if let Some(parameter) = list_parameter {
+        let item_properties = properties
+            .get_mut(parameter)
+            .and_then(|schema| schema.pointer_mut("/items/properties"))
+            .and_then(Value::as_object_mut)
+            .with_context(|| {
+                format!("MCP tool {name} {parameter} item schema has no properties object")
+            })?;
+        apply_parameters(
+            &format!("{name}.{parameter}"),
+            item_properties,
+            &description.item_parameters,
+        )?;
+    }
     tool.input_schema = normalize_schema(input_schema, true)?;
     tool.output_schema = tool
         .output_schema
@@ -137,7 +115,12 @@ fn normalize_schema(schema: JsonObject, input: bool) -> Result<Arc<JsonObject>> 
 }
 fn require_properties(schema: &mut Schema) {
     if let Some(properties) = schema.get("properties").and_then(Value::as_object) {
-        let required = properties.keys().cloned().map(Value::String).collect();
+        let required = properties
+            .keys()
+            .filter(|name| name.as_str() != "wait_timeout")
+            .cloned()
+            .map(Value::String)
+            .collect();
         schema.insert("required".to_owned(), Value::Array(required));
     }
 }

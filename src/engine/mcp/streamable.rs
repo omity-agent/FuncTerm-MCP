@@ -43,7 +43,7 @@ impl HttpServer {
             settings,
             privilege_mode,
             output_mode,
-            Backend::direct(dispatcher),
+            Backend::Direct(dispatcher),
         )?;
         let service =
             StreamableHttpService::new(move || Ok(handler.clone()), Arc::new(sessions), config);

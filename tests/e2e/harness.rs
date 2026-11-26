@@ -14,8 +14,8 @@ mod temp;
 mod test_environment;
 pub(crate) use command::run_cli_with_env;
 pub(crate) use command::{
-    complete_command, create_tab, create_tab_with_env, exe, manual_write, run, run_cli,
-    run_with_output, wait_for_completion, wait_for_stdout,
+    command_view, complete_command, create_tab, create_tab_with_env, exe, manual_write, run,
+    run_cli, run_with_output, tab_view, wait_for_completion, wait_for_stdout,
 };
 #[cfg(windows)]
 pub(crate) use daemon::locked;
@@ -26,7 +26,7 @@ pub(crate) use parse::assert_powershell_primary_prompt;
 pub(crate) use parse::parse_tab_created;
 pub(crate) use parse::tagged_content;
 pub(crate) use parse::{TabView, parse_command_id, parse_command_result, parse_tab_view};
-#[cfg(windows)]
 pub(crate) use process::ChildGuard;
-pub(crate) use temp::{command_directory, temp_dir, temp_root};
+pub(crate) use temp::{command_directory, tab_directory, temp_dir, temp_root, wait_for_removal};
 pub(crate) use test_environment::apply as apply_test_environment;
+pub(crate) const SHELL: &str = if cfg!(windows) { "powershell" } else { "bash" };

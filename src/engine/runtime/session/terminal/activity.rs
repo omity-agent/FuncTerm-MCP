@@ -35,29 +35,34 @@ impl Terminal {
     }
     pub(in crate::engine::runtime::session) fn process_exited(&self) {
         self.state.lock().process_exited = true;
+        self.lifetime_changed.notify(usize::MAX);
         self.changed.notify(usize::MAX);
     }
     pub(in crate::engine::runtime::session) fn process_failed(&self, message: String) {
         self.state.lock().process_failure = Some(message);
-        self.changed.notify(usize::MAX);
+        self.lifetime_changed.notify(usize::MAX);
     }
-    pub(in crate::engine::runtime::session) async fn wait_for_exit(&self) -> Result<()> {
-        wait_until(&self.changed, Duration::MAX, || {
+    pub(in crate::engine::runtime::session) async fn wait_for_exit(&self) -> Result<bool> {
+        wait_until(&self.lifetime_changed, Duration::MAX, || {
             let state = self.state.lock();
+            if state.session_stopped {
+                return Ok(true);
+            }
             if let Some(message) = state.process_failure.as_deref() {
                 bail!("{message}");
             }
-            Ok(state.process_exited || state.session_stopped)
+            Ok(state.process_exited)
         })
         .await?;
-        Ok(())
+        Ok(!self.state.lock().session_stopped)
     }
     pub(in crate::engine::runtime::session) fn session_stopped(&self) {
         self.state.lock().session_stopped = true;
+        self.lifetime_changed.notify(usize::MAX);
         self.changed.notify(usize::MAX);
     }
     pub(in crate::engine::runtime::session) async fn wait_for_shutdown(&self) -> Result<()> {
-        wait_until(&self.changed, Duration::MAX, || {
+        wait_until(&self.lifetime_changed, Duration::MAX, || {
             Ok(self.state.lock().session_stopped)
         })
         .await?;
@@ -65,9 +70,9 @@ impl Terminal {
     }
     pub(in crate::engine::runtime::session) fn reader_closed(&self) {
         let mut state = self.state.lock();
-        if let Err(error) = state.captures.close_all() {
+        if let Err(error) = state.captures.freeze() {
             let message = format!("failed to finish closed terminal capture: {error:#}");
-            state.captures.fail_all(&message);
+            state.captures.fail(&message);
             state.reader_failure = Some(message);
         }
         state.reader_closed = true;
@@ -76,7 +81,7 @@ impl Terminal {
     }
     pub(in crate::engine::runtime::session) fn reader_failed(&self, message: &str) {
         let mut state = self.state.lock();
-        state.captures.fail_all(message);
+        state.captures.fail(message);
         state.reader_closed = true;
         state.reader_failure = Some(message.to_owned());
         drop(state);

@@ -30,6 +30,8 @@ impl FromStr for WaitTimeoutMultiplier {
 }
 #[derive(Clone, Copy, Debug, Deserialize)]
 pub(crate) struct WaitTimeoutSettings {
+    #[serde(rename = "wait_timeout_default")]
+    pub(crate) default_seconds: f64,
     #[serde(rename = "wait_timeout_min")]
     pub(crate) minimum: f64,
     #[serde(rename = "wait_timeout_max")]
@@ -47,9 +49,14 @@ impl WaitTimeoutSettings {
                 "mcp.wait_timeout_max must be greater than or equal to mcp.wait_timeout_min"
             );
         }
+        wait_timeout_from_seconds(self.default_seconds)
+            .context("invalid mcp.wait_timeout_default")?;
+        self.scale(self.default_within_limits())
+            .context("invalid effective mcp.wait_timeout_default")?;
         Ok(())
     }
     pub(super) fn apply_schema(self, schema: &mut JsonObject) {
+        schema.insert("default".to_owned(), self.default_within_limits().into());
         schema.insert("minimum".to_owned(), self.minimum.into());
         if let Some(maximum) = self.maximum {
             schema.insert("maximum".to_owned(), maximum.into());
@@ -57,7 +64,11 @@ impl WaitTimeoutSettings {
             schema.remove("maximum");
         }
     }
-    fn scale(self, seconds: f64) -> Result<Duration> {
+    fn default_within_limits(self) -> f64 {
+        let bounded = self.default_seconds.max(self.minimum);
+        self.maximum.map_or(bounded, |maximum| bounded.min(maximum))
+    }
+    fn validate_input(self, seconds: f64) -> Result<()> {
         wait_timeout_from_seconds(seconds)?;
         ensure!(
             seconds >= self.minimum,
@@ -70,15 +81,40 @@ impl WaitTimeoutSettings {
                 "wait_timeout must be less than or equal to {maximum}"
             );
         }
+        Ok(())
+    }
+    fn scale(self, seconds: f64) -> Result<Duration> {
         wait_timeout_from_seconds(seconds * self.multiplier.0)
             .context("scaled wait timeout exceeds the supported duration range")
+    }
+    fn resolve(self, timeouts: impl IntoIterator<Item = f64>) -> Result<Duration> {
+        let mut largest: Option<f64> = None;
+        for seconds in timeouts {
+            self.validate_input(seconds)?;
+            largest = Some(largest.map_or(seconds, |current| current.max(seconds)));
+        }
+        self.scale(largest.unwrap_or_else(|| self.default_within_limits()))
+    }
+}
+pub(super) async fn run_timed<T>(
+    settings: &Settings,
+    backend: &Backend,
+    entries: Vec<T>,
+    timeouts: impl IntoIterator<Item = f64>,
+) -> Result<CallToolResult, ErrorData>
+where
+    T: Operation,
+{
+    match settings.mcp.wait_timeout.resolve(timeouts) {
+        Ok(budget) => run(settings, backend, entries, budget).await,
+        Err(error) => Ok(input_error(format!("{error:#}"))),
     }
 }
 pub(super) async fn run<T>(
     settings: &Settings,
     backend: &Backend,
     entries: Vec<T>,
-    wait_timeout: Option<f64>,
+    budget: Duration,
 ) -> Result<CallToolResult, ErrorData>
 where
     T: Operation,
@@ -86,28 +122,32 @@ where
     if let Err(message) = validate(&entries) {
         return Ok(input_error(message));
     }
-    let budget = match wait_timeout
-        .map(|seconds| settings.mcp.wait_timeout.scale(seconds))
-        .transpose()
-    {
-        Ok(timeout) => timeout.unwrap_or(Duration::ZERO),
-        Err(error) => return Ok(input_error(error.to_string())),
-    };
-    let prepared = backend
+    let requests = entries
+        .into_iter()
+        .map(|entry| entry.request(settings, budget))
+        .collect::<Vec<_>>();
+    if requests.iter().all(Result::is_err) {
+        return collection::combine(
+            requests
+                .into_iter()
+                .filter_map(Result::err)
+                .map(Err)
+                .collect(),
+        );
+    }
+    let mut prepared = backend
         .prepare(settings)
         .await
         .map_err(super::internal_error)?;
-    let execution = &prepared;
     let started = Instant::now();
-    let operations = entries.into_iter().map(|entry| async move {
-        let request = entry.request(settings, budget.saturating_sub(started.elapsed()))?;
-        let payload = execution.execute(settings, request).await?;
-        T::output(payload)
+    let operations = requests.into_iter().map(|request| {
+        let dispatched = request.map(|value| prepared.dispatch(settings, value, started));
+        async move { T::output(dispatched?.await?) }
     });
     let results = futures_util::future::join_all(operations).await;
     collection::combine(results)
 }
-fn input_error(message: String) -> CallToolResult {
+pub(super) fn input_error(message: String) -> CallToolResult {
     CallToolResult::error(vec![ContentBlock::text(message)])
 }
 fn validate<T>(entries: &[T]) -> Result<(), String>
@@ -125,10 +165,7 @@ where
         if let Some(tab_id) = entry.tab_id()
             && !tab_ids.insert(tab_id)
         {
-            return Err(format!(
-                "{} contains duplicate tab_id: {tab_id}",
-                T::LIST_PARAMETER
-            ));
+            return Err(format!("batch contains duplicate tab_id: {tab_id}"));
         }
     }
     Ok(())

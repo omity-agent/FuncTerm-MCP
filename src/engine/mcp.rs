@@ -1,7 +1,6 @@
 mod arguments;
 mod batch;
 mod collection;
-mod descriptions;
 mod invocation;
 mod operations;
 mod output;
@@ -11,27 +10,18 @@ use crate::runtime::config::Settings;
 use crate::runtime::protocol::OutputMode;
 use crate::runtime::protocol::time_consumption;
 use anyhow::Result;
-use arguments::{
-    FixedCommandInput, FixedNewTabOptions, ManualWriteRequest, NewTabOptions, NewTabRequest,
-    RunInput, RunRequest, ViewRequest,
-};
 pub(crate) use batch::{WaitTimeoutMultiplier, WaitTimeoutSettings};
-use collection::BatchOutput;
 use invocation::Backend;
 use output::internal_error;
 use rmcp::{
     ErrorData, ServerHandler, ServiceExt as _,
-    handler::server::{
-        router::tool::ToolRouter,
-        tool::{ToolCallContext, schema_for_output},
-        wrapper::Parameters,
-    },
+    handler::server::{router::tool::ToolRouter, tool::ToolCallContext},
     model::{
-        CacheScope, CallToolRequestParams, CallToolResponse, CallToolResult, ListToolsResult,
+        CacheScope, CallToolRequestParams, CallToolResponse, ListToolsResult,
         PaginatedRequestParams, ProtocolVersion, ResultType,
     },
     service::RequestContext,
-    tool, tool_handler, tool_router,
+    tool_handler,
 };
 pub(crate) use streamable::HttpServer;
 #[derive(Clone)]
@@ -84,7 +74,6 @@ impl ServerHandler for McpServer {
         output::processing(response?, processing)
     }
 }
-# [tool_router (router = tool_router)]
 impl McpServer {
     fn new(
         settings: Settings,
@@ -92,7 +81,7 @@ impl McpServer {
         output_mode: Option<OutputMode>,
         backend: Backend,
     ) -> Result<Self> {
-        let tool_router = descriptions::router(&settings.mcp, privilege_mode, output_mode)?;
+        let tool_router = operations::router(&settings.mcp, privilege_mode, output_mode)?;
         Ok(Self {
             settings,
             backend,
@@ -101,88 +90,6 @@ impl McpServer {
             tool_router,
         })
     }
-    # [tool (name = "new_tab" , output_schema = schema_for_output ::< BatchOutput < output :: NewTabOutput <'static >>> ())]
-    async fn new_tab(
-        &self,
-        Parameters(request): Parameters<NewTabRequest<NewTabOptions>>,
-    ) -> Result<CallToolResult, ErrorData> {
-        batch::run(&self.settings, &self.backend, request.tabs, None).await
-    }
-    # [tool (name = "fixed_new_tab" , output_schema = schema_for_output ::< BatchOutput < output :: NewTabOutput <'static >>> ())]
-    async fn fixed_new_tab(
-        &self,
-        Parameters(request): Parameters<NewTabRequest<FixedNewTabOptions>>,
-    ) -> Result<CallToolResult, ErrorData> {
-        let mode = self
-            .privilege_mode
-            .ok_or_else(|| internal_error("MCP privilege mode is not fixed"))?;
-        let entries = request
-            .tabs
-            .into_iter()
-            .map(|entry| entry.with_privilege(mode.elevated()))
-            .collect();
-        batch::run(&self.settings, &self.backend, entries, None).await
-    }
-    # [tool (name = "manual_write" , output_schema = schema_for_output ::< BatchOutput < output :: ManualWriteOutput <'static >>> ())]
-    async fn manual_write(
-        &self,
-        Parameters(request): Parameters<ManualWriteRequest>,
-    ) -> Result<CallToolResult, ErrorData> {
-        batch::run(
-            &self.settings,
-            &self.backend,
-            request.inputs,
-            Some(request.wait_timeout),
-        )
-        .await
-    }
-    # [tool (name = "run" , output_schema = schema_for_output ::< BatchOutput < output :: RunOutput <'static >>> ())]
-    async fn run(
-        &self,
-        Parameters(request): Parameters<RunRequest<RunInput>>,
-    ) -> Result<CallToolResult, ErrorData> {
-        batch::run(
-            &self.settings,
-            &self.backend,
-            request.commands,
-            Some(request.wait_timeout),
-        )
-        .await
-    }
-    #[tool(name = "fixed_run", output_schema = schema_for_output::<BatchOutput<output::RunOutput<'static>>>())]
-    async fn fixed_run(
-        &self,
-        Parameters(request): Parameters<RunRequest<FixedCommandInput>>,
-    ) -> Result<CallToolResult, ErrorData> {
-        let mode = self
-            .output_mode
-            .ok_or_else(|| internal_error("MCP output mode is not fixed"))?;
-        let entries = request
-            .commands
-            .into_iter()
-            .map(|entry| entry.with_output(mode.separate_output()))
-            .collect();
-        batch::run(
-            &self.settings,
-            &self.backend,
-            entries,
-            Some(request.wait_timeout),
-        )
-        .await
-    }
-    # [tool (name = "view" , output_schema = schema_for_output ::< BatchOutput < output :: ViewOutput <'static >>> ())]
-    async fn view(
-        &self,
-        Parameters(request): Parameters<ViewRequest>,
-    ) -> Result<CallToolResult, ErrorData> {
-        batch::run(
-            &self.settings,
-            &self.backend,
-            request.queries,
-            Some(request.wait_timeout),
-        )
-        .await
-    }
 }
 pub(crate) async fn run(
     settings: Settings,
@@ -190,7 +97,7 @@ pub(crate) async fn run(
     output_mode: Option<OutputMode>,
 ) -> Result<()> {
     super::init_diagnostics(&settings.diagnostics_filter)?;
-    let service = McpServer::new(settings, privilege_mode, output_mode, Backend::ipc())?
+    let service = McpServer::new(settings, privilege_mode, output_mode, Backend::Ipc)?
         .serve(rmcp::transport::stdio())
         .await?;
     service.waiting().await?;

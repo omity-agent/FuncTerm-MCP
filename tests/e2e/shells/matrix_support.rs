@@ -5,34 +5,25 @@ pub(super) struct ShellCase {
     pub(super) name: &'static str,
     pub(super) expected_exit_code: i32,
 }
-pub(super) const fn shell_cases() -> &'static [ShellCase] {
-    &[
-        #[cfg(windows)]
-        ShellCase {
-            name: "powershell",
-            expected_exit_code: 7,
-        },
-        ShellCase {
-            name: "bash",
-            expected_exit_code: 1,
-        },
-        #[cfg(windows)]
-        ShellCase {
-            name: "nu",
-            expected_exit_code: 0,
-        },
-        #[cfg(windows)]
-        ShellCase {
-            name: "cmd",
-            expected_exit_code: 7,
-        },
-        #[cfg(not(windows))]
-        ShellCase {
-            name: "zsh",
-            expected_exit_code: 1,
-        },
-    ]
+impl ShellCase {
+    const fn new(name: &'static str, expected_exit_code: i32) -> Self {
+        Self {
+            name,
+            expected_exit_code,
+        }
+    }
 }
+pub(super) const SHELL_CASES: &[ShellCase] = &[
+    #[cfg(windows)]
+    ShellCase::new("powershell", 7),
+    ShellCase::new("bash", 1),
+    #[cfg(windows)]
+    ShellCase::new("nu", 0),
+    #[cfg(windows)]
+    ShellCase::new("cmd", 7),
+    #[cfg(not(windows))]
+    ShellCase::new("zsh", 1),
+];
 pub(super) fn daemon() -> crate::support::TestGuard {
     crate::support::locked_with_env(&[])
 }

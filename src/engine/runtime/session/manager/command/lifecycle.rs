@@ -5,11 +5,11 @@ use crate::runtime::protocol::{
     CommandOutput, CommandSnapshot, EndReason, OutputTokenizer, OutputTokens, RequestRejected,
 };
 use crate::runtime::session::keyboard::InputDelivery;
-use crate::runtime::session::observation::{PathWatch, wait_until};
+use crate::runtime::session::observation::{PathEvents, wait_until};
 use crate::runtime::session::records::{CommandRecord, DoneFile, read_command_result};
 use crate::runtime::session::terminal::CommandCapture;
 use alloc::sync::Arc;
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, ensure};
 use core::time::Duration;
 use event_listener::Event;
 use parking_lot::Mutex;
@@ -18,6 +18,7 @@ pub(in crate::engine::runtime::session::manager) struct ManagedCommand {
     id: String,
     pub(super) record: CommandRecord,
     started_at: Instant,
+    start_timeout: Duration,
     pub(super) state: Mutex<ManagedCommandState>,
     pub(super) capture: Arc<CommandCapture>,
     pub(super) tokenizer: Arc<OutputTokenizer>,
@@ -46,12 +47,14 @@ impl ManagedCommand {
         record: CommandRecord,
         capture: Arc<CommandCapture>,
         tokenizer: Arc<OutputTokenizer>,
+        start_timeout: Duration,
     ) -> Self {
         tracing :: debug ! (command_id = % id , directory = % record . directory . display () , "command registered");
         Self {
             id,
             record,
             started_at: Instant::now(),
+            start_timeout,
             state: Mutex::new(ManagedCommandState {
                 outcome: None,
                 input: CommandInputHistory::default(),
@@ -95,11 +98,13 @@ impl ManagedCommand {
     pub(super) fn is_settled(&self) -> bool {
         self.state.lock().outcome.is_some()
     }
-    pub(in crate::engine::runtime::session::manager) async fn wait_started(
-        &self,
-        limit: Duration,
-    ) -> Result<bool> {
-        self.capture.wait_started(limit).await
+    pub(super) async fn wait_for_start(&self) -> Result<()> {
+        ensure!(
+            self.capture.wait_started(self.start_timeout).await?,
+            "shell did not start command within {:?}",
+            self.start_timeout
+        );
+        Ok(())
     }
     pub(super) async fn interrupted_prompt(&self) -> Result<Option<String>> {
         let mut revision = 0;
@@ -111,8 +116,8 @@ impl ManagedCommand {
         }
         Ok(None)
     }
-    pub(super) async fn wait_released(&self, watch: &PathWatch) -> Result<()> {
-        watch
+    pub(super) async fn wait_released(&self, events: &PathEvents) -> Result<()> {
+        events
             .wait(Duration::MAX, || {
                 self.record.released.try_exists().with_context(|| {
                     format!(

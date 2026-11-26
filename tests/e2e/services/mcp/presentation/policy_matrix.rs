@@ -21,44 +21,40 @@ fn schema_and_rejections_cover_every_privilege_and_output_policy_combination() {
                 .and_then(Value::as_array)
                 .unwrap();
             assert_eq!(tools.len(), 4, "{response}");
-            for tool in tools {
-                assert_references(tool);
-                let parameter = match text(tool, "/name") {
-                    "new_tab" => "tabs",
-                    "run" => "commands",
-                    "manual_write" => "inputs",
-                    "view" => "queries",
-                    name => panic!("unexpected tool {name}"),
-                };
-                let batch = field(tool, &format!("/inputSchema/properties/{parameter}"));
-                assert_field(batch, "/minItems", 1_u64);
-                assert_field(batch, "/items/type", "object");
-                if parameter == "queries" {
-                    let offset = field(batch, "/items/properties/start_token");
-                    assert_field(offset, "/minimum", 1_u64);
-                    assert_field(offset, "/default", 1_u64);
-                }
-            }
-            for (name, parameter, property, fixed) in [
-                ("new_tab", "tabs", "elevated", privilege.is_some()),
-                ("run", "commands", "separate_output", output.is_some()),
+            for (name, parameter, policy) in [
+                ("new_tab", "tabs", Some(("elevated", privilege.is_some()))),
+                (
+                    "run",
+                    "commands",
+                    Some(("separate_output", output.is_some())),
+                ),
+                ("manual_write", "inputs", None),
+                ("view", "queries", None),
             ] {
                 let tool = tools
                     .iter()
                     .find(|tool| text(tool, "/name") == name)
                     .unwrap();
-                let path =
-                    format!("/inputSchema/properties/{parameter}/items/properties/{property}");
-                let choice = tool.pointer(&path);
+                assert_references(tool);
+                let batch = field(tool, &format!("/inputSchema/properties/{parameter}"));
+                assert_field(batch, "/minItems", 1_u64);
+                let items = field(batch, "/items");
+                assert_field(items, "/type", "object");
+                if name == "view" {
+                    let offset = field(items, "/properties/start_token");
+                    assert_field(offset, "/minimum", 1_u64);
+                    assert_field(offset, "/default", 1_u64);
+                }
+                let Some((property, fixed)) = policy else {
+                    continue;
+                };
+                let choice = items.pointer(&format!("/properties/{property}"));
                 assert_eq!(choice.is_none(), fixed, "{response}");
                 if let Some(schema) = choice {
                     if name == "new_tab" {
                         assert_field(schema, "/type", "boolean");
                         assert_field(schema, "/default", false);
-                        let required = field(
-                            tool,
-                            &format!("/inputSchema/properties/{parameter}/items/required"),
-                        );
+                        let required = field(items, "/required");
                         assert!(required.as_array().unwrap().contains(&json!(property)));
                     } else {
                         assert_field(schema, "/type", json!(["boolean", "null"]));
@@ -91,7 +87,10 @@ fn assert_references(value: &Value) {
 }
 #[test]
 fn wait_timeout_limits_apply_to_schemas_and_calls_before_the_multiplier() {
-    let daemon = Rc::new(locked_with_env(&[]));
+    let daemon = Rc::new(locked_with_env(&[(
+        "FUNCTERM_MCP_WAIT_TIMEOUT_DEFAULT",
+        "0.4",
+    )]));
     for version in ["2025-06-18", "2025-11-25"] {
         let mut session = McpSession::with_protocol_version(
             Rc::clone(&daemon),
@@ -109,30 +108,45 @@ fn wait_timeout_limits_apply_to_schemas_and_calls_before_the_multiplier() {
                 let timeout = field(tool, "/inputSchema/properties/wait_timeout");
                 assert_field(timeout, "/minimum", 0.25_f64);
                 assert_field(timeout, "/maximum", 0.5_f64);
+                assert_field(timeout, "/default", 0.4_f64);
+                let required = field(tool, "/inputSchema/required").as_array().unwrap();
+                assert!(!required.contains(&json!("wait_timeout")));
             }
         }
-        for wait in [0.24_f64, 0.25_f64, 0.5_f64, 0.51_f64] {
-            for (name, arguments) in [
+        for wait in [
+            None,
+            Some(0.24_f64),
+            Some(0.25_f64),
+            Some(0.5_f64),
+            Some(0.51_f64),
+        ] {
+            for (name, mut arguments) in [
                 (
                     "view",
-                    json!({"queries": [{"id": "missing", "start_token": 1_u64}], "wait_timeout": wait}),
+                    json!({"queries": [{"id": "missing", "start_token": 1_u64}]}),
                 ),
                 (
                     "manual_write",
-                    json!({"inputs": [{"tab_id": "missing", "text": "", "bytes": null}], "wait_timeout": wait}),
+                    json!({"inputs": [{"tab_id": "missing", "text": "", "bytes": null}]}),
                 ),
                 (
                     "run",
-                    json!({"commands": [{"tab_id": "missing", "command": "echo UNUSED"}], "wait_timeout": wait}),
+                    json!({"commands": [{"tab_id": "missing", "command": "echo UNUSED"}]}),
                 ),
             ] {
+                if let Some(seconds) = wait {
+                    arguments
+                        .as_object_mut()
+                        .unwrap()
+                        .insert("wait_timeout".to_owned(), json!(seconds));
+                }
                 let called = session.call(name, arguments);
                 assert_rejected(&called);
                 assert_eq!(
                     called
                         .pointer("/result/structuredContent/results")
                         .is_some(),
-                    (0.25_f64..=0.5_f64).contains(&wait),
+                    wait.is_none_or(|seconds| (0.25_f64..=0.5_f64).contains(&seconds)),
                     "{called}"
                 );
             }

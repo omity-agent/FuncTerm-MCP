@@ -1,7 +1,7 @@
 use super::{rendering::CommandScreen, transcript::RenderedOutput};
 use crate::runtime::session::observation::wait_until;
 use alloc::sync::Arc;
-use anyhow::{Result, bail};
+use anyhow::{Result, bail, ensure};
 use bytestring::ByteString;
 use core::time::Duration;
 use event_listener::Event;
@@ -98,12 +98,14 @@ impl CommandCapture {
     }
     pub(super) fn start(&self) -> Result<()> {
         let mut state = self.state.lock();
-        if state.phase == CapturePhase::Pending {
-            if let Some(output) = state.output.as_mut() {
-                output.start()?;
-            }
-            state.phase = CapturePhase::Active;
+        ensure!(
+            state.phase == CapturePhase::Pending,
+            "terminal capture is not pending"
+        );
+        if let Some(output) = state.output.as_mut() {
+            output.start()?;
         }
+        state.phase = CapturePhase::Active;
         drop(state);
         self.changed.notify(usize::MAX);
         Ok(())
@@ -118,6 +120,9 @@ impl CommandCapture {
     }
     pub(super) fn observe_prompt(&self, cwd: String) {
         let mut state = self.state.lock();
+        if state.phase != CapturePhase::Active {
+            return;
+        }
         state.prompt_cwd = Some(cwd);
         state.prompt_revision = state
             .prompt_revision

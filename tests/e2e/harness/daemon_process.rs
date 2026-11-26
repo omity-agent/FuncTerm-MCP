@@ -36,7 +36,7 @@ impl Drop for TestGuard {
                 String::from_utf8_lossy(&stopped.stderr)
             );
         }
-        set_active_env(&self.previous_env);
+        ACTIVE_CLI_ENV.set(core::mem::take(&mut self.previous_env));
     }
 }
 #[cfg(windows)]
@@ -46,28 +46,20 @@ pub(crate) fn locked() -> TestGuard {
 pub(crate) fn locked_with_env(extra_env: &[(&str, &str)]) -> TestGuard {
     let runtime = temp::TestRuntime::new();
     let service_name = unique_service_name();
-    let mut env = vec![
-        (
-            "FUNCTERM_DAEMON_SERVICE_NAME".to_owned(),
-            service_name.clone(),
-        ),
-        (
-            "FUNCTERM_MCP_HTTP_BIND".to_owned(),
-            "127.0.0.1:0".to_owned(),
-        ),
-    ];
-    env.extend(extra_env.iter().map(|pair| {
-        let key = pair.0.to_owned();
-        let value = pair.1.to_owned();
-        (key, value)
-    }));
-    env.extend(runtime.environment());
+    let mut env: Vec<_> = [
+        ("FUNCTERM_DAEMON_SERVICE_NAME", service_name.as_str()),
+        ("FUNCTERM_MCP_HTTP_BIND", "127.0.0.1:0"),
+    ]
+    .into_iter()
+    .chain(extra_env.iter().copied())
+    .map(|(key, value)| (key.to_owned(), value.to_owned()))
+    .chain(runtime.environment())
+    .collect();
     if let Ok(filter) = std::env::var("FUNCTERM_DIAGNOSTICS_FILTER") {
         env.push(("FUNCTERM_DIAGNOSTICS_FILTER".to_owned(), filter));
     }
     let (child, http_address) = spawn_daemon(&env, &service_name);
-    let previous_env = active_env();
-    set_active_env(&env);
+    let previous_env = ACTIVE_CLI_ENV.replace(env.clone());
     TestGuard {
         _daemon: child,
         env,
@@ -79,9 +71,6 @@ pub(crate) fn locked_with_env(extra_env: &[(&str, &str)]) -> TestGuard {
 }
 pub(crate) fn active_env() -> Vec<(String, String)> {
     ACTIVE_CLI_ENV.with(|env| env.borrow().clone())
-}
-fn set_active_env(env: &[(String, String)]) {
-    ACTIVE_CLI_ENV.with(|active| active.replace(env.to_vec()));
 }
 fn unique_service_name() -> String {
     let unique = SERVICE_COUNTER.fetch_add(1, Ordering::Relaxed);

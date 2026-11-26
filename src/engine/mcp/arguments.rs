@@ -99,21 +99,26 @@ pub(super) struct NewTabRequest<T> {
 pub(super) struct RunRequest<T> {
     #[schemars(length(min = 1))]
     pub(super) commands: Vec<T>,
-    pub(super) wait_timeout: f64,
+    pub(super) wait_timeout: Option<f64>,
+}
+#[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(super) struct ScriptRequest {
+    pub(super) script: String,
 }
 #[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub(super) struct ManualWriteRequest {
     #[schemars(length(min = 1))]
     pub(super) inputs: Vec<ManualWriteInput>,
-    pub(super) wait_timeout: f64,
+    pub(super) wait_timeout: Option<f64>,
 }
 #[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub(super) struct ViewRequest {
     #[schemars(length(min = 1))]
     pub(super) queries: Vec<ViewQuery>,
-    pub(super) wait_timeout: f64,
+    pub(super) wait_timeout: Option<f64>,
 }
 #[derive(Debug, Deserialize, rmcp :: schemars :: JsonSchema)]
 #[serde(deny_unknown_fields)]

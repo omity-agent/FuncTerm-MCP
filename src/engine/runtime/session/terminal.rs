@@ -27,6 +27,7 @@ use wezterm_escape_parser::{
 pub(super) struct Terminal {
     state: Mutex<TerminalState>,
     changed: Event,
+    lifetime_changed: Event,
 }
 struct TerminalState {
     screen: Arc<Mutex<CommandScreen>>,
@@ -75,6 +76,7 @@ impl Terminal {
                 session_stopped: false,
             }),
             changed: Event::new(),
+            lifetime_changed: Event::new(),
         }))
     }
     pub(super) fn capture_command(
@@ -109,7 +111,7 @@ impl Terminal {
         let processed = state.process(chunk);
         if let Err(error) = processed.as_ref() {
             let message = format!("failed to process terminal output: {error:#}");
-            state.captures.fail_all(&message);
+            state.captures.fail(&message);
             state.reader_closed = true;
             state.reader_failure = Some(message);
         }

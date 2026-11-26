@@ -1,3 +1,4 @@
+use crate::runtime::config::MCP_SINGLE_PARAMETER_RUN_ENV;
 use crate::runtime::daemon::report::{
     READY_FILE_ENV, READY_STDOUT_ENV, StartupReply, StartupReporter,
 };
@@ -12,9 +13,13 @@ pub(super) enum StartupProcess {
     Launcher,
     Daemon,
 }
-pub(crate) fn spawn_daemon(service_name: &str, timeout: Duration) -> Result<()> {
+pub(crate) fn spawn_daemon(
+    service_name: &str,
+    timeout: Duration,
+    single_parameter_run: bool,
+) -> Result<()> {
     let startup_file = startup_file()?;
-    let mut launcher = spawn_launcher_process(service_name, &startup_file)
+    let mut launcher = spawn_launcher_process(service_name, &startup_file, single_parameter_run)
         .context("failed to spawn daemon launcher")?;
     let reported = wait_for_startup_file(&startup_file, &mut launcher, timeout);
     match (reported, remove_startup_file(&startup_file)) {
@@ -56,10 +61,15 @@ fn startup_file() -> Result<std::path::PathBuf> {
 fn spawn_launcher_process(
     service_name: &str,
     startup_file: &std::path::Path,
+    single_parameter_run: bool,
 ) -> Result<std::process::Child> {
     let mut command = startup_command(LAUNCHER_SUBCOMMAND)?;
     command
         .env("FUNCTERM_DAEMON_SERVICE_NAME", service_name)
+        .env(
+            MCP_SINGLE_PARAMETER_RUN_ENV,
+            single_parameter_run.to_string(),
+        )
         .env(READY_FILE_ENV, startup_file)
         .stdout(Stdio::null());
     process_flags::spawn_detached(command, StartupProcess::Launcher)

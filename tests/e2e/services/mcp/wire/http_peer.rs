@@ -1,4 +1,6 @@
-use super::wire::{assert_field, initialize_params, request_message, tool_arguments};
+use super::wire::{
+    assert_field, initialize_params, initialized_notification, request_message, tool_arguments,
+};
 use crate::support::TestGuard;
 use core::time::Duration;
 use reqwest::{
@@ -51,7 +53,7 @@ impl HttpSession {
         };
         let notification = session
             .builder(Method::POST)
-            .body(json!({"jsonrpc": "2.0", "method": "notifications/initialized"}).to_string())
+            .body(initialized_notification().to_string())
             .send()
             .unwrap();
         assert_eq!(notification.status(), StatusCode::ACCEPTED);

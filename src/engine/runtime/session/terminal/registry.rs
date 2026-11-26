@@ -1,13 +1,12 @@
 use super::{capture::CommandCapture, markers::ProtocolEvent, rendering::CommandScreen};
-use alloc::{collections::BTreeMap, sync::Arc};
-use anyhow::{Result, bail};
+use alloc::sync::Arc;
+use anyhow::{Context as _, Result, ensure};
 use parking_lot::Mutex;
 pub(super) struct CaptureRegistry {
     title: String,
-    captures: BTreeMap<String, Arc<CommandCapture>>,
-    active: Option<ActiveCapture>,
+    current: Option<RegisteredCapture>,
 }
-struct ActiveCapture {
+struct RegisteredCapture {
     id: String,
     capture: Arc<CommandCapture>,
     titles: TitleUpdates,
@@ -28,8 +27,7 @@ impl CaptureRegistry {
     pub(super) const fn new(title: String) -> Self {
         Self {
             title,
-            captures: BTreeMap::new(),
-            active: None,
+            current: None,
         }
     }
     pub(super) fn register(
@@ -38,16 +36,21 @@ impl CaptureRegistry {
         separate_output: bool,
         screen: Arc<Mutex<CommandScreen>>,
     ) -> Result<Arc<CommandCapture>> {
-        if self.captures.contains_key(id) {
-            bail!("command capture already exists for {id}");
-        }
+        ensure!(
+            self.current.is_none(),
+            "terminal already has a registered command capture"
+        );
         let capture = Arc::new(CommandCapture::new(
             self.title.clone(),
             separate_output,
             screen,
         ));
-        self.captures.insert(id.to_owned(), Arc::clone(&capture));
-        tracing::trace!(command_id = %id, captures = self.captures.len(), "terminal command capture registered");
+        self.current = Some(RegisteredCapture {
+            id: id.to_owned(),
+            capture: Arc::clone(&capture),
+            titles: TitleUpdates::Live,
+        });
+        tracing::trace!(command_id = %id, "terminal command capture registered");
         Ok(capture)
     }
     pub(super) fn handle(&mut self, event: ProtocolEvent) -> Result<()> {
@@ -61,85 +64,67 @@ impl CaptureRegistry {
                 self.finish(&id, CaptureEnd::Marker)
             }
             ProtocolEvent::Prompt(cwd) => {
-                if let Some(active) = self.active.as_ref() {
-                    active.capture.observe_prompt(cwd);
+                if let Some(current) = self.current.as_ref() {
+                    current.capture.observe_prompt(cwd);
                 }
                 Ok(())
             }
         }
     }
-    pub(super) fn fail_all(&mut self, message: &str) {
-        for capture in self.captures.values() {
-            capture.fail(message);
+    pub(super) fn fail(&mut self, message: &str) {
+        if let Some(current) = self.current.take() {
+            current.capture.fail(message);
         }
-        self.captures.clear();
-        self.active = None;
     }
-    pub(super) fn close_all(&mut self) -> Result<()> {
-        for capture in self.captures.values() {
-            capture.freeze()?;
+    pub(super) fn freeze(&mut self) -> Result<()> {
+        if let Some(current) = self.current.as_ref() {
+            current.capture.freeze()?;
         }
-        self.captures.clear();
-        self.active = None;
+        self.current = None;
         Ok(())
     }
     fn start(&mut self, id: &str) -> Result<()> {
-        if let Some(active) = self.active.as_ref() {
-            bail!("command capture {id} started while {} is active", active.id);
-        }
-        let capture = self.require(id)?;
-        capture.start()?;
-        self.active = Some(ActiveCapture {
-            id: id.to_owned(),
-            capture,
-            titles: TitleUpdates::Live,
-        });
-        Ok(())
+        self.require(id)?.capture.start()
     }
     pub(super) fn finish(&mut self, id: &str, end: CaptureEnd) -> Result<()> {
-        if let Some(active) = self.active.as_mut() {
-            if active.id != id {
-                bail!("command capture {id} ended while {} is active", active.id);
-            }
-            if matches!(end, CaptureEnd::Marker)
-                && let TitleUpdates::Deferred(title) = core::mem::take(&mut active.titles)
-                && active.capture.update_title(&title)
-            {
-                self.title = title;
-            }
+        let current = self.require(id)?;
+        if matches!(end, CaptureEnd::Marker)
+            && let TitleUpdates::Deferred(title) = core::mem::take(&mut current.titles)
+        {
+            current.capture.update_title(&title);
         }
-        drop(self.require(id)?.cancel()?);
-        self.captures.remove(id);
-        self.active = None;
+        self.title = current.capture.cancel()?;
+        self.current = None;
         Ok(())
     }
     pub(super) fn title(&self) -> &str {
         &self.title
     }
     pub(super) fn defer_window_titles(&mut self, id: &str) {
-        if let Some(active) = self.active.as_mut()
-            && active.id == id
-            && matches!(active.titles, TitleUpdates::Live)
+        if let Some(current) = self.current.as_mut()
+            && current.id == id
+            && current.capture.active()
+            && matches!(current.titles, TitleUpdates::Live)
         {
-            active.titles = TitleUpdates::AwaitingEnd;
+            current.titles = TitleUpdates::AwaitingEnd;
         }
     }
     pub(super) fn record_window_title(&mut self, title: String) {
-        let Some(active) = self.active.as_mut() else {
+        let Some(current) = self.current.as_mut() else {
             return;
         };
-        if matches!(active.titles, TitleUpdates::Live) {
-            if active.capture.update_title(&title) {
+        if matches!(current.titles, TitleUpdates::Live) {
+            if current.capture.update_title(&title) {
                 self.title = title;
             }
         } else {
-            active.titles = TitleUpdates::Deferred(title);
+            current.titles = TitleUpdates::Deferred(title);
         }
     }
-    fn require(&self, id: &str) -> Result<Arc<CommandCapture>> {
-        self.captures
-            .get(id)
-            .cloned()
-            .ok_or_else(|| anyhow::anyhow!("terminal marker references unknown command {id}"))
+    fn require(&mut self, id: &str) -> Result<&mut RegisteredCapture> {
+        self.current
+            .as_mut()
+            .filter(|current| current.id == id)
+            .with_context(|| format!("terminal marker references unknown command {id}"))
     }
 }

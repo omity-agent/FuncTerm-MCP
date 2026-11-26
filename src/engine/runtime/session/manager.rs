@@ -118,13 +118,16 @@ impl Manager {
             elevated,
             environment,
         )?;
-        self.tabs.insert(tab::Tab::new(
+        let terminal = session.terminal();
+        let tab = Arc::new(tab::Tab::new(
             tab_id.clone(),
             session,
             self.blocking.clone(),
             Arc::clone(&self.tokenizer),
             self.supervisors.clone(),
         )?);
+        self.tabs.insert(Arc::clone(&tab));
+        tab.supervise_lifetime(terminal);
         drop(accepting);
         Ok(tab_id)
     }

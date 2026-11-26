@@ -62,7 +62,7 @@ impl Dispatcher {
                 wait_timeout,
             } => {
                 let (command_id, view) = manager
-                    .run(&tab_id, &command, separate_output, wait_timeout)
+                    .run(&tab_id, command, separate_output, wait_timeout)
                     .await?;
                 Payload::CommandAccepted { command_id, view }
             }

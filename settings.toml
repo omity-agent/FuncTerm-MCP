@@ -89,6 +89,12 @@ windows_access_control = "D:P(A;;GA;;;SY)(A;;GA;;;{user_sid})"
 windows_security_label = "S:(ML;;NW;;;ME)"
 
 [mcp]
+# Run 是否接收单个脚本参数；命令行 --single-parameter-run 或 FUNCTERM_MCP_SINGLE_PARAMETER_RUN 可开启。
+single_parameter_run = false
+
+# 省略 wait_timeout 时的默认秒数；先限制在 min/max 内，再乘以倍率。可通过 FUNCTERM_MCP_WAIT_TIMEOUT_DEFAULT 覆盖。
+wait_timeout_default = 16.0
+
 # MCP 工具 wait_timeout 接受的最小秒数，包含边界；命令行 --wait-timeout-min 可覆盖。
 wait_timeout_min = 10.0
 
@@ -155,6 +161,12 @@ wait_timeout = "等待时长，单位为秒。命令不会在时间结束后终�
 tab_id = "每个 Tab 在同一时刻仅能有一份命令正在运行，Tab 繁忙时收到的命令会被丢弃。"
 command = "Single-line or multi-line commands"
 separate_output = "是否分别捕获 stdout 和 stderr。false 时保留终端句柄。"
+
+[mcp.script_run]
+description = "每个命令块以一行元数据标头开始，其后直到下一个标头为止的行都是命令正文（支持多行）。元数据标头形如 `*** tab_id: <id>; wait_timeout: <seconds>;`"
+
+[mcp.script_run.parameters]
+script = ""
 
 [mcp.view]
 description = "查看状态。该工具会在等待时长结束或命令结束时输出。CLI：`functerm view <id>`"

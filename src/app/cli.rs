@@ -89,9 +89,10 @@ pub(crate) async fn run() -> Result<std::process::ExitCode> {
         } => crate::app::command_state::write_start(&command_id, &directory, stdio),
         CliCommand::Mcp(options) => options.run().await,
         CliCommand::Daemon { command } => {
-            let settings = config::load()?;
+            let mut settings = config::load()?;
             let message = match command {
-                DaemonCommand::Start => {
+                DaemonCommand::Start(options) => {
+                    options.apply(&mut settings);
                     if service_control::start(&settings).await? {
                         "daemon started"
                     } else {
@@ -105,7 +106,8 @@ pub(crate) async fn run() -> Result<std::process::ExitCode> {
                         "daemon is not running"
                     }
                 }
-                DaemonCommand::Restart => {
+                DaemonCommand::Restart(options) => {
+                    options.apply(&mut settings);
                     service_control::restart(&settings).await?;
                     "daemon restarted"
                 }

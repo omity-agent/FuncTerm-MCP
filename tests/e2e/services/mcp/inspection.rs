@@ -1,7 +1,11 @@
 use super::{
     execution::create_tabs,
-    wire::{McpSession, assert_field, command_result, entries, field, result, text},
+    wire::{
+        McpSession, assert_field, assert_finished_output, command_result, entries, field, result,
+        text,
+    },
 };
+use itertools::Itertools as _;
 use sugar_path::SugarPath as _;
 #[test]
 fn mcp_views_preserve_mixed_id_order_errors_and_shared_completion() {
@@ -25,33 +29,25 @@ fn mcp_views_preserve_mixed_id_order_errors_and_shared_completion() {
         ],
         0.0,
     );
-    let results = entries(&viewed);
-    assert_eq!(results.len(), 5);
+    let (second_view, command_view, missing, first_view, repeated) = entries(&viewed)
+        .iter()
+        .collect_tuple()
+        .unwrap_or_else(|| panic!("unexpected view batch: {viewed}"));
     assert_field(&viewed, "/result/isError", true);
-    for (index, cwd) in [
-        (0, second_cwd.as_str()),
-        (3, first_cwd),
-        (4, second_cwd.as_str()),
+    for (entry, cwd) in [
+        (second_view, second_cwd.as_str()),
+        (first_view, first_cwd),
+        (repeated, second_cwd.as_str()),
     ] {
-        let entry = results
-            .get(index)
-            .unwrap_or_else(|| panic!("missing result {index}: {viewed}"));
         assert_eq!(text(entry, "/result/shell/cwd"), cwd);
         assert!(entry.pointer("/result/screen").is_some());
     }
-    let completed = field(
-        results.get(1).unwrap_or_else(|| panic!("missing command")),
-        "/result/command",
+    assert_finished_output(
+        field(command_view, "/result/command"),
+        "/stdout",
+        "VIEW_ID_LIST_RESULT",
     );
-    assert_field(completed, "/finished", true);
-    assert!(text(completed, "/stdout").contains("VIEW_ID_LIST_RESULT"));
-    assert!(
-        text(
-            results.get(2).unwrap_or_else(|| panic!("missing error")),
-            "/error"
-        )
-        .contains("unknown id missing")
-    );
+    assert!(text(missing, "/error").contains("unknown id missing"));
     super::wire::text_documents(&viewed);
     #[cfg(windows)]
     let source = "Start-Sleep -Seconds 2\nWrite-Output MANY_WAITERS_FINISHED";
@@ -62,12 +58,10 @@ fn mcp_views_preserve_mixed_id_order_errors_and_shared_completion() {
     let waited = session.view(&[(pending_id, 1); 64], 5.0);
     assert_eq!(entries(&waited).len(), 64);
     for entry in entries(&waited) {
-        let saved = field(entry, "/result/command");
-        assert_field(saved, "/finished", true);
-        assert_field(saved, "/exit_code", 0_i32);
-        assert!(
-            text(saved, "/stdout").contains("MANY_WAITERS_FINISHED"),
-            "{waited}"
+        assert_finished_output(
+            field(entry, "/result/command"),
+            "/stdout",
+            "MANY_WAITERS_FINISHED",
         );
     }
     super::wire::text_documents(&waited);

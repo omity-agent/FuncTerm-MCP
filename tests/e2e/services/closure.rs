@@ -1,12 +1,8 @@
 use crate::support::{
-    command_directory, create_tab, locked_with_env, parse_command_id, parse_command_result,
-    parse_tab_view, run, run_cli, run_cli_with_env, temp_root, wait_for_completion,
+    SHELL, command_view, create_tab, locked_with_env, parse_command_id, run, run_cli,
+    run_cli_with_env, tab_directory, tab_view, temp_root, wait_for_completion, wait_for_removal,
     wait_for_stdout,
 };
-#[cfg(windows)]
-const SHELL: &str = "powershell";
-#[cfg(unix)]
-const SHELL: &str = "bash";
 #[test]
 fn close_and_reader_failure_preserve_history_and_other_tabs() {
     let _guard = locked_with_env(&[]);
@@ -15,11 +11,7 @@ fn close_and_reader_failure_preserve_history_and_other_tabs() {
     let accepted = run(&target.tab_id, "echo CLOSE_HISTORY", 5.0);
     let command_id = parse_command_id(&accepted);
     wait_for_completion(&accepted);
-    let workspace = command_directory(&target.tab_id, &command_id)
-        .ancestors()
-        .nth(2)
-        .unwrap()
-        .to_path_buf();
+    let workspace = tab_directory(&target.tab_id);
     #[cfg(windows)]
     let source = "Write-Output BEFORE_CLOSE; $null = [Console]::In.ReadLine()";
     #[cfg(unix)]
@@ -34,17 +26,10 @@ fn close_and_reader_failure_preserve_history_and_other_tabs() {
     let closed = run_cli(&["close", "--tab-id", &target.tab_id]);
     assert!(closed.status.success(), "{closed:?}");
     assert!(String::from_utf8_lossy(&closed.stdout).contains(&target.tab_id));
-    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(5);
-    while workspace.try_exists().unwrap() {
-        assert!(
-            std::time::Instant::now() < deadline,
-            "closed Tab workspace was retained"
-        );
-        std::thread::sleep(core::time::Duration::from_millis(10));
-    }
-    assert!(!parse_tab_view(&run_cli(&["view", &target.tab_id])).alive);
-    assert!(parse_tab_view(&run_cli(&["view", &other.tab_id])).alive);
-    let history = parse_command_result(&run_cli(&["view", &command_id]));
+    wait_for_removal(&workspace);
+    assert!(!tab_view(&target.tab_id).alive);
+    assert!(tab_view(&other.tab_id).alive);
+    let history = command_view(&command_id);
     assert!(history.finished);
     assert!(history.stdout.contains("CLOSE_HISTORY"));
     let interrupted = wait_for_completion(&running);
@@ -69,8 +54,36 @@ fn close_and_reader_failure_preserve_history_and_other_tabs() {
         failed.stdout.contains("BEFORE_READER_FAILURE"),
         "{failed:?}"
     );
-    assert!(!parse_tab_view(&run_cli(&["view", &failing])).alive);
-    assert!(parse_tab_view(&run_cli(&["view", &other.tab_id])).alive);
+    assert!(!tab_view(&failing).alive);
+    assert!(tab_view(&other.tab_id).alive);
+}
+#[test]
+fn idle_shell_exit_reclaims_workspace_and_retains_history() {
+    let _guard = locked_with_env(&[]);
+    let cwd = temp_root();
+    let tab = create_tab(&cwd, "python").tab_id;
+    let workspace = tab_directory(&tab);
+    let armed = run(
+        &tab,
+        "import os, threading, time
+def close_on_signal():
+    while not os.path.exists('exit-now'):
+        time.sleep(0.02)
+    os._exit(23)
+threading.Thread(target=close_on_signal, daemon=True).start()
+print('EXIT_ARMED')",
+        0.0,
+    );
+    let command_id = parse_command_id(&armed);
+    let result = wait_for_completion(&armed);
+    assert_eq!(result.exit_code, Some(0_i32), "{result:?}");
+    fs_err::write(cwd.join("exit-now"), "").unwrap();
+    wait_for_removal(&workspace);
+    let closed = tab_view(&tab);
+    assert!(!closed.alive, "{}", closed.screen);
+    let history = command_view(&command_id);
+    assert_eq!(history.exit_code, Some(0_i32), "{history:?}");
+    assert!(history.stdout.contains("EXIT_ARMED"), "{history:?}");
 }
 #[test]
 fn close_current_from_nested_shell_targets_its_own_tab() {
@@ -86,19 +99,19 @@ fn close_current_from_nested_shell_targets_its_own_tab() {
     let closed = run(&target.tab_id, command, 5.0);
     wait_for_completion(&closed);
     assert!(
-        !parse_tab_view(&run_cli(&["view", &target.tab_id])).alive,
+        !tab_view(&target.tab_id).alive,
         "close --current response: {}",
         String::from_utf8_lossy(&closed.stdout)
     );
-    assert!(parse_tab_view(&run_cli(&["view", &other.tab_id])).alive);
+    assert!(tab_view(&other.tab_id).alive);
 }
 #[test]
 fn failed_startup_removes_its_runtime_directory() {
     let guard = locked_with_env(&[("FUNCTERM_SHELL_LOAD_PROFILE", "true")]);
     let root = temp_root();
     let tab = create_tab(&root, "python");
-    let workspace = command_directory(&tab.tab_id, "unused");
-    let tabs = workspace.ancestors().nth(3).unwrap();
+    let workspace = tab_directory(&tab.tab_id);
+    let tabs = workspace.parent().unwrap();
     let before = fs_err::read_dir(tabs).unwrap().count();
     let startup = root.join("exit-startup.py");
     fs_err::write(&startup, "raise SystemExit(23)\n").unwrap();
@@ -119,5 +132,5 @@ fn failed_startup_removes_its_runtime_directory() {
     );
     assert!(!failed.status.success(), "{failed:?}");
     assert_eq!(fs_err::read_dir(tabs).unwrap().count(), before);
-    assert!(parse_tab_view(&run_cli(&["view", &tab.tab_id])).alive);
+    assert!(tab_view(&tab.tab_id).alive);
 }

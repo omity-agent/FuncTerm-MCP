@@ -43,10 +43,12 @@ async fn start_locked(settings: &Settings) -> Result<bool> {
     }
     let service_name = settings.daemon_service_name.clone();
     let timeout = settings.ipc.setup_timeout()?;
-    let spawned =
-        tokio::task::spawn_blocking(move || daemon_spawn::spawn_daemon(&service_name, timeout))
-            .await
-            .context("daemon launch worker failed")?;
+    let single_parameter_run = settings.mcp.single_parameter_run;
+    let spawned = tokio::task::spawn_blocking(move || {
+        daemon_spawn::spawn_daemon(&service_name, timeout, single_parameter_run)
+    })
+    .await
+    .context("daemon launch worker failed")?;
     if let Err(error) = spawned
         && lock::already_running_service_name(&error).is_none()
     {

@@ -16,13 +16,14 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "ahash"
-version = "0.8.12"
+version = "0.8.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a15f179cd60c4584b8a8c596927aadc462e27f2ca70c04e0071964a73ba7a75"
+checksum = "54dae3d1d7b8956f3506c4e999a74e77f932a59153ccf38ab8cf96db74bb9dc0"
 dependencies = [
  "cfg-if",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
+ "serde",
  "version_check",
  "zerocopy",
 ]
@@ -146,8 +147,8 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.104"
-source = "git+https://github.com/dtolnay/anyhow#dd0c0a655a214add8fc986df34ea3823468fa4fb"
+version = "1.0.105"
+source = "git+https://github.com/dtolnay/anyhow#c89c9b82b155f701a20eb4a9d3609ad09df5a62f"
 
 [[package]]
 name = "ar_archive_writer"
@@ -475,8 +476,8 @@ checksum = "776dfebd015e2d8732c684a2c71003674ccb49457b539b9e82151ba38e96dd7c"
 
 [[package]]
 name = "bytestring"
-version = "1.6.0"
-source = "git+https://github.com/actix/actix-net#bcfdb247321edbec0987f1189ffc90bbd934602e"
+version = "1.6.1"
+source = "git+https://github.com/actix/actix-net#8aaad01c640c7005b19c5a7ef2c4f54da064397a"
 dependencies = [
  "bytes",
  "serde_core",
@@ -551,8 +552,8 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.6.9"
-source = "git+https://github.com/clap-rs/clap#487474f013d3e0cbffc911934575f7ebcc72a6d4"
+version = "4.6.10"
+source = "git+https://github.com/clap-rs/clap#4201754a400f676c9744da66383c89eb9f41af88"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -560,8 +561,8 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.6.7"
-source = "git+https://github.com/clap-rs/clap#487474f013d3e0cbffc911934575f7ebcc72a6d4"
+version = "4.6.10"
+source = "git+https://github.com/clap-rs/clap#4201754a400f676c9744da66383c89eb9f41af88"
 dependencies = [
  "anstream 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "anstyle 1.0.14 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -573,7 +574,7 @@ dependencies = [
 [[package]]
 name = "clap_derive"
 version = "4.6.9"
-source = "git+https://github.com/clap-rs/clap#487474f013d3e0cbffc911934575f7ebcc72a6d4"
+source = "git+https://github.com/clap-rs/clap#4201754a400f676c9744da66383c89eb9f41af88"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -584,7 +585,7 @@ dependencies = [
 [[package]]
 name = "clap_lex"
 version = "1.1.2"
-source = "git+https://github.com/clap-rs/clap#487474f013d3e0cbffc911934575f7ebcc72a6d4"
+source = "git+https://github.com/clap-rs/clap#4201754a400f676c9744da66383c89eb9f41af88"
 
 [[package]]
 name = "color_quant"
@@ -647,9 +648,9 @@ dependencies = [
 
 [[package]]
 name = "crc32fast"
-version = "1.5.5"
+version = "1.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b929dd2a135771f40afabd1073f85eed59c800b7c61901e5c254270497dad64"
+checksum = "fd9ae8fcb3ea71b0b26338b4ffb13006bb175de8fd07921089a906ce7e5e6945"
 dependencies = [
  "cfg-if",
 ]
@@ -1035,7 +1036,7 @@ dependencies = [
 [[package]]
 name = "filedescriptor"
 version = "0.8.3"
-source = "git+https://github.com/wezterm/wezterm#ee6f3044d09f83f21a32aead8dac2bc2a32e7fcb"
+source = "git+https://github.com/wezterm/wezterm#7d0eb9685cbee56340ccd17926abdaf286a2f977"
 dependencies = [
  "libc",
  "thiserror 2.0.21 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1283,9 +1284,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi 6.0.0",
  "rand_core 0.10.1",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -1345,9 +1348,9 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.17.1"
+version = "0.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
+checksum = "735eaa21a6a5ffb2e84362faaeb90c05ba8e19797ca30428478cb6ea3a4921bc"
 
 [[package]]
 name = "heck"
@@ -1441,9 +1444,9 @@ dependencies = [
 
 [[package]]
 name = "hyper"
-version = "1.12.0"
+version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c3e324da4c95177d6291d4c8730197c0d1822f8a9766814a4a44fa5ab797c9c"
+checksum = "229c6ff5584df4c6becbfe00567128bac768c8cd32ebc8a8366bd81ed072e8f3"
 dependencies = [
  "atomic-waker",
  "bytes",
@@ -1664,7 +1667,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cc4e190f5d26ca7051642629da2c52fc03bde85a03197c99408dcd291734c855"
 dependencies = [
  "equivalent",
- "hashbrown 0.17.1",
+ "hashbrown 0.17.2",
  "serde",
  "serde_core",
 ]
@@ -1702,9 +1705,9 @@ dependencies = [
 
 [[package]]
 name = "interprocess"
-version = "2.4.9"
+version = "2.4.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f243523bf126ddfc5cddf87a8193a941bfca29476ce3c842e24c916cf5a22ec"
+checksum = "a50ad48c57a73eb3e157c55c3bf6a35cbc9c57b4ebc177d24a92b02de884388d"
 dependencies = [
  "doctest-file",
  "futures-core",
@@ -1870,14 +1873,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
-name = "libmimalloc-sys"
-version = "0.1.49"
-source = "git+https://github.com/purpleprotocol/mimalloc_rust#a35cc759c071fd7bd586685048367839002b95dd"
-dependencies = [
- "cc",
-]
-
-[[package]]
 name = "linux-raw-sys"
 version = "0.4.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1976,10 +1971,20 @@ checksum = "a64a92489e2744ce060c349162be1c5f33c6969234104dbd99ddb5feb08b8c15"
 
 [[package]]
 name = "mimalloc"
-version = "0.1.52"
-source = "git+https://github.com/purpleprotocol/mimalloc_rust#a35cc759c071fd7bd586685048367839002b95dd"
+version = "3.7.1"
+source = "git+https://github.com/microsoft/mimalloc#bc44251a1198409399bca17e319914795e8903d1"
 dependencies = [
- "libmimalloc-sys",
+ "mimalloc-sys",
+ "rustversion",
+]
+
+[[package]]
+name = "mimalloc-sys"
+version = "3.7.1"
+source = "git+https://github.com/microsoft/mimalloc#bc44251a1198409399bca17e319914795e8903d1"
+dependencies = [
+ "cc",
+ "rustversion",
 ]
 
 [[package]]
@@ -2469,9 +2474,9 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "pest"
-version = "2.9.6"
+version = "2.9.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ec53fd1d256900a9a771bf2720d42cef6f8bc91b4e25065fbd291e3e7222576"
+checksum = "44cf434b793f79ab490e99ae3b2f9acce4ef02cdac3eee541a69de78c1aadd7c"
 dependencies = [
  "memchr",
  "pest_stack_guard",
@@ -2480,9 +2485,9 @@ dependencies = [
 
 [[package]]
 name = "pest_derive"
-version = "2.9.6"
+version = "2.9.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adcf794fd301ddc20818a6b4de85ed507f4b45300245cec948982e69e12e3bd7"
+checksum = "082f5f21b49230a02b9ee78a8a39d5771fd0ed6dc4d88ecc9fd583cb781e5751"
 dependencies = [
  "pest",
  "pest_generator",
@@ -2490,9 +2495,9 @@ dependencies = [
 
 [[package]]
 name = "pest_generator"
-version = "2.9.6"
+version = "2.9.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3073afae5db334c25dea9fc3e230a4f191e920c1df080cb9c0b37c9ce1dbb41"
+checksum = "5e4725db179c5bc5ea719d3312ce518f4b70d368139d630f4c9309d9117a3ac1"
 dependencies = [
  "pest",
  "pest_meta",
@@ -2503,9 +2508,9 @@ dependencies = [
 
 [[package]]
 name = "pest_meta"
-version = "2.9.6"
+version = "2.9.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7bc7f614b3742541642af1685faaa910bf6333e3cd3729c2cccd118146a57327"
+checksum = "8363b5d48f0960fc3db68b1c8aa0bdc1a370d465a8c74287172ed5093a4cf293"
 dependencies = [
  "pest",
 ]
@@ -2614,7 +2619,7 @@ dependencies = [
 [[package]]
 name = "portable-pty"
 version = "0.9.0"
-source = "git+https://github.com/wezterm/wezterm#ee6f3044d09f83f21a32aead8dac2bc2a32e7fcb"
+source = "git+https://github.com/wezterm/wezterm#7d0eb9685cbee56340ccd17926abdaf286a2f977"
 dependencies = [
  "anyhow",
  "bitflags 1.3.2",
@@ -3053,7 +3058,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d9776093b7ca170454ab1406954f7b7d97a57c51dc6c0642957fb2ef25c2d399"
 dependencies = [
  "bytes",
- "hashbrown 0.17.1",
+ "hashbrown 0.17.2",
  "indexmap",
  "munge",
  "ptr_meta",
@@ -3078,7 +3083,7 @@ dependencies = [
 [[package]]
 name = "rmcp"
 version = "3.11.0"
-source = "git+https://github.com/modelcontextprotocol/rust-sdk#86c65108c9b358cfff5954e55502d2ee826baf8c"
+source = "git+https://github.com/modelcontextprotocol/rust-sdk#d6c3e2cfe55a63bf1a7d52bb6a0b26454a9aeef1"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -3098,7 +3103,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
- "sha2 0.11.1",
+ "sha2 0.11.2",
  "sse-stream",
  "thiserror 2.0.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio",
@@ -3114,7 +3119,7 @@ dependencies = [
 [[package]]
 name = "rmcp-macros"
 version = "3.11.0"
-source = "git+https://github.com/modelcontextprotocol/rust-sdk#86c65108c9b358cfff5954e55502d2ee826baf8c"
+source = "git+https://github.com/modelcontextprotocol/rust-sdk#d6c3e2cfe55a63bf1a7d52bb6a0b26454a9aeef1"
 dependencies = [
  "darling 0.24.1",
  "proc-macro2",
@@ -3323,9 +3328,9 @@ dependencies = [
 
 [[package]]
 name = "sha2"
-version = "0.11.1"
+version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47d7069beb7d6ac7b9acd1039986e73443f24234f41074da099d6f994ac9ad19"
+checksum = "5b0e5c7d67bc53f435386b2130fdc900488c5703770f6d8a4633060e34288a27"
 dependencies = [
  "cfg-if",
  "cpufeatures 0.3.1",
@@ -3407,12 +3412,9 @@ checksum = "3a219298ac11a56ea9a6d2120044824d6f01aeb034955e7af7bc16858527deea"
 
 [[package]]
 name = "simd_helpers"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95890f873bec569a0362c235787f3aca6e1e887302ba4840839bcc6459c42da6"
-dependencies = [
- "quote",
-]
+checksum = "f48ea32978b7ad365bd1ecce83827746d5d50dc006a8c85112b7acc3c716e3e7"
 
 [[package]]
 name = "simdutf8"
@@ -3625,7 +3627,7 @@ dependencies = [
 [[package]]
 name = "sysinfo"
 version = "0.40.4"
-source = "git+https://github.com/GuillaumeGomez/sysinfo#d3abcdeb3029d328946b41164382a7c71a7758da"
+source = "git+https://github.com/GuillaumeGomez/sysinfo#847a39249bdc82215f6a6e4f2ae5b1c7bdc969ac"
 dependencies = [
  "libc",
  "memchr",
@@ -3688,7 +3690,7 @@ dependencies = [
 [[package]]
 name = "termwiz"
 version = "0.24.0"
-source = "git+https://github.com/wezterm/wezterm#ee6f3044d09f83f21a32aead8dac2bc2a32e7fcb"
+source = "git+https://github.com/wezterm/wezterm#7d0eb9685cbee56340ccd17926abdaf286a2f977"
 dependencies = [
  "anyhow",
  "bitflags 2.13.2",
@@ -3749,7 +3751,7 @@ dependencies = [
 [[package]]
 name = "thiserror"
 version = "2.0.21"
-source = "git+https://github.com/dtolnay/thiserror#ba2784aadbe2015b879a129a9f53727258275aa8"
+source = "git+https://github.com/dtolnay/thiserror#aa7e8161d55acd7792f4e3d1d9b1b3052134dfaf"
 dependencies = [
  "thiserror-impl 2.0.21 (git+https://github.com/dtolnay/thiserror)",
 ]
@@ -3779,7 +3781,7 @@ dependencies = [
 [[package]]
 name = "thiserror-impl"
 version = "2.0.21"
-source = "git+https://github.com/dtolnay/thiserror#ba2784aadbe2015b879a129a9f53727258275aa8"
+source = "git+https://github.com/dtolnay/thiserror#aa7e8161d55acd7792f4e3d1d9b1b3052134dfaf"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3900,9 +3902,9 @@ source = "git+https://github.com/vectorize-io/toktok#0dab51c474c2bccea287eaaf489
 
 [[package]]
 name = "toml"
-version = "1.2.2+spec-1.1.0"
+version = "1.2.3+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5426cb1b964690d913f6c5c1a1ae0b42f428ec506bb4d452876d7a209c9bca3b"
+checksum = "26b1f26e9485c1fa43ee89fe76e9f3fb9e2e52bb227f8594b4d687496b83d073"
 dependencies = [
  "indexmap",
  "serde_core",
@@ -3924,9 +3926,9 @@ dependencies = [
 
 [[package]]
 name = "toml_parser"
-version = "1.1.6+spec-1.1.0"
+version = "1.1.7+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6769c452d71ba30696c6b37770c439a9cc9110f47f7d5cdbeda79840ef5ea31"
+checksum = "0bb28d6e049a9766c3bd91a8326e6179f5b132dec87906bb97018ef7a2f3431a"
 dependencies = [
  "winnow",
 ]
@@ -4158,7 +4160,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "vtparse"
 version = "0.7.0"
-source = "git+https://github.com/wezterm/wezterm#ee6f3044d09f83f21a32aead8dac2bc2a32e7fcb"
+source = "git+https://github.com/wezterm/wezterm#7d0eb9685cbee56340ccd17926abdaf286a2f977"
 dependencies = [
  "utf8parse",
 ]
@@ -4271,7 +4273,7 @@ checksum = "a28ac98ddc8b9274cb41bb4d9d4d5c425b6020c50c46f25559911905610b4a88"
 [[package]]
 name = "wezterm-bidi"
 version = "0.2.3"
-source = "git+https://github.com/wezterm/wezterm#ee6f3044d09f83f21a32aead8dac2bc2a32e7fcb"
+source = "git+https://github.com/wezterm/wezterm#7d0eb9685cbee56340ccd17926abdaf286a2f977"
 dependencies = [
  "log",
  "wezterm-dynamic",
@@ -4280,7 +4282,7 @@ dependencies = [
 [[package]]
 name = "wezterm-blob-leases"
 version = "0.1.1"
-source = "git+https://github.com/wezterm/wezterm#ee6f3044d09f83f21a32aead8dac2bc2a32e7fcb"
+source = "git+https://github.com/wezterm/wezterm#7d0eb9685cbee56340ccd17926abdaf286a2f977"
 dependencies = [
  "getrandom 0.3.4",
  "log",
@@ -4292,7 +4294,7 @@ dependencies = [
 [[package]]
 name = "wezterm-cell"
 version = "0.1.0"
-source = "git+https://github.com/wezterm/wezterm#ee6f3044d09f83f21a32aead8dac2bc2a32e7fcb"
+source = "git+https://github.com/wezterm/wezterm#7d0eb9685cbee56340ccd17926abdaf286a2f977"
 dependencies = [
  "finl_unicode",
  "image",
@@ -4311,7 +4313,7 @@ dependencies = [
 [[package]]
 name = "wezterm-char-props"
 version = "0.1.3"
-source = "git+https://github.com/wezterm/wezterm#ee6f3044d09f83f21a32aead8dac2bc2a32e7fcb"
+source = "git+https://github.com/wezterm/wezterm#7d0eb9685cbee56340ccd17926abdaf286a2f977"
 dependencies = [
  "phf",
  "serde",
@@ -4321,7 +4323,7 @@ dependencies = [
 [[package]]
 name = "wezterm-color-types"
 version = "0.3.0"
-source = "git+https://github.com/wezterm/wezterm#ee6f3044d09f83f21a32aead8dac2bc2a32e7fcb"
+source = "git+https://github.com/wezterm/wezterm#7d0eb9685cbee56340ccd17926abdaf286a2f977"
 dependencies = [
  "csscolorparser",
  "deltae",
@@ -4333,7 +4335,7 @@ dependencies = [
 [[package]]
 name = "wezterm-dynamic"
 version = "0.2.1"
-source = "git+https://github.com/wezterm/wezterm#ee6f3044d09f83f21a32aead8dac2bc2a32e7fcb"
+source = "git+https://github.com/wezterm/wezterm#7d0eb9685cbee56340ccd17926abdaf286a2f977"
 dependencies = [
  "log",
  "ordered-float",
@@ -4345,7 +4347,7 @@ dependencies = [
 [[package]]
 name = "wezterm-dynamic-derive"
 version = "0.1.1"
-source = "git+https://github.com/wezterm/wezterm#ee6f3044d09f83f21a32aead8dac2bc2a32e7fcb"
+source = "git+https://github.com/wezterm/wezterm#7d0eb9685cbee56340ccd17926abdaf286a2f977"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4355,7 +4357,7 @@ dependencies = [
 [[package]]
 name = "wezterm-escape-parser"
 version = "0.1.0"
-source = "git+https://github.com/wezterm/wezterm#ee6f3044d09f83f21a32aead8dac2bc2a32e7fcb"
+source = "git+https://github.com/wezterm/wezterm#7d0eb9685cbee56340ccd17926abdaf286a2f977"
 dependencies = [
  "base64 0.22.1",
  "bitflags 2.13.2",
@@ -4381,7 +4383,7 @@ dependencies = [
 [[package]]
 name = "wezterm-input-types"
 version = "0.1.0"
-source = "git+https://github.com/wezterm/wezterm#ee6f3044d09f83f21a32aead8dac2bc2a32e7fcb"
+source = "git+https://github.com/wezterm/wezterm#7d0eb9685cbee56340ccd17926abdaf286a2f977"
 dependencies = [
  "bitflags 1.3.2",
  "euclid",
@@ -4392,7 +4394,7 @@ dependencies = [
 [[package]]
 name = "wezterm-surface"
 version = "0.1.0"
-source = "git+https://github.com/wezterm/wezterm#ee6f3044d09f83f21a32aead8dac2bc2a32e7fcb"
+source = "git+https://github.com/wezterm/wezterm#7d0eb9685cbee56340ccd17926abdaf286a2f977"
 dependencies = [
  "bitflags 2.13.2",
  "fancy-regex",
@@ -4413,7 +4415,7 @@ dependencies = [
 [[package]]
 name = "wezterm-term"
 version = "0.1.0"
-source = "git+https://github.com/wezterm/wezterm#ee6f3044d09f83f21a32aead8dac2bc2a32e7fcb"
+source = "git+https://github.com/wezterm/wezterm#7d0eb9685cbee56340ccd17926abdaf286a2f977"
 dependencies = [
  "anyhow",
  "bitflags 1.3.2",
@@ -4534,7 +4536,7 @@ dependencies = [
 [[package]]
 name = "windows"
 version = "0.100.0"
-source = "git+https://github.com/microsoft/windows-rs#8f4bec4d64b0a37e40c818ddce5718e8278064a5"
+source = "git+https://github.com/microsoft/windows-rs#4f854dd5a17cb7cabcf097074c9b8b49ec9b7f84"
 dependencies = [
  "windows-collections 0.101.0",
  "windows-core 0.101.0",
@@ -4556,7 +4558,7 @@ dependencies = [
 [[package]]
 name = "windows-collections"
 version = "0.101.0"
-source = "git+https://github.com/microsoft/windows-rs#8f4bec4d64b0a37e40c818ddce5718e8278064a5"
+source = "git+https://github.com/microsoft/windows-rs#4f854dd5a17cb7cabcf097074c9b8b49ec9b7f84"
 dependencies = [
  "windows-core 0.101.0",
 ]
@@ -4596,7 +4598,7 @@ dependencies = [
 [[package]]
 name = "windows-core"
 version = "0.101.0"
-source = "git+https://github.com/microsoft/windows-rs#8f4bec4d64b0a37e40c818ddce5718e8278064a5"
+source = "git+https://github.com/microsoft/windows-rs#4f854dd5a17cb7cabcf097074c9b8b49ec9b7f84"
 dependencies = [
  "windows-implement 0.101.0",
  "windows-interface 0.101.0",
@@ -4619,7 +4621,7 @@ dependencies = [
 [[package]]
 name = "windows-future"
 version = "0.101.0"
-source = "git+https://github.com/microsoft/windows-rs#8f4bec4d64b0a37e40c818ddce5718e8278064a5"
+source = "git+https://github.com/microsoft/windows-rs#4f854dd5a17cb7cabcf097074c9b8b49ec9b7f84"
 dependencies = [
  "windows-core 0.101.0",
  "windows-link 0.100.1",
@@ -4640,7 +4642,7 @@ dependencies = [
 [[package]]
 name = "windows-implement"
 version = "0.101.0"
-source = "git+https://github.com/microsoft/windows-rs#8f4bec4d64b0a37e40c818ddce5718e8278064a5"
+source = "git+https://github.com/microsoft/windows-rs#4f854dd5a17cb7cabcf097074c9b8b49ec9b7f84"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4661,7 +4663,7 @@ dependencies = [
 [[package]]
 name = "windows-interface"
 version = "0.101.0"
-source = "git+https://github.com/microsoft/windows-rs#8f4bec4d64b0a37e40c818ddce5718e8278064a5"
+source = "git+https://github.com/microsoft/windows-rs#4f854dd5a17cb7cabcf097074c9b8b49ec9b7f84"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4677,7 +4679,7 @@ checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
 [[package]]
 name = "windows-link"
 version = "0.100.1"
-source = "git+https://github.com/microsoft/windows-rs#8f4bec4d64b0a37e40c818ddce5718e8278064a5"
+source = "git+https://github.com/microsoft/windows-rs#4f854dd5a17cb7cabcf097074c9b8b49ec9b7f84"
 
 [[package]]
 name = "windows-numerics"
@@ -4692,7 +4694,7 @@ dependencies = [
 [[package]]
 name = "windows-numerics"
 version = "0.101.0"
-source = "git+https://github.com/microsoft/windows-rs#8f4bec4d64b0a37e40c818ddce5718e8278064a5"
+source = "git+https://github.com/microsoft/windows-rs#4f854dd5a17cb7cabcf097074c9b8b49ec9b7f84"
 dependencies = [
  "windows-core 0.101.0",
 ]
@@ -4700,7 +4702,7 @@ dependencies = [
 [[package]]
 name = "windows-reference"
 version = "0.101.0"
-source = "git+https://github.com/microsoft/windows-rs#8f4bec4d64b0a37e40c818ddce5718e8278064a5"
+source = "git+https://github.com/microsoft/windows-rs#4f854dd5a17cb7cabcf097074c9b8b49ec9b7f84"
 dependencies = [
  "windows-core 0.101.0",
  "windows-time",
@@ -4709,7 +4711,7 @@ dependencies = [
 [[package]]
 name = "windows-registry"
 version = "0.100.1"
-source = "git+https://github.com/microsoft/windows-rs#8f4bec4d64b0a37e40c818ddce5718e8278064a5"
+source = "git+https://github.com/microsoft/windows-rs#4f854dd5a17cb7cabcf097074c9b8b49ec9b7f84"
 dependencies = [
  "windows-link 0.100.1",
  "windows-result 0.100.1",
@@ -4737,7 +4739,7 @@ dependencies = [
 [[package]]
 name = "windows-result"
 version = "0.100.1"
-source = "git+https://github.com/microsoft/windows-rs#8f4bec4d64b0a37e40c818ddce5718e8278064a5"
+source = "git+https://github.com/microsoft/windows-rs#4f854dd5a17cb7cabcf097074c9b8b49ec9b7f84"
 dependencies = [
  "windows-link 0.100.1",
 ]
@@ -4763,7 +4765,7 @@ dependencies = [
 [[package]]
 name = "windows-strings"
 version = "0.100.1"
-source = "git+https://github.com/microsoft/windows-rs#8f4bec4d64b0a37e40c818ddce5718e8278064a5"
+source = "git+https://github.com/microsoft/windows-rs#4f854dd5a17cb7cabcf097074c9b8b49ec9b7f84"
 dependencies = [
  "windows-link 0.100.1",
 ]
@@ -4814,7 +4816,7 @@ dependencies = [
 [[package]]
 name = "windows-threading"
 version = "0.100.1"
-source = "git+https://github.com/microsoft/windows-rs#8f4bec4d64b0a37e40c818ddce5718e8278064a5"
+source = "git+https://github.com/microsoft/windows-rs#4f854dd5a17cb7cabcf097074c9b8b49ec9b7f84"
 dependencies = [
  "windows-link 0.100.1",
 ]
@@ -4822,7 +4824,7 @@ dependencies = [
 [[package]]
 name = "windows-time"
 version = "0.101.0"
-source = "git+https://github.com/microsoft/windows-rs#8f4bec4d64b0a37e40c818ddce5718e8278064a5"
+source = "git+https://github.com/microsoft/windows-rs#4f854dd5a17cb7cabcf097074c9b8b49ec9b7f84"
 dependencies = [
  "windows-core 0.101.0",
 ]
@@ -4951,18 +4953,18 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.8.64"
+version = "0.8.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed43f3060383c64b000f3c630550aebdfa9d3b76d48de32390483dd2cc7e0865"
+checksum = "cba8a86aee14fc8cc6c208af60854b3d4ab7185a9a369a12c648faa2716ff42a"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.64"
+version = "0.8.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5cbd820fe3e35fb38c83b6dc7e6b1618bc46e0cd10073ae94e8d52dc468d8b9"
+checksum = "f89bca3b96ceb3cfcb4572790402f977442270d252b9a8504ebc258760c55f94"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5025,9 +5027,9 @@ dependencies = [
 
 [[package]]
 name = "zlib-rs"
-version = "0.6.8"
+version = "0.6.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b268e58e7c693d7c271f93ffc4ba3b380412554231c85bf61ca7af91042a4112"
+checksum = "aa76918995d776d9dd34d371030be228d021137449771493d56e29f77e4148ac"
 
 [[package]]
 name = "zmij"

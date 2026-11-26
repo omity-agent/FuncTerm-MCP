@@ -1,21 +1,22 @@
 extern crate alloc;
 #[path = "replies.rs"]
 mod replies;
-use crate::support::{TestGuard, locked_with_env};
+use crate::support::{ChildGuard, TestGuard, locked_with_env};
 use alloc::rc::Rc;
 use core::time::Duration;
 pub(super) use replies::{
-    assert_field, assert_rejected, command_result, entries, field, result, text, text_documents,
+    assert_field, assert_finished_output, assert_rejected, command_result, completed_commands,
+    entries, field, result, text, text_documents,
 };
 use rmcp::serde_json::{Value, json};
 use std::{
     io::{BufRead as _, BufReader, Write as _},
-    process::{Child, ChildStdin, Command, Stdio},
+    process::{ChildStdin, Command, Stdio},
     sync::mpsc::{self, Receiver},
     thread,
 };
 pub(super) struct McpSession {
-    child: Child,
+    _child: ChildGuard,
     input: ChildStdin,
     responses: Receiver<Value>,
     sequence: u64,
@@ -34,15 +35,6 @@ impl McpSession {
         arguments: &[&str],
         version: &str,
     ) -> Self {
-        let environment = daemon.env();
-        Self::start(daemon, arguments, &environment, version)
-    }
-    fn start(
-        daemon: Rc<TestGuard>,
-        arguments: &[&str],
-        environment: &[(String, String)],
-        version: &str,
-    ) -> Self {
         let mut command = Command::new(crate::support::exe());
         command
             .arg("mcp")
@@ -50,10 +42,10 @@ impl McpSession {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit());
-        crate::support::apply_test_environment(&mut command, environment);
-        let mut child = command.spawn().unwrap();
-        let input = child.stdin.take().unwrap();
-        let stdout = child.stdout.take().unwrap();
+        crate::support::apply_test_environment(&mut command, &daemon.env());
+        let mut child = ChildGuard::spawn(&mut command).unwrap();
+        let input = child.child_mut().stdin.take().unwrap();
+        let stdout = child.child_mut().stdout.take().unwrap();
         let (sender, responses) = mpsc::channel();
         thread::spawn(move || {
             for line in BufReader::new(stdout).lines() {
@@ -64,7 +56,7 @@ impl McpSession {
             }
         });
         let mut session = Self {
-            child,
+            _child: child,
             input,
             responses,
             sequence: 0,
@@ -72,7 +64,7 @@ impl McpSession {
         };
         let initialized = session.request("initialize", initialize_params(version));
         assert_field(&initialized, "/result/protocolVersion", version);
-        session.send(&json ! ({ "jsonrpc" : "2.0" , "method" : "notifications/initialized" }));
+        session.send(&initialized_notification());
         session
     }
     pub(super) fn request(&mut self, method: &str, params: Value) -> Value {
@@ -121,14 +113,24 @@ impl McpSession {
     }
 }
 pub(super) fn request_message(method: &str, params: Value, sequence: u64) -> Value {
-    let mut message = json!({"jsonrpc": "2.0", "id": sequence, "method": method, "params": null});
-    *message.get_mut("params").unwrap() = params;
-    message
+    with_payload(
+        json!({"jsonrpc": "2.0", "id": sequence, "method": method}),
+        "params",
+        params,
+    )
 }
 pub(super) fn tool_arguments(name: &str, arguments: Value) -> Value {
-    let mut parameters = json!({"name": name, "arguments": null});
-    *parameters.get_mut("arguments").unwrap() = arguments;
-    parameters
+    with_payload(json!({"name": name}), "arguments", arguments)
+}
+fn with_payload(mut envelope: Value, key: &str, value: Value) -> Value {
+    envelope
+        .as_object_mut()
+        .unwrap()
+        .insert(key.to_owned(), value);
+    envelope
+}
+pub(super) fn initialized_notification() -> Value {
+    json!({"jsonrpc": "2.0", "method": "notifications/initialized"})
 }
 pub(super) fn initialize_params(version: &str) -> Value {
     json!({
@@ -136,12 +138,4 @@ pub(super) fn initialize_params(version: &str) -> Value {
         "capabilities": {},
         "clientInfo": {"name": "contract-tests", "version": "1"}
     })
-}
-impl Drop for McpSession {
-    fn drop(&mut self) {
-        if self.child.try_wait().unwrap().is_none() {
-            self.child.kill().unwrap();
-        }
-        self.child.wait().unwrap();
-    }
 }

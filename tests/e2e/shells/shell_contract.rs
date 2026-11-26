@@ -1,10 +1,10 @@
-use super::matrix::{assert_cwd, assert_shell_query, case_command, case_dir, shell_cases};
+use super::matrix::{SHELL_CASES, assert_cwd, assert_shell_query, case_command, case_dir};
 use crate::support::{complete_command, create_tab, parse_tab_view, run_cli};
 use std::fs;
 #[test]
 fn cli_runs_commands_for_every_supported_shell() {
     let _guard = super::matrix::daemon();
-    for case in shell_cases() {
+    for case in SHELL_CASES {
         let start = case_dir(case.name, "start dir");
         let next = case_dir(case.name, "next dir");
         let created = create_tab(&start, case.name);

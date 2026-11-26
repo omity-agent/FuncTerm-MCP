@@ -1,6 +1,6 @@
 use super::{
     execution::create_tabs,
-    wire::{McpSession, assert_field, entries, text},
+    wire::{McpSession, assert_finished_output, entries, field, text},
 };
 use rmcp::serde_json::json;
 #[test]
@@ -47,11 +47,6 @@ fn mcp_manual_write_delivers_text_and_bytes_to_distinct_tabs() {
         .iter()
         .zip(["RECEIVED_FIRST", "RECEIVED_SECOND"])
     {
-        assert_field(entry, "/result/command/finished", true);
-        assert_field(entry, "/result/command/exit_code", 0_i32);
-        assert!(
-            text(entry, "/result/command/stdout").contains(expected),
-            "{completed}"
-        );
+        assert_finished_output(field(entry, "/result/command"), "/stdout", expected);
     }
 }

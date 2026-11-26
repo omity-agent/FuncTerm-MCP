@@ -1,16 +1,14 @@
 use super::matrix::{
-    case_dir, exit_command, nested_launch_command, nested_marker_command, shell_cases,
+    SHELL_CASES, case_dir, exit_command, nested_launch_command, nested_marker_command,
 };
 use crate::support::{
     command_directory, complete_command, create_tab, parse_command_id, parse_command_result, run,
-    run_cli, wait_for_completion,
+    run_cli, wait_for_completion, wait_for_removal,
 };
-use core::time::Duration;
-use std::time::Instant;
 #[test]
 fn cli_keeps_nested_launch_result_stable_after_nested_shell_exits() {
     let _guard = super::matrix::daemon();
-    for case in shell_cases() {
+    for case in SHELL_CASES {
         let tab = create_tab(&case_dir(case.name, "nested start"), case.name);
         let output = run(&tab.tab_id, nested_launch_command(case.name), 15.0);
         let id = parse_command_id(&output);
@@ -50,14 +48,6 @@ fn cli_keeps_nested_launch_result_stable_after_nested_shell_exits() {
             "{restored:?}"
         );
         assert!(restored.stdout.contains("PARENT_RESTORED"), "{restored:?}");
-        let started = Instant::now();
-        while directory.try_exists().unwrap() && started.elapsed() < Duration::from_secs(3) {
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        assert!(
-            !directory.try_exists().unwrap(),
-            "launch record not released: {}",
-            directory.display()
-        );
+        wait_for_removal(&directory);
     }
 }

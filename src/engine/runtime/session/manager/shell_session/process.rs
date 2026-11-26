@@ -74,12 +74,6 @@ impl Drop for ProcessTree {
         }
     }
 }
-pub(in crate::engine::runtime::session::manager) fn is_alive(
-    child: &mut (dyn Child + Send + Sync),
-) -> Result<bool> {
-    let status = child.try_wait().context("failed to poll shell child")?;
-    Ok(status.is_none())
-}
 pub(in crate::engine::runtime::session::manager) fn cleanup(
     child: &mut (dyn Child + Send + Sync),
     description: &str,

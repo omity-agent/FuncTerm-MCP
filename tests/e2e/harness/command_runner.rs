@@ -1,6 +1,7 @@
 use super::daemon;
 use super::parse::{
-    CommandResult, TabCreated, parse_command_id, parse_command_result, parse_tab_created,
+    CommandResult, TabCreated, TabView, parse_command_id, parse_command_result, parse_tab_created,
+    parse_tab_view,
 };
 use base64_turbo::STANDARD;
 use core::cell::RefCell;
@@ -88,45 +89,55 @@ pub(crate) fn run_with_output(
         &wait_timeout.to_string(),
     ])
 }
+pub(crate) fn tab_view(tab: &str) -> TabView {
+    parse_tab_view(&run_cli(&["view", tab]))
+}
+pub(crate) fn command_view(id: &str) -> CommandResult {
+    parse_command_result(&run_cli(&["view", id]))
+}
 pub(crate) fn wait_for_stdout(
     command_id: &str,
     expected: &str,
     timeout: Duration,
 ) -> CommandResult {
-    let started = Instant::now();
-    loop {
-        let result = parse_command_result(&run_cli(&["view", command_id, "--wait-timeout", "0.1"]));
+    watch_command(command_id, "0.1", timeout, |result| {
         assert!(
             !result.finished,
             "command ended before producing {expected}: {result:?}"
         );
-        if result.stdout.contains(expected) {
-            return result;
-        }
-        assert!(
-            started.elapsed() < timeout,
-            "command did not produce {expected}: {result:?}"
-        );
-    }
+        result.stdout.contains(expected)
+    })
 }
 pub(crate) fn complete_command(tab_id: &str, command: &str) -> CommandResult {
     wait_for_completion(&run(tab_id, command, 0.0))
 }
 pub(crate) fn wait_for_completion(accepted: &Output) -> CommandResult {
-    let id = parse_command_id(accepted);
     let initial = parse_command_result(accepted);
     if initial.finished {
         return initial;
     }
-    let deadline = Instant::now() + CLI_COMMAND_TIMEOUT;
+    watch_command(
+        &parse_command_id(accepted),
+        "1",
+        CLI_COMMAND_TIMEOUT,
+        |result| result.finished,
+    )
+}
+fn watch_command(
+    id: &str,
+    step: &str,
+    limit: Duration,
+    ready: impl Fn(&CommandResult) -> bool,
+) -> CommandResult {
+    let started = Instant::now();
     loop {
-        let observed = parse_command_result(&run_cli(&["view", &id, "--wait-timeout", "1"]));
-        if observed.finished {
+        let observed = parse_command_result(&run_cli(&["view", id, "--wait-timeout", step]));
+        if ready(&observed) {
             return observed;
         }
         assert!(
-            Instant::now() < deadline,
-            "command {id} did not finish within {CLI_COMMAND_TIMEOUT:?}: {observed:?}"
+            started.elapsed() < limit,
+            "command {id} did not reach the expected state within {limit:?}: {observed:?}"
         );
     }
 }

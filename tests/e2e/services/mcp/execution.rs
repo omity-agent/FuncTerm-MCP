@@ -1,13 +1,14 @@
 extern crate alloc;
-use super::wire::{McpSession, assert_field, entries, text};
+use super::wire::{
+    McpSession, assert_field, assert_finished_output, command_result, completed_commands, entries,
+    field, text,
+};
+pub(super) use crate::support::SHELL;
 use alloc::rc::Rc;
 use core::time::Duration;
+use itertools::Itertools as _;
 use rmcp::serde_json::json;
 use std::time::Instant;
-#[cfg(windows)]
-pub(super) const SHELL: &str = "powershell";
-#[cfg(not(windows))]
-pub(super) const SHELL: &str = "bash";
 pub(super) fn create_tabs<const N: usize>(session: &mut McpSession) -> [String; N] {
     let tabs = (0..N)
         .map(|index| {
@@ -40,36 +41,45 @@ fn mcp_batch_preserves_order_and_isolates_errors() {
             ], "wait_timeout": 5_u64
         }),
     );
-    let results = entries(&response);
+    let (first_run, rejected, last_run) = entries(&response)
+        .iter()
+        .collect_tuple()
+        .unwrap_or_else(|| panic!("unexpected batch: {response}"));
     assert_field(&response, "/result/isError", true);
-    assert_eq!(results.len(), 3);
-    let documents = super::wire::text_documents(&response);
     assert!(
-        documents
+        super::wire::text_documents(&response)
             .iter()
             .all(|block| !block.starts_with("commands["))
     );
-    assert!(
-        text(results.first().unwrap(), "/result/command/stdout").contains("FIRST_BATCH_RESULT")
-    );
-    assert!(
-        results
-            .get(1)
-            .is_some_and(|entry| entry.get("error").is_some())
-    );
-    assert!(text(results.last().unwrap(), "/result/command/stdout").contains("LAST_BATCH_RESULT"));
+    assert!(rejected.get("error").is_some());
+    let ids = [first_run, last_run].map(|entry| text(entry, "/result/command/command_id"));
+    let complete = completed_commands(&ids, |arguments| session.call("view", arguments));
+    for (entry, expected) in entries(&complete)
+        .iter()
+        .zip(["FIRST_BATCH_RESULT", "LAST_BATCH_RESULT"])
+    {
+        assert_finished_output(field(entry, "/result/command"), "/stdout", expected);
+    }
     let viewed = session.view(&[(&first, 1), (&second, 1)], 0.0);
     assert!(
         entries(&viewed)
             .iter()
             .all(|entry| entry.pointer("/result/screen").is_some())
     );
+    let stopped = crate::support::run_cli(&["daemon", "stop"]);
+    assert!(stopped.status.success(), "{stopped:?}");
     let written = session.call("manual_write", json!({
         "inputs": [{"tab_id": first, "text": "x", "bytes": [120_u8]}, {"tab_id": second}], "wait_timeout": 0_u64
     }));
     let errors = entries(&written);
     assert!(text(errors.first().unwrap(), "/error").contains("cannot be provided together"));
     assert!(text(errors.last().unwrap(), "/error").contains("either text or bytes"));
+    let still_stopped = crate::support::run_cli(&["daemon", "stop"]);
+    assert!(still_stopped.status.success(), "{still_stopped:?}");
+    assert_eq!(
+        String::from_utf8(still_stopped.stdout).unwrap().trim(),
+        "daemon is not running"
+    );
 }
 #[test]
 fn mcp_scaled_wait_budget_is_shared_and_timeout_does_not_cancel_commands() {
@@ -88,9 +98,7 @@ fn mcp_scaled_wait_budget_is_shared_and_timeout_does_not_cancel_commands() {
         let [first, second] = create_tabs(&mut session);
         let ready = session.execute_many(&[&first, &second], "echo BATCH_READY", true, 10.0);
         for entry in entries(&ready) {
-            assert_field(entry, "/result/command/finished", true);
-            assert_field(entry, "/result/command/exit_code", 0_i32);
-            assert!(text(entry, "/result/command/stdout").contains("BATCH_READY"));
+            assert_finished_output(field(entry, "/result/command"), "/stdout", "BATCH_READY");
         }
         let window = Duration::from_millis(1400)..Duration::from_millis(2800);
         let viewing = Instant::now();
@@ -119,8 +127,63 @@ fn mcp_scaled_wait_budget_is_shared_and_timeout_does_not_cancel_commands() {
         assert!(window.contains(&writing.elapsed()), "{written}");
         let completed = session.view(&queries, 8.0);
         for entry in entries(&completed) {
-            assert_field(entry, "/result/command/finished", true);
-            assert!(text(entry, "/result/command/stdout").contains("BATCH_FINISHED"));
+            assert_finished_output(field(entry, "/result/command"), "/stdout", "BATCH_FINISHED");
         }
     }
+}
+#[test]
+fn script_run_uses_the_largest_explicit_timeout_and_defaults_only_when_all_omit() {
+    let daemon = Rc::new(crate::support::locked_with_env(&[(
+        "FUNCTERM_MCP_WAIT_TIMEOUT_DEFAULT",
+        "6",
+    )]));
+    let mut session = McpSession::on(
+        &daemon,
+        &[
+            "--single-parameter-run",
+            "--wait-timeout-min=0",
+            "--no-profile",
+            "--output-mode=separated",
+        ],
+    );
+    let [first, second] = create_tabs(&mut session);
+    for script in [
+        format!(
+            "*** tab_id: {first};\necho UNUSED\n*** tab_id: {second}; wait_timeout: NaN;\necho UNUSED"
+        ),
+        format!("*** tab_id: {first};\necho UNUSED\n*** tab_id: {first};\necho UNUSED"),
+        format!("*** tab_id: {first};\n"),
+    ] {
+        let rejected = session.call("run", json!({"script": script}));
+        assert_field(&rejected, "/result/isError", true);
+        assert!(
+            rejected.pointer("/result/structuredContent").is_none(),
+            "{rejected}"
+        );
+    }
+    #[cfg(windows)]
+    let slow = "Start-Sleep -Seconds 4\nWrite-Output SLOW_RESULT";
+    #[cfg(not(windows))]
+    let slow = "sleep 4\necho SLOW_RESULT";
+    let mixed = format!(
+        "*** tab_id: {first}; wait_timeout: 0;\necho FAST_RESULT\n*** tab_id: {second}; wait_timeout: 1.5;\n{slow}\n*** tab_id: missing;\necho UNUSED"
+    );
+    let started = Instant::now();
+    let mixed_response = session.call("run", json!({"script": mixed}));
+    assert!(
+        started.elapsed() >= Duration::from_millis(1400),
+        "{mixed_response}"
+    );
+    let (fast, pending, rejected) = entries(&mixed_response)
+        .iter()
+        .collect_tuple()
+        .unwrap_or_else(|| panic!("unexpected script response: {mixed_response}"));
+    assert_field(pending, "/result/command/finished", false);
+    assert!(rejected.get("error").is_some());
+    let fast_id = text(fast, "/result/command/command_id");
+    let fast_response = completed_commands(&[fast_id], |arguments| session.call("view", arguments));
+    assert_finished_output(command_result(&fast_response), "/stdout", "FAST_RESULT");
+    let script = format!("*** tab_id: {first};\n{slow}");
+    let response = session.call("run", json!({"script": script}));
+    assert_finished_output(command_result(&response), "/stdout", "SLOW_RESULT");
 }

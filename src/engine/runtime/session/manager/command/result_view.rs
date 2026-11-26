@@ -13,13 +13,12 @@ impl Tab {
         command.wait(wait_timeout).await?;
         let managed = Arc::clone(command);
         self.with_operation(move |tab| {
-            let (end_reason, snapshot) = managed.view()?;
-            let mut shell = if let Some(session) = tab.optional_session() {
-                let alive = session.is_alive()?;
-                tab.remember(&session)?.shell_view(alive)
+            let mut shell = if let Some(session) = tab.active_session()? {
+                tab.remember(&session)?.shell_view(true)
             } else {
                 tab.snapshot_shell_view()
             };
+            let (end_reason, snapshot) = managed.view()?;
             shell.title = snapshot.title;
             Ok(ViewResult::Command {
                 shell,

@@ -1,8 +1,7 @@
 use crate::support::{
-    create_tab_with_env, locked_with_env, parse_command_result, run, run_cli, temp_dir, temp_root,
+    SHELL, complete_command, create_tab_with_env, locked_with_env, run_cli, temp_dir, temp_root,
 };
 use std::path::Path;
-const SHELL: &str = if cfg!(windows) { "powershell" } else { "bash" };
 #[test]
 fn new_tab_uses_client_path_after_daemon_startup() {
     let guard = locked_with_env(&[]);
@@ -27,9 +26,7 @@ fn new_tab_uses_client_path_after_daemon_startup() {
     let mut client_env = guard.env();
     client_env.push(("PATH".to_owned(), client_path));
     let tab = create_tab_with_env(&temp_root(), SHELL, &client_env);
-    let output = run(&tab.tab_id, "functerm-client-path-probe", 5.0);
-    let result = parse_command_result(&output);
-    assert!(result.finished);
+    let result = complete_command(&tab.tab_id, "functerm-client-path-probe");
     assert_eq!(result.exit_code, Some(0_i32));
     assert!(result.stdout.contains("FUNCTERM_CLIENT_PATH_PROBE"));
 }
@@ -54,10 +51,7 @@ fn new_tab_inherits_environment_from_each_client() {
             client_environment.push(("FUNCTERM_CLIENT_ENV_PROBE".to_owned(), expected.to_owned()));
         }
         let tab = create_tab_with_env(&temp_root(), SHELL, &client_environment);
-        let command = environment_probe_command(expected);
-        let output = run(&tab.tab_id, &command, 5.0);
-        let result = parse_command_result(&output);
-        assert!(result.finished, "command should finish: {}", result.stderr);
+        let result = complete_command(&tab.tab_id, &environment_probe_command(expected));
         assert_eq!(result.exit_code, Some(0_i32), "stderr: {}", result.stderr);
         assert!(result.stdout.contains("CLIENT_ENVIRONMENT_INHERITED"));
     }

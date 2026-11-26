@@ -147,11 +147,21 @@ pub(super) enum CliCommand {
 #[derive(Subcommand)]
 pub(super) enum DaemonCommand {
     /// Start the daemon in the background.
-    Start,
+    Start(RunModeOptions),
     /// Stop the daemon and terminate tabs and running commands.
     Stop,
     /// Stop the daemon, then start a fresh instance.
-    Restart,
+    Restart(RunModeOptions),
+}
+#[derive(Default, clap::Args)]
+pub(super) struct RunModeOptions {
+    #[arg(long)]
+    single_parameter_run: bool,
+}
+impl RunModeOptions {
+    pub(super) const fn apply(self, settings: &mut Settings) {
+        settings.mcp.single_parameter_run |= self.single_parameter_run;
+    }
 }
 pub(crate) fn close_target(tab_id: Option<String>) -> Result<String> {
     if let Some(id) = tab_id {

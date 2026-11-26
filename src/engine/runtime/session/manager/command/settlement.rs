@@ -45,11 +45,12 @@ impl Tab {
     }
     pub(in crate::engine::runtime::session::manager) async fn stop_after_failure(
         self: &Arc<Self>,
-        session: Arc<ShellSession>,
         command: Arc<ManagedCommand>,
     ) -> Result<()> {
         self.with_operation(move |tab| {
-            if session.holds_command(&command) {
+            if let Some(session) = tab.active_session()?
+                && session.holds_command(&command)
+            {
                 tab.end_session(&session, SessionEnd::Failed)?;
             }
             Ok(())

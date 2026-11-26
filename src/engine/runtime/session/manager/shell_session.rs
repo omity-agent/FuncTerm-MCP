@@ -4,7 +4,7 @@ mod containment;
 mod input;
 pub(super) mod process;
 use super::command::ManagedCommand;
-use crate::runtime::session::observation::PathWatch;
+use crate::runtime::session::observation::{PathEvents, PathWatch};
 use crate::runtime::session::records::CommandRecord;
 use crate::runtime::session::terminal::{CommandCapture, Terminal};
 use crate::shell::{ShellChoice, shims};
@@ -50,8 +50,17 @@ impl ShellSession {
     pub(super) fn command_root(&self) -> &Path {
         &self.command_root
     }
-    pub(super) const fn command_watch(&self) -> &PathWatch {
-        &self.command_watch
+    pub(super) fn command_events(&self) -> PathEvents {
+        self.command_watch.events()
+    }
+    pub(super) const fn command_start_timeout(&self) -> Duration {
+        self.command_start_timeout
+    }
+    pub(super) fn terminal(&self) -> Arc<Terminal> {
+        Arc::clone(&self.screen)
+    }
+    pub(super) fn startup_child(&mut self) -> &mut (dyn Child + Send + Sync) {
+        self.child.get_mut().as_mut()
     }
     pub(super) fn set_cwd(&self, cwd: PathBuf) {
         *self.cwd.lock() = cwd;
@@ -77,9 +86,6 @@ impl ShellSession {
             *self.choice.lock() = choice;
         }
         Ok(())
-    }
-    pub(super) fn is_alive(&self) -> Result<bool> {
-        process::is_alive(self.child.lock().as_mut())
     }
     pub(super) fn exit_code(&self) -> Result<Option<i32>> {
         Ok(self
@@ -122,24 +128,6 @@ impl ShellSession {
             .write_all(&invocation_bytes)
             .context("failed to write command invocation")?;
         writer.flush().context("failed to flush command invocation")
-    }
-    pub(super) async fn wait_for_command_start(&self, command: &ManagedCommand) -> Result<()> {
-        if command.wait_started(self.command_start_timeout).await? {
-            return Ok(());
-        }
-        anyhow::bail!(
-            "shell did not start command within {:?}",
-            self.command_start_timeout
-        );
-    }
-    pub(super) async fn wait_for_output(&self, revision: u64, timeout: Duration) -> Result<()> {
-        self.screen.wait_for_visible_change(revision, timeout).await
-    }
-    pub(super) async fn wait_for_exit(&self) -> Result<()> {
-        self.screen.wait_for_exit().await
-    }
-    pub(super) async fn wait_for_shutdown(&self) -> Result<()> {
-        self.screen.wait_for_shutdown().await
     }
     pub(super) fn complete_interruption(&self, command: &ManagedCommand, cwd: &str) -> Result<()> {
         command.publish_interruption(cwd)?;

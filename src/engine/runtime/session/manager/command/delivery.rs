@@ -1,3 +1,4 @@
+use super::super::shell_session::ShellSession;
 use super::super::tab::Tab;
 use super::SessionEnd;
 use crate::runtime::protocol::{KeyboardInput, RequestRejected, ViewResult};
@@ -10,21 +11,18 @@ impl Tab {
         input: KeyboardInput,
         wait_timeout: Duration,
     ) -> Result<ViewResult> {
-        let session = self.live_session()?;
-        let expected = session.busy_command().ok_or_else(|| {
+        let busy = self
+            .observe_session(ShellSession::busy_command)
+            .ok_or_else(|| self.closed_tab())?;
+        let expected = busy.ok_or_else(|| {
             RequestRejected::new(
                 "manual_write is unavailable while the prompt is idle; use run for prompt commands",
             )
         })?;
-        session.wait_for_command_start(&expected).await?;
-        let target = Arc::clone(&session);
-        let revision = self
+        expected.wait_for_start().await?;
+        let (terminal, revision) = self
             .with_operation(move |tab| {
-                tab.live_session()?;
-                if let Some(code) = target.exit_code()? {
-                    tab.end_session(&target, SessionEnd::Exited(code))?;
-                    return Err(tab.closed_tab().into());
-                }
+                let target = tab.live_session()?;
                 target.refresh_choice()?;
                 match target.write_keyboard_for_running_command(&expected, &input) {
                     Err(error) if !error.is::<RequestRejected>() => {
@@ -39,11 +37,13 @@ impl Tab {
                         }
                         Err(error)
                     }
-                    result => result,
+                    result => Ok((target.terminal(), result?)),
                 }
             })
             .await?;
-        session.wait_for_output(revision, wait_timeout).await?;
+        terminal
+            .wait_for_visible_change(revision, wait_timeout)
+            .await?;
         self.with_operation(|tab| tab.tab_view()).await
     }
 }

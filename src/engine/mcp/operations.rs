@@ -1,3 +1,6 @@
+mod routes;
+mod schema;
+mod script;
 use super::{
     arguments::{ManualWriteInput, NewTabOptions, RunInput, ViewQuery},
     output::{self, EntryOutput},
@@ -6,6 +9,7 @@ use crate::runtime::config::Settings;
 use crate::runtime::protocol::{EnvironmentSnapshot, Payload, Request};
 use anyhow::Result;
 use core::time::Duration;
+pub(super) use routes::router;
 pub(super) trait Operation {
     const LIST_PARAMETER: &'static str;
     fn tab_id(&self) -> Option<&str> {

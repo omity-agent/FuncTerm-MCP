@@ -13,10 +13,6 @@ impl Tab {
         separate_output: bool,
     ) -> Result<Arc<ManagedCommand>> {
         let session = self.live_session()?;
-        if let Some(code) = session.exit_code()? {
-            self.end_session(&session, SessionEnd::Exited(code))?;
-            return Err(self.closed_tab().into());
-        }
         session.ensure_idle(self.id())?;
         session.refresh_choice()?;
         let choice = session.current_choice();
@@ -35,6 +31,7 @@ impl Tab {
             record,
             capture,
             Arc::clone(&self.tokenizer),
+            session.command_start_timeout(),
         ));
         session.reserve(Arc::clone(&managed));
         if let Err(error) = session.write_invocation(
@@ -52,7 +49,11 @@ impl Tab {
             }
             return Err(error);
         }
-        self.supervise(session, Arc::clone(&managed));
+        self.supervise(
+            session.terminal(),
+            session.command_events(),
+            Arc::clone(&managed),
+        );
         Ok(managed)
     }
 }

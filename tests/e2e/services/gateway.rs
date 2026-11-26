@@ -18,6 +18,7 @@ mod policy_matrix;
 mod threshold_notes;
 #[path = "mcp/wire/stdio_peer.rs"]
 mod wire;
+use itertools::Itertools as _;
 use rmcp::serde_json::json;
 use wire::{McpSession, assert_rejected, command_result, entries, text};
 #[test]
@@ -35,42 +36,39 @@ fn mcp_rejects_invalid_batches_before_dispatch() {
     }
     let mut session = McpSession::new();
     let directory = crate::support::temp_dir("rejected-dispatch");
-    let creation = session . call ("new_tab" , json ! ({ "tabs" : [{ "starting_shell" : execution :: SHELL , "starting_directory" : env ! ("CARGO_BIN_EXE_functerm") } , { "starting_shell" : execution :: SHELL , "starting_directory" : directory }] })) ;
-    assert!(
-        entries(&creation).first().unwrap().get("error").is_some(),
-        "{creation}"
-    );
-    let tab = text(entries(&creation).last().unwrap(), "/result/tab_id");
-    for (name, arguments) in [
+    let tabs: Vec<_> = [crate::support::exe(), directory.clone()]
+        .iter()
+        .map(|cwd| json!({"starting_shell": execution::SHELL, "starting_directory": cwd}))
+        .collect();
+    let creation = session.call("new_tab", json!({"tabs": tabs}));
+    let (invalid, valid) = entries(&creation)
+        .iter()
+        .collect_tuple()
+        .unwrap_or_else(|| panic!("unexpected batch: {creation}"));
+    assert!(invalid.get("error").is_some(), "{creation}");
+    let tab = text(valid, "/result/tab_id");
+    let duplicate = json!({"tab_id": tab, "command": "echo UNEXPECTED > rejected.txt"});
+    let batches = [
         ("new_tab", json!({"tabs": []})),
         ("run", json!({"commands": [], "wait_timeout": 0_u64})),
         ("manual_write", json!({"inputs": [], "wait_timeout": 0_u64})),
         ("view", json!({"queries": [], "wait_timeout": 0_u64})),
         (
             "run",
-            json ! ({ "commands" : [{ "tab_id" : tab , "command" : "echo UNEXPECTED > rejected.txt" } , { "tab_id" : tab , "command" : "echo UNEXPECTED > rejected.txt" }] , "wait_timeout" : 0_u64 }),
+            json!({"commands": [duplicate, duplicate], "wait_timeout": 0_u64}),
         ),
         (
             "view",
             json!({"queries": [{"id": tab}], "wait_timeout": -1_i64}),
         ),
+    ];
+    let offsets = [json!(-1_i64), json!(0_u64), json!(1.5_f64), json!(null)].map(|offset| {
         (
             "view",
-            json!({"queries": [{"id": tab, "start_token": -1_i64}], "wait_timeout": 0_u64}),
-        ),
-        (
-            "view",
-            json!({"queries": [{"id": tab, "start_token": 0_u64}], "wait_timeout": 0_u64}),
-        ),
-        (
-            "view",
-            json!({"queries": [{"id": tab, "start_token": 1.5_f64}], "wait_timeout": 0_u64}),
-        ),
-        (
-            "view",
-            json!({"queries": [{"id": tab, "start_token": null}], "wait_timeout": 0_u64}),
-        ),
-    ] {
+            json!({"queries": [{"id": tab, "start_token": offset}], "wait_timeout": 0_u64}),
+        )
+    });
+    for (name, arguments) in batches.into_iter().chain(offsets) {
         let response = session.call(name, arguments);
         assert_rejected(&response);
         assert!(
@@ -80,14 +78,7 @@ fn mcp_rejects_invalid_batches_before_dispatch() {
             "{response}"
         );
     }
-    let recovered = session.call(
-        "run",
-        json!({
-            "commands": [{"tab_id": tab, "command": "echo DISPATCH_RECOVERED", "separate_output": true}],
-            "wait_timeout": 5_u64
-        }),
-    );
+    let recovered = session.execute(tab, "echo DISPATCH_RECOVERED", true, 5.0);
     assert!(text(command_result(&recovered), "/stdout").contains("DISPATCH_RECOVERED"));
     assert!(!directory.join("rejected.txt").exists());
-    drop(session);
 }

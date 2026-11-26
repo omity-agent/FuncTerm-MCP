@@ -6,9 +6,11 @@ use notify::{RecommendedWatcher, RecursiveMode, Watcher as _};
 use parking_lot::Mutex;
 use std::{path::Path, time::Instant};
 pub(in crate::engine::runtime::session) struct PathWatch {
-    signal: Arc<Signal>,
+    events: PathEvents,
     watcher: RecommendedWatcher,
 }
+#[derive(Clone, Default)]
+pub(in crate::engine::runtime::session) struct PathEvents(Arc<Signal>);
 #[derive(Default)]
 struct Signal {
     failure: Mutex<Option<String>>,
@@ -20,8 +22,8 @@ impl PathWatch {
         mode: RecursiveMode,
         relevant: impl Fn(&notify::Event) -> bool + Send + 'static,
     ) -> Result<Self> {
-        let signal = Arc::new(Signal::default());
-        let observed = Arc::clone(&signal);
+        let events = PathEvents::default();
+        let observed = Arc::clone(&events.0);
         let mut watcher =
             notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
                 match event {
@@ -35,25 +37,30 @@ impl PathWatch {
         watcher
             .watch(directory, mode)
             .with_context(|| format!("failed to watch directory {}", directory.display()))?;
-        Ok(Self { signal, watcher })
+        Ok(Self { events, watcher })
+    }
+    pub(in crate::engine::runtime::session) fn events(&self) -> PathEvents {
+        self.events.clone()
     }
     pub(in crate::engine::runtime::session) fn unwatch(&mut self, path: &Path) -> Result<()> {
         self.watcher
             .unwatch(path)
             .with_context(|| format!("failed to release filesystem watch on {}", path.display()))
     }
+}
+impl PathEvents {
     pub(in crate::engine::runtime::session) async fn wait(
         &self,
         limit: Duration,
         ready: impl Fn() -> Result<bool>,
     ) -> Result<bool> {
-        wait_until(&self.signal.changed, limit, || self.ready(&ready)).await
+        wait_until(&self.0.changed, limit, || self.ready(&ready)).await
     }
     fn ready(&self, ready: &impl Fn() -> Result<bool>) -> Result<bool> {
         if ready()? {
             return Ok(true);
         }
-        if let Some(message) = self.signal.failure.lock().as_deref() {
+        if let Some(message) = self.0.failure.lock().as_deref() {
             bail!("filesystem watcher failed: {message}");
         }
         Ok(false)
@@ -61,7 +68,7 @@ impl PathWatch {
     fn wait_blocking(&self, limit: Duration, ready: impl Fn() -> Result<bool>) -> Result<bool> {
         let started = Instant::now();
         loop {
-            let listener = self.signal.changed.listen();
+            let listener = self.0.changed.listen();
             if self.ready(&ready)? {
                 return Ok(true);
             }
@@ -106,5 +113,5 @@ pub(crate) fn wait_for_path(path: &Path, limit: Duration) -> Result<bool> {
     let parent = path.parent().context("watched path has no parent")?;
     fs_err::create_dir_all(parent)?;
     let watch = PathWatch::new(parent, RecursiveMode::NonRecursive, |_| true)?;
-    watch.wait_blocking(limit, || Ok(path.try_exists()?))
+    watch.events.wait_blocking(limit, || Ok(path.try_exists()?))
 }

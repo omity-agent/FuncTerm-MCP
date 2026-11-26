@@ -1,8 +1,11 @@
+use super::interface::RunModeOptions;
 use crate::engine::{mcp::WaitTimeoutMultiplier, privileges::PrivilegeMode};
 use crate::runtime::{config, protocol::OutputMode};
 use anyhow::Result;
 #[derive(Default, clap::Args)]
 pub(super) struct Options {
+    #[command(flatten)]
+    run_mode: RunModeOptions,
     #[arg(
         long,
         help = "Disable Shell Profile loading for all Tabs created by this MCP server"
@@ -41,6 +44,7 @@ pub(super) struct Options {
 impl Options {
     pub(super) async fn run(self) -> Result<()> {
         let mut settings = config::load()?;
+        self.run_mode.apply(&mut settings);
         settings.shell_load_profile &= !self.no_profile;
         let timing = &mut settings.mcp.wait_timeout;
         if let Some(minimum) = self.wait_timeout_min {

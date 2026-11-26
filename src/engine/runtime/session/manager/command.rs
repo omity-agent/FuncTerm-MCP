@@ -23,7 +23,7 @@ impl Manager {
     pub(crate) async fn run(
         self: &Arc<Self>,
         tab_id: &str,
-        command: &str,
+        command: String,
         separate_output: bool,
         wait_timeout: Duration,
     ) -> Result<(String, ViewResult)> {
