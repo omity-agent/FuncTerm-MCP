@@ -18,9 +18,10 @@ public sealed class FuncTermSubmission {
     readonly FuncTermNativeWrite nativeWrite = new FuncTermNativeWrite();
     FuncTermEnvironment environment;
     FuncTermOutputCapture capture;
+    Pipeline execution;
     PSVariable nativeVariable;
     string commandId, directory, previousId, previousDirectory;
-    bool separate, executing, stopped, failed, createdNativeVariable;
+    bool separate, hostAttached, failed, createdNativeVariable;
     public FuncTermSubmission(Runspace runspace, PSHost host, EngineIntrinsics engine, string[] protectedNames) {
         this.runspace = runspace;
         this.host = host;
@@ -34,7 +35,7 @@ public sealed class FuncTermSubmission {
         availability = runspace.GetType().GetProperty("RunspaceAvailability");
         if (runningPipeline == null || setHost == null || resetHost == null || availability == null)
             throw new InvalidOperationException("PowerShell host does not expose submission lifecycle hooks");
-        runspace.AvailabilityChanged += ObservePipeline;
+        runspace.AvailabilityChanged += BeginExecution;
         FuncTermEnvironment.EnsureShims();
     }
     public string Claim() { return helper.Claim(); }
@@ -43,7 +44,7 @@ public sealed class FuncTermSubmission {
         commandId = id;
         directory = path;
         separate = separateOutput;
-        executing = stopped = failed = false;
+        hostAttached = failed = false;
         environment = new FuncTermEnvironment(protectedNames);
         previousId = Environment.GetEnvironmentVariable("@COMMAND_ID_ENV@");
         previousDirectory = Environment.GetEnvironmentVariable("@COMMAND_DIR_ENV@");
@@ -60,56 +61,84 @@ public sealed class FuncTermSubmission {
         nativeWrite.Written = false;
         helper.Invoke("internal-write-start", "--command-id", id, "--directory", path);
         timer.Restart();
-        ((Pipeline)runningPipeline.Invoke(runspace, null)).StateChanged += ReleaseInput;
+        CurrentPipeline().StateChanged += ReleaseInput;
         if (string.IsNullOrWhiteSpace(source)) Complete(0, false);
+        else engine.InvokeCommand.PreCommandLookupAction += ObservePrompt;
         return source;
     }
+    Pipeline CurrentPipeline() { return (Pipeline)runningPipeline.Invoke(runspace, null); }
+    static bool IsInteractive(Pipeline pipeline) {
+        return (bool)pipeline.GetType().GetProperty("AddToHistory", PrivateInstance).GetValue(pipeline);
+    }
+    static bool HasEnded(PipelineState state) {
+        return state == PipelineState.Completed || state == PipelineState.Failed || state == PipelineState.Stopped;
+    }
     void ReleaseInput(object sender, PipelineStateEventArgs args) {
+        if (!HasEnded(args.PipelineStateInfo.State)) return;
+        ((Pipeline)sender).StateChanged -= ReleaseInput;
         if (args.PipelineStateInfo.State == PipelineState.Completed &&
-            runningPipeline.Invoke(runspace, null) == null && runspace.RunspaceAvailability == RunspaceAvailability.Busy)
+            CurrentPipeline() == null && runspace.RunspaceAvailability == RunspaceAvailability.Busy)
             availability.SetValue(runspace, RunspaceAvailability.Available);
     }
-    void ObservePipeline(object sender, RunspaceAvailabilityEventArgs args) {
-        if (commandId == null || args.RunspaceAvailability != RunspaceAvailability.Busy) return;
+    void BeginExecution(object sender, RunspaceAvailabilityEventArgs args) {
+        if (commandId == null || execution != null || args.RunspaceAvailability != RunspaceAvailability.Busy) return;
         try {
-            var pipeline = (Pipeline)runningPipeline.Invoke(runspace, null);
-            if (pipeline == null || pipeline.Commands.Count == 0) return;
-            var history = (bool)pipeline.GetType().GetProperty("AddToHistory", PrivateInstance).GetValue(pipeline);
-            if ((Environment.GetEnvironmentVariable("FUNCTERM_DIAGNOSTICS_FILTER") ?? "").Contains("debug"))
-                Console.Error.WriteLine("PowerShell submission " + commandId + ": executing=" + executing +
-                    ", interactive=" + history + ", prompt=" + (pipeline.Commands[0].CommandText == "prompt"));
-            if (!history && pipeline.Commands[0].CommandText == "prompt") {
-                Complete(null, false);
-            } else if (history && !executing) {
-                executing = true;
-                if (separate) {
-                    capture = new FuncTermOutputCapture(directory);
-                    FuncTermConsoleHost.Separate(pipeline);
-                }
-                setHost.Invoke(host, new object[] { new FuncTermConsoleHost(host, separate, Exit) });
-                pipeline.StateChanged += ObserveCompletion;
+            var pipeline = CurrentPipeline();
+            if (pipeline == null || pipeline.Commands.Count == 0 || !IsInteractive(pipeline)) return;
+            execution = pipeline;
+            if (separate) {
+                capture = new FuncTermOutputCapture(directory);
+                FuncTermConsoleHost.Separate(pipeline);
             }
+            setHost.Invoke(host, new object[] { new FuncTermConsoleHost(host, separate, Exit) });
+            hostAttached = true;
         } catch (Exception error) {
             failed = true;
-            Console.Error.WriteLine("PowerShell submission lifecycle failed: " + error.Message);
+            ReportFailure("prepare", error);
         }
     }
-    void ObserveCompletion(object sender, PipelineStateEventArgs args) {
-        stopped = args.PipelineStateInfo.State == PipelineState.Stopped;
-        failed |= args.PipelineStateInfo.State == PipelineState.Failed;
+    void ObservePrompt(object sender, CommandLookupEventArgs args) {
+        if (args.CommandName != "prompt" || (execution != null && !HasEnded(execution.PipelineStateInfo.State))) return;
+        try {
+            var pipeline = CurrentPipeline();
+            if (pipeline != null && pipeline.Commands.Count == 1 &&
+                pipeline.Commands[0].CommandText == "prompt" && !IsInteractive(pipeline))
+                Complete(null, false);
+        } catch (Exception error) {
+            AbortCompletion(error);
+        }
+    }
+    static void ReportFailure(string action, Exception error) {
+        Console.Error.WriteLine("FuncTerm could not " + action + " the PowerShell submission.");
+        if ((Environment.GetEnvironmentVariable("FUNCTERM_DIAGNOSTICS_FILTER") ?? "").Contains("debug"))
+            Console.Error.WriteLine(error);
+    }
+    static void AbortCompletion(Exception error) {
+        try { ReportFailure("complete", error); }
+        finally { Environment.Exit(1); }
     }
     void Exit(int code) { Complete(code, true); }
     void Complete(int? explicitCode, bool sessionExit) {
         if (commandId == null) return;
+        engine.InvokeCommand.PreCommandLookupAction -= ObservePrompt;
+        try {
+            PublishCompletion(explicitCode, sessionExit);
+        } catch (Exception error) {
+            AbortCompletion(error);
+        }
+    }
+    void PublishCompletion(int? explicitCode, bool sessionExit) {
         timer.Stop();
-        var succeeded = LanguagePrimitives.IsTrue(engine.SessionState.PSVariable.GetValue("?"));
+        var state = execution?.PipelineStateInfo.State;
+        var succeeded = !failed && state != PipelineState.Failed &&
+            LanguagePrimitives.IsTrue(engine.SessionState.PSVariable.GetValue("?"));
         var nativeCode = nativeVariable.Value;
-        var exitCode = explicitCode ?? (stopped ? 130 : succeeded && !failed ? 0 :
+        var exitCode = explicitCode ?? (state == PipelineState.Stopped ? 130 : succeeded ? 0 :
             nativeWrite.Written && nativeCode != null && LanguagePrimitives.ConvertTo<int>(nativeCode) != 0
                 ? LanguagePrimitives.ConvertTo<int>(nativeCode) : 1);
         nativeVariable.Attributes.Remove(nativeWrite);
         if (createdNativeVariable && !nativeWrite.Written) engine.SessionState.PSVariable.Remove("global:LASTEXITCODE");
-        if (executing) resetHost.Invoke(host, null);
+        if (hostAttached) resetHost.Invoke(host, null);
         if (capture != null) {
             capture.Dispose();
             Console.Write(File.ReadAllText(capture.Stdout));
@@ -126,6 +155,7 @@ public sealed class FuncTermSubmission {
         Environment.SetEnvironmentVariable("@COMMAND_ID_ENV@", previousId);
         Environment.SetEnvironmentVariable("@COMMAND_DIR_ENV@", previousDirectory);
         commandId = null;
+        execution = null;
     }
 }
 "#;

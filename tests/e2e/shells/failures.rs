@@ -18,6 +18,47 @@ fn nushell_parse_errors_and_user_bindings_preserve_lexical_state() {
     }
 }
 #[test]
+fn powershell_unknown_command_completes_with_history_sync() {
+    let _guard = super::matrix::daemon();
+    let tab = create_tab(&temp_dir("history-sync"), "powershell").tab_id;
+    let setup = complete_command(
+        &tab,
+        r#"Add-Type @"
+using System.Management.Automation;
+using System.Management.Automation.Runspaces;
+public static class HistorySync {
+    public static void Enable() => Runspace.DefaultRunspace.AvailabilityChanged += Refresh;
+    static void Refresh(object sender, RunspaceAvailabilityEventArgs args) {
+        if (args.RunspaceAvailability != RunspaceAvailability.Available) return;
+        var runspace = (Runspace)sender;
+        runspace.AvailabilityChanged -= Refresh;
+        try {
+            using var query = PowerShell.Create();
+            query.Runspace = runspace;
+            query.AddCommand("Get-History").AddParameter("Count", 1).Invoke();
+        } finally { runspace.AvailabilityChanged += Refresh; }
+    }
+}
+"@
+[HistorySync]::Enable()"#,
+    );
+    assert_eq!(setup.exit_code, Some(0_i32), "{setup:?}");
+    for separate in [false, true] {
+        let source = "Invoke-MissingExampleCommand";
+        let failed = parse_command_result(&run_with_output(&tab, source, separate, 10.0));
+        assert_eq!(failed.exit_code, Some(1_i32), "{failed:?}");
+        let diagnostic = if separate {
+            &failed.stderr
+        } else {
+            &failed.stdout
+        };
+        assert!(failed.finished && diagnostic.contains(source), "{failed:?}");
+        assert!(!diagnostic.contains("PS> "), "{failed:?}");
+        let next = complete_command(&tab, r#""PREVIOUS=$?""#);
+        assert_eq!(next.stdout.trim(), "PREVIOUS=False", "{next:?}");
+    }
+}
+#[test]
 fn powershell_top_level_return_keeps_state_and_does_not_exit() {
     let _guard = super::matrix::daemon();
     for separated in [false, true] {
