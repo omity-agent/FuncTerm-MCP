@@ -7,7 +7,7 @@ use std::process::{Child, Command};
 pub(super) fn spawn_shell(choice: ShellChoice, startup: ShellStartup) -> Result<Child> {
     let executable = real_executable(choice)?;
     let mut command = process_command(&executable, &startup.args)?;
-    command.envs(startup.env);
+    command.env_clear().envs(startup.env);
     stdio::attach_session_stdio(&mut command)?;
     command
         .spawn()

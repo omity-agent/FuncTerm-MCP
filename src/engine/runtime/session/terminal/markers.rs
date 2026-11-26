@@ -2,11 +2,17 @@ use crate::contract::{
     TERMINAL_MARKER_CODE, TERMINAL_MARKER_END, TERMINAL_MARKER_NAME, TERMINAL_MARKER_START,
 };
 use anyhow::{Context as _, Result, bail};
+use std::time::Instant;
 use wezterm_escape_parser::{Action, OperatingSystemCommand};
 pub(super) enum ProtocolEvent {
     Start(String),
     End(String),
-    Prompt(String),
+    Prompt(ShellPrompt),
+}
+pub(in crate::engine::runtime::session) struct ShellPrompt {
+    pub(in crate::engine::runtime::session) frame_id: u32,
+    pub(in crate::engine::runtime::session) observed_at: Instant,
+    pub(in crate::engine::runtime::session) cwd: String,
 }
 #[expect(
     clippy::pattern_type_mismatch,
@@ -25,13 +31,19 @@ pub(super) fn parse(action: &Action) -> Result<Option<ProtocolEvent>> {
     if code.as_slice() != TERMINAL_MARKER_CODE || name.as_slice() != TERMINAL_MARKER_NAME {
         return Ok(None);
     }
-    if let Some(([phase, shell], cwd)) = payload.split_first_chunk::<2>()
+    if let Some(([phase, frame], cwd_fields)) = payload.split_first_chunk::<2>()
         && phase == b"prompt"
-        && matches!(shell.as_slice(), b"cmd" | b"bash" | b"zsh")
     {
-        let path =
-            String::from_utf8(cwd.join(b";".as_slice())).context("prompt cwd is not UTF-8")?;
-        return Ok(Some(ProtocolEvent::Prompt(path)));
+        let frame_id = str::from_utf8(frame)?
+            .parse()
+            .context("invalid terminal prompt frame id")?;
+        let cwd = String::from_utf8(cwd_fields.join(b";".as_slice()))
+            .context("prompt cwd is not UTF-8")?;
+        return Ok(Some(ProtocolEvent::Prompt(ShellPrompt {
+            frame_id,
+            observed_at: Instant::now(),
+            cwd,
+        })));
     }
     let [phase, raw_id] = payload else {
         bail!("terminal marker has invalid fields");

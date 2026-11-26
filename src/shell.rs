@@ -3,11 +3,13 @@ use crate::runtime::config::Settings;
 use crate::runtime::protocol::EnvironmentSnapshot;
 mod drivers;
 mod executable;
+pub(crate) mod frame;
 pub mod quote;
 pub(crate) mod shims;
 mod wrappers;
 use alloc::borrow::Cow;
 use anyhow::{Context as _, Result};
+pub(crate) use drivers::DispatchWake;
 pub(crate) use executable::ShellChoice;
 use std::ffi::OsString;
 use std::path::Path;
@@ -20,7 +22,7 @@ impl ShellChoice {
     pub(crate) fn executable_path(
         self,
         settings: &Settings,
-        environment: &crate::runtime::protocol::EnvironmentSnapshot,
+        environment: &EnvironmentSnapshot,
         cwd: &Path,
         identity: &ShellIdentity,
     ) -> Result<std::path::PathBuf> {
@@ -32,75 +34,11 @@ impl ShellChoice {
             identity,
         )
     }
-    pub(crate) fn startup(
-        self,
-        cwd: &Path,
-        session_root: &Path,
-        load_profile: bool,
-        ignore_shell_style: bool,
-        environment: &EnvironmentSnapshot,
-    ) -> Result<ShellStartup> {
-        let state_directory = session_root.join("state");
-        let startup_directory = session_root.join("startup");
-        fs_err::create_dir_all(&state_directory)?;
-        fs_err::create_dir_all(&startup_directory)?;
-        let ready_file = state_directory.join("ready");
-        let mut variables = environment.variables();
-        variables.retain(|pair| {
-            !crate::runtime::protocol::environment_name_equals(&pair.0, shims::LOAD_PROFILE_ENV)
-                && !crate::runtime::protocol::environment_name_equals(
-                    &pair.0,
-                    shims::IGNORE_SHELL_STYLE_ENV,
-                )
-                && (!ignore_shell_style
-                    || !crate::runtime::protocol::environment_name_equals(
-                        &pair.0,
-                        shims::NO_COLOR_ENV,
-                    ))
-        });
-        variables.push((
-            shims::LOAD_PROFILE_ENV.into(),
-            if load_profile { "1" } else { "0" }.into(),
-        ));
-        variables.push((
-            shims::IGNORE_SHELL_STYLE_ENV.into(),
-            if ignore_shell_style { "1" } else { "0" }.into(),
-        ));
-        if ignore_shell_style {
-            variables.push((shims::NO_COLOR_ENV.into(), "1".into()));
-        }
-        let launch_environment = EnvironmentSnapshot::from_variables(variables);
-        let startup = drivers::startup(
-            self,
-            drivers::StartupContext {
-                cwd,
-                startup_directory: &startup_directory,
-                ready_file: &ready_file,
-                load_profile,
-                ignore_shell_style,
-                environment: &launch_environment,
-            },
-        )?;
-        let args = startup.args;
-        let mut env = launch_environment.variables();
-        env.extend(
-            startup
-                .env
-                .into_iter()
-                .map(|(name, value)| (OsString::from(name), OsString::from(value))),
-        );
-        Ok(ShellStartup {
-            args,
-            env,
-            ready_file,
-        })
+    pub(crate) fn dispatch_wakeup(self, directory: &Path) -> Result<DispatchWake> {
+        drivers::dispatch_wakeup(self, directory)
     }
-    pub(crate) fn invocation_for(
-        self,
-        directory: &Path,
-        separate_output: bool,
-    ) -> Result<Option<drivers::ShellInvocation>> {
-        drivers::invocation_for(self, directory, separate_output)
+    pub(crate) const fn supports_separated_output(self) -> bool {
+        !matches!(self, Self::NuShell)
     }
     pub(crate) const fn source_file(self) -> &'static str {
         match self {
@@ -113,8 +51,8 @@ impl ShellChoice {
             | Self::Python => crate::contract::COMMAND_FILE,
         }
     }
-    pub(crate) fn prepare_command(self, directory: &Path, session_root: &Path) -> Result<()> {
-        drivers::prepare_command(self, directory, session_root)
+    pub(crate) fn prepare_command(self, directory: &Path) -> Result<()> {
+        drivers::prepare_command(self, directory)
     }
     pub(crate) fn keyboard_bytes(self, bytes: &[u8]) -> Cow<'_, [u8]> {
         drivers::keyboard_bytes(self, bytes)

@@ -2,7 +2,7 @@ use super::super::variables;
 use super::PosixDialect;
 use crate::contract::{
     CLAIM_RECEIPT_FILE, COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV,
-    SESSION_COMMANDS_DIRECTORY, SESSION_STATE_DIRECTORY, STDERR_FILE, STDOUT_FILE,
+    SESSION_COMMANDS_DIRECTORY, STDERR_FILE, STDOUT_FILE,
 };
 pub(in crate::shell) fn script(zsh: bool) -> String {
     let dialect = if zsh {
@@ -12,7 +12,7 @@ pub(in crate::shell) fn script(zsh: bool) -> String {
     };
     format!(
         r#"functerm_prepare_command() {{
-    @VAR_claim_error@="$("$@VAR_helper_path@" internal-claim-command --session-root "$FUNCTERM_SESSION_ROOT" --shell "$FUNCTERM_CURRENT_SHELL" --output-file "$FUNCTERM_SESSION_ROOT/{state}/{receipt}" < /dev/null 2>&1)" || {{
+    @VAR_claim_error@="$("$@VAR_helper_path@" internal-claim-command --session-root "$FUNCTERM_SESSION_ROOT" --shell "$FUNCTERM_CURRENT_SHELL" --output-file "$FUNCTERM_FRAME_STATE/{receipt}" < /dev/null 2>&1)" || {{
         builtin printf '%s\n' "$@VAR_claim_error@" >&2
         return 1
     }}
@@ -35,7 +35,6 @@ pub(in crate::shell) fn script(zsh: bool) -> String {
     functerm_ensure_shim_path || return 1
     @VAR_script@="$(< "$@VAR_directory@/{source}")" || return 1
     {cd} "$@VAR_working_directory@" || return 1
-    @VAR_command_started_at@="$(functerm_command_time_millis)" || return 1
     functerm_publish_start "$@VAR_command_id@" "$@VAR_native_directory@"
 }}
 functerm_finish_command() {{
@@ -44,9 +43,7 @@ functerm_finish_command() {{
         printf '%s\n' 'failed to restore shell shim path' >&2
         @VAR_exit_code@=1
     fi
-    @VAR_command_finished_at@="$(functerm_command_time_millis)" || return 1
-    @VAR_time_consumption@="$((@VAR_command_finished_at@ - @VAR_command_started_at@))ms"
-    functerm_publish_done "$@VAR_command_id@" "$@VAR_exit_code@" "$@VAR_time_consumption@" "$PWD" "$@VAR_native_directory@" || return 1
+    functerm_publish_done "$@VAR_command_id@" "$@VAR_exit_code@" "$@VAR_native_directory@" false || return 1
     functerm_restore_command_environment \
         "$@VAR_had_previous_command_id@" "$@VAR_previous_command_id@" \
         "$@VAR_had_previous_command_directory@" "$@VAR_previous_command_directory@"
@@ -68,7 +65,6 @@ if functerm_prepare_command; then
     functerm_finish_command
 fi
 "#,
-        state = SESSION_STATE_DIRECTORY,
         receipt = CLAIM_RECEIPT_FILE,
         commands = SESSION_COMMANDS_DIRECTORY,
         stdout = STDOUT_FILE,

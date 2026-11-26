@@ -11,13 +11,13 @@ pub(crate) struct ManagedEnvironment {
     pub(crate) variables: Vec<(OsString, OsString)>,
     pub(crate) executable: PathBuf,
 }
-pub(crate) const ACTIVE_SHELL_FILE_ENV: &str = "FUNCTERM_ACTIVE_SHELL_FILE";
 pub(crate) const CURRENT_SHELL_ENV: &str = "FUNCTERM_CURRENT_SHELL";
+pub(crate) const FRAME_ID_ENV: &str = "FUNCTERM_FRAME_ID";
+pub(crate) const FRAME_STATE_ENV: &str = "FUNCTERM_FRAME_STATE";
 pub(crate) const IGNORE_SHELL_STYLE_ENV: &str = "FUNCTERM_IGNORE_SHELL_STYLE";
 pub(crate) const LOAD_PROFILE_ENV: &str = "FUNCTERM_LOAD_PROFILE";
 pub(crate) const NO_COLOR_ENV: &str = "NO_COLOR";
 pub(crate) const PATH_ENV: &str = "PATH";
-pub(crate) const PARENT_SHELL_ENV: &str = "FUNCTERM_PARENT_SHELL";
 pub(crate) const SESSION_ROOT_ENV: &str = "FUNCTERM_SESSION_ROOT";
 pub(crate) const SHIM_DIR_ENV: &str = "FUNCTERM_SHIM_DIR";
 pub(crate) const TAB_ID_ENV: &str = "FUNCTERM_TAB_ID";
@@ -26,7 +26,8 @@ pub(crate) const PROTECTED_ENVIRONMENT_NAMES: [&str; 17] = [
     DAEMON_SERVICE_NAME_ENV,
     SHIM_DIR_ENV,
     SESSION_ROOT_ENV,
-    ACTIVE_SHELL_FILE_ENV,
+    FRAME_ID_ENV,
+    FRAME_STATE_ENV,
     HELPER_EXECUTABLE_ENV,
     CURRENT_SHELL_ENV,
     IGNORE_SHELL_STYLE_ENV,
@@ -38,7 +39,6 @@ pub(crate) const PROTECTED_ENVIRONMENT_NAMES: [&str; 17] = [
     "FUNCTERM_REAL_CMD",
     "FUNCTERM_REAL_BUN",
     "FUNCTERM_REAL_PYTHON",
-    PARENT_SHELL_ENV,
 ];
 pub(crate) use crate::contract::{COMMAND_DIRECTORY_ENV, COMMAND_ID_ENV};
 pub(crate) fn environment(
@@ -73,19 +73,8 @@ pub(crate) fn environment(
             session_root.as_os_str().to_owned(),
         ),
         (
-            OsString::from(ACTIVE_SHELL_FILE_ENV),
-            session_root
-                .join("state")
-                .join("active-shell.txt")
-                .into_os_string(),
-        ),
-        (
             OsString::from(HELPER_EXECUTABLE_ENV),
             current_exe.into_os_string(),
-        ),
-        (
-            OsString::from(CURRENT_SHELL_ENV),
-            OsString::from(current_shell.canonical_name()),
         ),
     ];
     for &shell in ShellChoice::all() {
@@ -146,16 +135,13 @@ fn create_executable_alias(current_exe: &Path, alias_path: &Path, alias: &str) -
         }
     }
 }
-pub(crate) fn write_active_shell(path: &Path, shell: ShellChoice) -> Result<()> {
-    crate::publication::write_replace(path, shell.canonical_name())
-        .with_context(|| format!("failed to publish active shell state {}", path.display()))
-}
-pub(crate) fn read_active_shell(path: &Path) -> Result<Option<ShellChoice>> {
-    match fs::read_to_string(path) {
-        Ok(text) => Ok(Some(ShellChoice::from_canonical_name(text.trim())?)),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(error.into()),
-    }
+pub(super) fn set_environment_value(
+    variables: &mut Vec<(OsString, OsString)>,
+    name: &str,
+    value: OsString,
+) {
+    variables.retain(|pair| !environment_name_equals(&pair.0, name));
+    variables.push((name.into(), value));
 }
 fn prepend_path(
     shim_dir: &Path,

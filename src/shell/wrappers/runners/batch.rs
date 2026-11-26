@@ -20,7 +20,7 @@ set "@VAR_working_directory@=%~3"
 set "@VAR_stdout_file@=%@VAR_directory@%\@STDOUT@"
 set "@VAR_stderr_file@=%@VAR_directory@%\@STDERR@"
 set "@VAR_script_file@=%@VAR_directory@%\@SCRIPT@"
-set "@VAR_time_consumption@=0ns"
+set "@VAR_shell_exit@=false"
 set "@VAR_had_previous_command_id@="
 set "@VAR_had_previous_command_directory@="
 if defined @COMMAND_ID_ENV@ set "@VAR_had_previous_command_id@=1"
@@ -41,8 +41,6 @@ if errorlevel 1 (
     call :restore_command_environment
     exit /b 1
 )
-call :command_time_millis
-set "@VAR_command_started_at@=%ERRORLEVEL%"
 set > "%~dp0@VAR_environment_before_file@.txt"
 if "%~4"=="1" (
     "%FUNCTERM_REAL_CMD%" /D /Q /V:OFF /S /C ""%~f0" --capture "%~2" "%~5"" > "%~2\@STDOUT@" 2> "%~2\@STDERR@"
@@ -50,9 +48,8 @@ if "%~4"=="1" (
     "%FUNCTERM_REAL_CMD%" /D /Q /V:OFF /S /C ""%~f0" --capture "%~2" "%~5""
 )
 set "@VAR_exit_code@=%ERRORLEVEL%"
-set "@VAR_worker_exited@="
 if not exist "%~dp0@VAR_exit_code_file@.txt" (
-    set "@VAR_worker_exited@=1"
+    set "@VAR_shell_exit@=true"
     goto publish_result
 )
 if not exist "%~dp0@VAR_cwd_after_file@.txt" (
@@ -73,10 +70,6 @@ cd /d "%@VAR_current_directory@%"
 call :prepend_functerm_paths
 if errorlevel 1 set "@VAR_exit_code@=1"
 :publish_result
-call :command_time_millis
-set /a @VAR_command_elapsed@=%ERRORLEVEL% - @VAR_command_started_at@
-if %@VAR_command_elapsed@% LSS 0 set /a @VAR_command_elapsed@+=86400000
-set "@VAR_time_consumption@=%@VAR_command_elapsed@%ms"
 if "%~4"=="1" if exist "%@VAR_stdout_file@%" type "%@VAR_stdout_file@%"
 if "%~4"=="1" if exist "%@VAR_stderr_file@%" type "%@VAR_stderr_file@%" 1>&2
 call :publish_done %@VAR_exit_code@%
@@ -85,7 +78,7 @@ if errorlevel 1 (
     exit /b 1
 )
 call :restore_command_environment
-if defined @VAR_worker_exited@ exit %@VAR_exit_code@%
+if "%@VAR_shell_exit@%"=="true" exit %@VAR_exit_code@%
 exit /b %@VAR_exit_code@%
 :capture_user_state
 call :publish_start
@@ -111,7 +104,7 @@ if "%@HELPER_ENV@%"=="" (
     echo @HELPER_ENV@ is not set 1>&2
     exit /b 1
 )
-"%@HELPER_ENV@%" internal-write-done --command-id "%@VAR_command_id@%" --exit-code "%~1" --time-consumption "%@VAR_time_consumption@%" --cwd "%CD:\=/%" --directory "%@VAR_directory@%"
+"%@HELPER_ENV@%" internal-write-done --command-id "%@VAR_command_id@%" --exit-code "%~1" --session-exit %@VAR_shell_exit@% --cwd "%CD:\=/%" --directory "%@VAR_directory@%"
 exit /b %ERRORLEVEL%
 :publish_start
 if "%@HELPER_ENV@%"=="" (
@@ -120,10 +113,6 @@ if "%@HELPER_ENV@%"=="" (
 )
 "%@HELPER_ENV@%" internal-write-start --command-id "%@VAR_command_id@%" --directory "%@VAR_directory@%"
 exit /b %ERRORLEVEL%
-:command_time_millis
-set "@VAR_time_value@=%TIME: =0%"
-set /a "@VAR_time_millis@=((1%@VAR_time_value@:~0,2% %% 100 * 60 + 1%@VAR_time_value@:~3,2% %% 100) * 60 + 1%@VAR_time_value@:~6,2% %% 100) * 1000 + 1%@VAR_time_value@:~9,2% %% 100 * 10"
-exit /b %@VAR_time_millis@%
 :restore_command_environment
 if defined @VAR_had_previous_command_id@ (
     set "@COMMAND_ID_ENV@=%@VAR_previous_command_id@%"

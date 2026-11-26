@@ -14,6 +14,7 @@ impl Tab {
         let managed = Arc::clone(command);
         self.with_operation(move |tab| {
             let mut shell = if let Some(session) = tab.active_session()? {
+                session.refresh_route()?;
                 tab.remember(&session)?.shell_view(true)
             } else {
                 tab.snapshot_shell_view()

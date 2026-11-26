@@ -1,26 +1,16 @@
-use crate::contract::{DONE_FILE, RELEASED_FILE, STDERR_FILE, STDOUT_FILE};
+use crate::contract::{CommandReport, RELEASED_FILE, STDERR_FILE, STDOUT_FILE};
 use crate::runtime::protocol::{CommandOutput, CommandSnapshot, CommandView};
 use crate::shell::ShellChoice;
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use core::time::Duration;
 use fs_err as fs;
 use std::path::{Path, PathBuf};
-#[derive(Clone)]
 pub(super) struct CommandRecord {
     pub(super) directory: PathBuf,
     pub(super) stdout: PathBuf,
     pub(super) stderr: PathBuf,
     pub(super) source: PathBuf,
-    pub(super) done: PathBuf,
     pub(super) released: PathBuf,
-    pub(super) session_exit: PathBuf,
-}
-pub(super) type DoneFile = crate::contract::CommandCompletion<String>;
-pub(super) fn lifecycle_event(event: &notify::Event) -> bool {
-    event
-        .paths
-        .iter()
-        .any(|path| path.file_name() == Some(std::ffi::OsStr::new(RELEASED_FILE)))
 }
 pub(super) fn create_record(
     command_root: &Path,
@@ -33,37 +23,33 @@ pub(super) fn create_record(
         stdout: command_dir.join(STDOUT_FILE),
         stderr: command_dir.join(STDERR_FILE),
         source: command_dir.join(choice.source_file()),
-        done: command_dir.join(DONE_FILE),
         released: command_dir.join(RELEASED_FILE),
-        session_exit: command_dir.join(crate::contract::SESSION_EXIT_FILE),
         directory: command_dir,
     })
 }
-pub(super) fn read_command_result(
+pub(super) fn command_snapshot(
     observed_time_consumption: Duration,
     title: String,
     output: CommandOutput,
     total_output_tokens: usize,
-    done: Option<&DoneFile>,
-) -> Result<CommandSnapshot> {
-    let exit_code = done.map(|file| file.exit_code);
-    let finished = done.is_some();
-    let measured_time_consumption = done.map_or(Ok(observed_time_consumption), |file| {
-        humantime::parse_duration(&file.time_consumption)
-            .context("done file contains an invalid time consumption")
-    })?;
+    report: Option<&CommandReport<String>>,
+) -> CommandSnapshot {
+    let exit_code = report.map(|result| result.outcome.exit_code());
+    let time_consumption = report.map_or(observed_time_consumption, |result| {
+        result.elapsed.unwrap_or(observed_time_consumption)
+    });
     let note = command_note(&output, "");
-    Ok(CommandSnapshot {
+    CommandSnapshot {
         title,
         command: CommandView {
             total_output_tokens,
             output,
             exit_code,
-            time_consumption: measured_time_consumption,
-            finished,
+            time_consumption,
+            finished: report.is_some(),
         },
         note,
-    })
+    }
 }
 pub(super) fn remove_record_directory(record: &CommandRecord) -> Result<()> {
     match fs::remove_dir_all(&record.directory) {
@@ -96,13 +82,4 @@ pub(super) fn command_note(output: &CommandOutput, extra: &str) -> String {
         );
     }
     lines.join("\n")
-}
-pub(super) fn read_done(path: &Path) -> Result<Option<DoneFile>> {
-    match fs::read(path) {
-        Ok(bytes) => Ok(Some(
-            sonic_rs::from_slice(&bytes).context("failed to parse done file")?,
-        )),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(error).context("failed to read done file"),
-    }
 }

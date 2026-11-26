@@ -44,7 +44,6 @@ pub(crate) async fn run() -> Result<std::process::ExitCode> {
             )
             .map(crate::shim::process_exit);
         }
-        CliCommand::InternalTimeMillis => print_result(crate::app::command_state::time_millis()),
         #[cfg(windows)]
         CliCommand::InternalCmdPath { startup_directory } => print_result(
             crate::app::command_state::cmd_search_path(&startup_directory),
@@ -73,11 +72,14 @@ pub(crate) async fn run() -> Result<std::process::ExitCode> {
             directory,
             options,
         } => crate::app::command_state::complete(
-            &crate::app::command_state::DoneOutput {
+            &crate::contract::CommandReport {
                 command_id: &command_id,
-                exit_code,
-                time_consumption: &time_consumption,
+                elapsed: time_consumption,
                 cwd: &cwd,
+                outcome: crate::contract::CommandOutcome::Returned {
+                    exit_code,
+                    shell_exit: options.session_exit,
+                },
             },
             &directory,
             options,

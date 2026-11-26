@@ -20,7 +20,11 @@ impl ShellSession {
         let command_id = expected.id();
         tracing::debug!(%command_id, "delivering keyboard input to running command");
         let visible_revision = self.screen.visible_revision()?;
-        expected.deliver_input(|| self.write_keyboard(command_id, input))?;
+        if self.resuming() && expected.capture_finished()? {
+            self.write_keyboard(command_id, input)?;
+        } else {
+            expected.deliver_input(|| self.write_keyboard(command_id, input))?;
+        }
         tracing::debug!(%command_id, "keyboard input delivery completed");
         Ok(visible_revision)
     }
@@ -74,7 +78,7 @@ impl ShellSession {
         }
     }
     pub(in crate::engine::runtime::session::manager) fn is_busy(&self) -> bool {
-        self.busy.lock().is_some()
+        self.busy.lock().is_some() || self.resuming()
     }
     pub(in crate::engine::runtime::session::manager) fn holds_command(
         &self,

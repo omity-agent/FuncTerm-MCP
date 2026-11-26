@@ -1,7 +1,7 @@
 use super::StartupContext;
 use crate::contract::{
-    COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, HELPER_EXECUTABLE_ENV, SESSION_EXIT_FILE,
-    STDERR_FILE, STDOUT_FILE,
+    COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, HELPER_EXECUTABLE_ENV, STDERR_FILE,
+    STDOUT_FILE,
 };
 use anyhow::{Context as _, Result};
 pub(super) fn script(context: StartupContext<'_>) -> Result<String> {
@@ -135,12 +135,11 @@ def _functerm_dispatch():
         @VAR_os@.environ.update(@VAR_protected_environment@)
         @VAR_prepend_shim@()
         @VAR_elapsed@ = max(1, round((@VAR_time@.perf_counter() - @VAR_started@) * 1000))
-        if @VAR_session_exit@ and not @VAR_os@.environ.get("FUNCTERM_PARENT_SHELL"):
-            (@VAR_directory@ / "{SESSION_EXIT_FILE}").touch()
         @VAR_helper@(
             "internal-write-done",
             "--command-id", @VAR_command_id@,
             "--exit-code", str(@VAR_exit_code@),
+            "--session-exit", "true" if @VAR_session_exit@ else "false",
             "--time-consumption", f"{{@VAR_elapsed@}}ms",
             "--cwd", @VAR_os@.getcwd(),
             "--directory", str(@VAR_directory@),

@@ -1,37 +1,31 @@
 use super::lifecycle::{ManagedCommand, SettledCommand};
+use crate::contract::{CommandOutcome, CommandReport};
 use crate::runtime::protocol::{CommandSnapshot, EndReason};
-use crate::runtime::session::records::{DoneFile, command_note, read_done};
+use crate::runtime::session::records::command_note;
 use anyhow::{Result, ensure};
 use std::path::PathBuf;
 #[derive(Clone, Copy)]
-pub(super) enum Completion {
-    Reported,
+pub(super) enum Completion<'report> {
+    Reported(&'report CommandReport<String>),
     Exited(i32),
     Closed,
     Failed,
 }
 impl ManagedCommand {
-    pub(in crate::engine::runtime::session::manager) fn publish_interruption(
-        &self,
-        cwd: &str,
-    ) -> Result<()> {
-        if self.record.done.try_exists()? {
-            return Ok(());
-        }
+    pub(super) fn interruption_report(&self, cwd: String) -> Result<CommandReport<String>> {
         ensure!(
             self.state.lock().input.interrupted(),
             "shell returned to its prompt without publishing command completion"
         );
-        let duration = format!("{}ns", self.time_consumption().as_nanos());
-        let done = crate::contract::CommandCompletion {
-            command_id: self.id(),
-            exit_code: 130,
-            time_consumption: duration.as_str(),
+        Ok(CommandReport {
+            command_id: self.id().to_owned(),
+            elapsed: None,
             cwd,
-        };
-        crate::publication::write_once(&self.record.done, sonic_rs::to_vec(&done)?)?;
-        crate::publication::write_once(&self.record.released, b"")?;
-        Ok(())
+            outcome: CommandOutcome::Returned {
+                exit_code: 130,
+                shell_exit: false,
+            },
+        })
     }
     pub(super) fn view(&self) -> Result<(EndReason, CommandSnapshot)> {
         let mut state = self.state.lock();
@@ -47,32 +41,30 @@ impl ManagedCommand {
     }
     pub(super) fn settle(
         &self,
-        completion: Completion,
+        completion: Completion<'_>,
         update_cwd: impl FnOnce(PathBuf),
-    ) -> Result<bool> {
+    ) -> Result<()> {
         let mut state = self.state.lock();
         if state.outcome.is_some() {
-            return Ok(false);
+            return Ok(());
         }
-        let reported = matches!(completion, Completion::Reported);
-        let title = if reported {
+        let title = if matches!(completion, Completion::Reported(_)) {
             self.capture.title()
         } else {
             self.capture.cancel()?
         };
-        let done = if matches!(completion, Completion::Failed) {
-            None
-        } else {
-            self.read_completion()?
+        let on_shutdown;
+        let report = match completion {
+            Completion::Reported(report) => Some(report),
+            Completion::Failed => None,
+            Completion::Exited(_) | Completion::Closed => {
+                on_shutdown = self.read_completion()?;
+                on_shutdown.as_ref()
+            }
         };
-        ensure!(
-            !reported || done.is_some(),
-            "completed command did not report its result"
-        );
-        let requested_exit = reported && self.record.session_exit.try_exists()?;
-        let mut view = self.snapshot(&mut state, title, done.as_ref(), true)?;
-        let reason = if let Some(result) = done {
-            update_cwd(PathBuf::from(result.cwd));
+        let mut view = self.snapshot(&mut state, title, report, true)?;
+        let reason = if let Some(result) = report {
+            update_cwd(PathBuf::from(&result.cwd));
             state.input.normalize(&mut view);
             EndReason::CommandEnded
         } else if let Completion::Exited(exit_code) = completion {
@@ -96,7 +88,7 @@ impl ManagedCommand {
         state.finish(Ok(SettledCommand { reason, view }));
         drop(state);
         self.settled.notify(usize::MAX);
-        Ok(requested_exit)
+        Ok(())
     }
     pub(super) fn mark_unavailable(&self, error: &anyhow::Error) {
         let mut state = self.state.lock();
@@ -106,14 +98,14 @@ impl ManagedCommand {
             self.settled.notify(usize::MAX);
         }
     }
-    fn read_completion(&self) -> Result<Option<DoneFile>> {
-        let done = read_done(&self.record.done)?;
-        if let Some(record) = done.as_ref() {
+    pub(super) fn read_completion(&self) -> Result<Option<CommandReport<String>>> {
+        let report = CommandReport::read(&self.record.directory)?;
+        if let Some(record) = report.as_ref() {
             ensure!(
                 record.command_id == self.id(),
                 "shell reported completion for a different command"
             );
         }
-        Ok(done)
+        Ok(report)
     }
 }

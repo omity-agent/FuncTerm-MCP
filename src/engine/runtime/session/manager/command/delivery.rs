@@ -23,7 +23,7 @@ impl Tab {
         let (terminal, revision) = self
             .with_operation(move |tab| {
                 let target = tab.live_session()?;
-                target.refresh_choice()?;
+                target.refresh_route()?;
                 match target.write_keyboard_for_running_command(&expected, &input) {
                     Err(error) if !error.is::<RequestRejected>() => {
                         if let Err(cleanup) = tab.end_session(&target, SessionEnd::Failed) {

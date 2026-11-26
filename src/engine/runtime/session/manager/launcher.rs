@@ -3,13 +3,14 @@ mod spawn_builder;
 mod startup;
 use super::process;
 use super::shell_session::ShellSession;
-use crate::contract::DISPATCH_FILE;
+use crate::contract::RELEASED_FILE;
 use crate::engine::privileges::ShellIdentity;
 use crate::runtime::config::Settings;
 use crate::runtime::protocol::EnvironmentSnapshot;
 use crate::runtime::session::observation::PathWatch;
 use crate::runtime::session::terminal::{Terminal, start_reader};
 use crate::runtime::temp;
+use crate::shell::frame::{ACTIVE_ROUTE_FILE, ShellFrame};
 use crate::shell::{ShellChoice, shims};
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
@@ -77,15 +78,20 @@ impl ShellLauncher {
             &self.shim_ready.0
         };
         ready.get_or_try_init(|| shims::ensure_directory(&shim_dir))?;
-        let tab_state = temp::tab_state_directory(tab_root);
+        let frame = ShellFrame::root(starting_shell);
+        let tab_state = frame.state_directory(tab_root);
+        let route = frame.route(starting_directory.to_path_buf(), None);
         let command_root = temp::tab_commands_directory(tab_root);
-        fs_err::create_dir_all(&tab_state)?;
+        route.publish(tab_root)?;
         fs_err::create_dir_all(&command_root)?;
-        let command_watch = PathWatch::new(
-            &command_root,
-            RecursiveMode::Recursive,
-            crate::runtime::session::records::lifecycle_event,
-        )?;
+        let mut workspace_watch =
+            PathWatch::new(&command_root, RecursiveMode::Recursive, |event| {
+                event.paths.iter().any(|path| {
+                    path.file_name()
+                        .is_some_and(|name| name == RELEASED_FILE || name == ACTIVE_ROUTE_FILE)
+                })
+            })?;
+        workspace_watch.watch(&tab_state, RecursiveMode::NonRecursive)?;
         let managed_environment = shims::environment(
             &self.settings,
             tab_root,
@@ -99,7 +105,7 @@ impl ShellLauncher {
             crate::text::path_text(&managed_environment.executable, "executable path")?;
         let mut variables = managed_environment.variables;
         variables.push((shims::TAB_ID_ENV.into(), tab_id.into()));
-        let startup = starting_shell.startup(
+        let startup = frame.startup(
             starting_directory,
             tab_root,
             load_profile,
@@ -150,14 +156,13 @@ impl ShellLauncher {
             }
         };
         let mut session = ShellSession::builder()
-            .choice(starting_shell)
+            .route(route)
             .cwd(starting_directory.to_path_buf())
             .writer(writer)
             .screen(Arc::clone(&screen))
             .command_root(command_root)
-            .command_watch(command_watch)
-            .dispatch_file(tab_state.join(DISPATCH_FILE))
-            .active_shell_file(tab_state.join("active-shell.txt"))
+            .workspace_watch(workspace_watch)
+            .tab_root(tab_root.to_path_buf())
             .command_start_timeout(startup_timeout)
             .process_tree(process_tree)
             .child(child)

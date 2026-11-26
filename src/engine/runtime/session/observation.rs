@@ -24,20 +24,23 @@ impl PathWatch {
     ) -> Result<Self> {
         let events = PathEvents::default();
         let observed = Arc::clone(&events.0);
-        let mut watcher =
-            notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-                match event {
-                    Ok(change) if !change.need_rescan() && !relevant(&change) => return,
-                    Ok(_) => {}
-                    Err(error) => *observed.failure.lock() = Some(error.to_string()),
-                }
-                observed.changed.notify(usize::MAX);
-            })
-            .context("failed to create filesystem watcher")?;
-        watcher
+        let watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
+            match event {
+                Ok(change) if !change.need_rescan() && !relevant(&change) => return,
+                Ok(_) => {}
+                Err(error) => *observed.failure.lock() = Some(error.to_string()),
+            }
+            observed.changed.notify(usize::MAX);
+        })
+        .context("failed to create filesystem watcher")?;
+        let mut watch = Self { events, watcher };
+        watch.watch(directory, mode)?;
+        Ok(watch)
+    }
+    pub(super) fn watch(&mut self, directory: &Path, mode: RecursiveMode) -> Result<()> {
+        self.watcher
             .watch(directory, mode)
-            .with_context(|| format!("failed to watch directory {}", directory.display()))?;
-        Ok(Self { events, watcher })
+            .with_context(|| format!("failed to watch directory {}", directory.display()))
     }
     pub(in crate::engine::runtime::session) fn events(&self) -> PathEvents {
         self.events.clone()

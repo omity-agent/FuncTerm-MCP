@@ -27,7 +27,7 @@ impl Tab {
     }
     pub(in crate::engine::runtime::session::manager) fn tab_view(&self) -> Result<ViewResult> {
         if let Some(session) = self.active_session()? {
-            session.refresh_choice()?;
+            session.refresh_route()?;
             return Ok(self.remember(&session)?.into_view(true));
         }
         Ok(self.snapshot_view())

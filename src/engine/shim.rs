@@ -1,3 +1,4 @@
+mod interactive;
 mod invocation;
 mod process_contract;
 mod routing;
@@ -6,14 +7,10 @@ mod stdio;
 pub(crate) use self::stdio::terminal_output;
 use crate::shell::{ShellChoice, shims};
 use anyhow::{Context as _, Result};
-use core::time::Duration;
 pub(crate) use process_contract::process_exit;
 use routing::LaunchRoute;
-use spawning::spawn_shell;
-use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::ExitStatus;
-use std::time::Instant;
 pub(crate) fn run_if_requested() -> Result<Option<i32>> {
     let Some(choice) = requested_shell() else {
         return Ok(None);
@@ -23,7 +20,7 @@ pub(crate) fn run_if_requested() -> Result<Option<i32>> {
     }
     let arguments = std::env::args_os().skip(1).collect::<Vec<_>>();
     match LaunchRoute::detect(choice, &arguments) {
-        LaunchRoute::ManagedSession => run_interactive(choice, &arguments).map(Some),
+        LaunchRoute::ManagedSession => interactive::run(choice, &arguments).map(Some),
         LaunchRoute::NativeProcess => run_passthrough(choice, &arguments).map(Some),
     }
 }
@@ -65,78 +62,6 @@ fn run_passthrough(choice: ShellChoice, arguments: &[std::ffi::OsString]) -> Res
         .with_context(|| format!("failed to run {}", choice.canonical_name()))?;
     Ok(exit_code(status))
 }
-fn run_interactive(choice: ShellChoice, arguments: &[std::ffi::OsString]) -> Result<i32> {
-    let command_started_at = Instant::now();
-    let parent_shell = current_shell().unwrap_or(choice);
-    let active_shell_file = active_shell_file()?;
-    let session_root = nested_session_root(choice)?;
-    fs_err::create_dir_all(&session_root)?;
-    let cwd = std::env::current_dir().context("failed to read current directory")?;
-    let mut variables = crate::runtime::protocol::EnvironmentSnapshot::capture().variables();
-    variables.retain(|pair| {
-        !crate::runtime::protocol::environment_name_equals(&pair.0, shims::PARENT_SHELL_ENV)
-    });
-    variables.push((
-        OsString::from(shims::PARENT_SHELL_ENV),
-        OsString::from(parent_shell.canonical_name()),
-    ));
-    let startup = choice.startup(
-        &cwd,
-        &session_root,
-        routing::load_profile(arguments)?,
-        routing::ignore_shell_style()?,
-        &crate::runtime::protocol::EnvironmentSnapshot::from_variables(variables),
-    )?;
-    let ready_file = startup.ready_file.clone();
-    let child = spawn_shell(choice, startup)?;
-    let mut active_shell = ActiveShellGuard::new(active_shell_file, parent_shell);
-    let status = invocation::run_shell_until_exit(child, &ready_file, || {
-        active_shell.activate(choice)?;
-        complete_active_command(&cwd, command_started_at.elapsed())?;
-        Ok(())
-    })?;
-    Ok(exit_code(status))
-}
-fn complete_active_command(cwd: &Path, time_consumption: Duration) -> Result<()> {
-    let Some(directory) = std::env::var_os(shims::COMMAND_DIRECTORY_ENV) else {
-        return Ok(());
-    };
-    let Some(command_id) = std::env::var_os(shims::COMMAND_ID_ENV) else {
-        return Ok(());
-    };
-    let directory_path = PathBuf::from(directory);
-    let command_id_text = command_id.to_string_lossy().into_owned();
-    let time_consumption_text = format!("{time_consumption:?}");
-    let cwd_text = cwd.to_string_lossy().into_owned();
-    let done = crate::app::command_state::DoneOutput {
-        command_id: &command_id_text,
-        exit_code: 0,
-        time_consumption: &time_consumption_text,
-        cwd: &cwd_text,
-    };
-    let mut terminal = stdio::terminal_output()?;
-    crate::app::command_state::write_early_done_guard(&command_id_text, &directory_path)?;
-    crate::app::command_state::write_done_to(&done, &directory_path, &mut terminal)
-        .context("failed to publish early done file")
-}
-fn current_shell() -> Option<ShellChoice> {
-    let value = std::env::var(shims::CURRENT_SHELL_ENV).ok()?;
-    ShellChoice::from_canonical_name(&value).ok()
-}
-fn active_shell_file() -> Result<PathBuf> {
-    std::env::var_os(shims::ACTIVE_SHELL_FILE_ENV)
-        .map(PathBuf::from)
-        .context("missing active shell state path")
-}
-fn nested_session_root(choice: ShellChoice) -> Result<PathBuf> {
-    let root = std::env::var_os(shims::SESSION_ROOT_ENV)
-        .map(PathBuf::from)
-        .context("missing shell session root")?;
-    Ok(root
-        .join("nested")
-        .join(choice.canonical_name())
-        .join(std::process::id().to_string()))
-}
 fn real_executable(choice: ShellChoice) -> Result<String> {
     std::env::var(choice.shim_env_name()).with_context(|| {
         format!(
@@ -147,32 +72,4 @@ fn real_executable(choice: ShellChoice) -> Result<String> {
 }
 fn exit_code(status: ExitStatus) -> i32 {
     status.code().unwrap_or(1)
-}
-struct ActiveShellGuard {
-    path: PathBuf,
-    parent_shell: ShellChoice,
-    active: bool,
-}
-impl ActiveShellGuard {
-    const fn new(path: PathBuf, parent_shell: ShellChoice) -> Self {
-        Self {
-            path,
-            parent_shell,
-            active: false,
-        }
-    }
-    fn activate(&mut self, shell: ShellChoice) -> Result<()> {
-        shims::write_active_shell(&self.path, shell)?;
-        self.active = true;
-        Ok(())
-    }
-}
-impl Drop for ActiveShellGuard {
-    fn drop(&mut self) {
-        if self.active
-            && let Err(error) = shims::write_active_shell(&self.path, self.parent_shell)
-        {
-            eprintln!("failed to restore active shell state: {error:#}");
-        }
-    }
 }

@@ -6,6 +6,7 @@ use bytestring::ByteString;
 use core::time::Duration;
 use event_listener::Event;
 use parking_lot::Mutex;
+use std::time::Instant;
 pub(in crate::engine::runtime::session) struct CommandCapture {
     state: Mutex<CaptureState>,
     changed: Event,
@@ -17,11 +18,11 @@ struct CaptureState {
     prompt_cwd: Option<String>,
     prompt_revision: u64,
 }
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone)]
 enum CapturePhase {
     Pending,
-    Active,
-    Finished,
+    Active(Instant),
+    Finished(Option<Duration>),
     Failed(String),
 }
 impl CommandCapture {
@@ -45,13 +46,16 @@ impl CommandCapture {
         self.state.lock().title.clone()
     }
     pub(in crate::engine::runtime::session) fn active(&self) -> bool {
-        self.state.lock().phase == CapturePhase::Active
+        matches!(self.state.lock().phase, CapturePhase::Active(_))
+    }
+    pub(in crate::engine::runtime::session) fn elapsed(&self) -> Option<Duration> {
+        self.state.lock().phase.elapsed()
     }
     pub(in crate::engine::runtime::session) fn finished(&self) -> Result<bool> {
         let phase = self.state.lock().phase.clone();
         match phase {
-            CapturePhase::Finished => Ok(true),
-            CapturePhase::Pending | CapturePhase::Active => Ok(false),
+            CapturePhase::Finished(_) => Ok(true),
+            CapturePhase::Pending | CapturePhase::Active(_) => Ok(false),
             CapturePhase::Failed(message) => bail!("{message}"),
         }
     }
@@ -75,7 +79,7 @@ impl CommandCapture {
             let phase = self.state.lock().phase.clone();
             match phase {
                 CapturePhase::Pending => Ok(false),
-                CapturePhase::Active | CapturePhase::Finished => Ok(true),
+                CapturePhase::Active(_) | CapturePhase::Finished(_) => Ok(true),
                 CapturePhase::Failed(message) => bail!("{message}"),
             }
         })
@@ -86,7 +90,7 @@ impl CommandCapture {
         if let Some(output) = state.output.as_mut() {
             output.finish()?;
         }
-        state.phase = CapturePhase::Finished;
+        state.phase = CapturePhase::Finished(state.phase.elapsed());
         self.changed.notify(usize::MAX);
         Ok(state.title.clone())
     }
@@ -99,31 +103,31 @@ impl CommandCapture {
     pub(super) fn start(&self) -> Result<()> {
         let mut state = self.state.lock();
         ensure!(
-            state.phase == CapturePhase::Pending,
+            matches!(state.phase, CapturePhase::Pending),
             "terminal capture is not pending"
         );
         if let Some(output) = state.output.as_mut() {
             output.start()?;
         }
-        state.phase = CapturePhase::Active;
+        state.phase = CapturePhase::Active(Instant::now());
         drop(state);
         self.changed.notify(usize::MAX);
         Ok(())
     }
     pub(super) fn update_title(&self, title: &str) -> bool {
         let mut state = self.state.lock();
-        if state.phase != CapturePhase::Active {
+        if !matches!(state.phase, CapturePhase::Active(_)) {
             return false;
         }
         title.clone_into(&mut state.title);
         true
     }
-    pub(super) fn observe_prompt(&self, cwd: String) {
+    pub(super) fn observe_prompt(&self, cwd: &str) {
         let mut state = self.state.lock();
-        if state.phase != CapturePhase::Active {
+        if !matches!(state.phase, CapturePhase::Active(_)) {
             return;
         }
-        state.prompt_cwd = Some(cwd);
+        state.prompt_cwd = Some(cwd.to_owned());
         state.prompt_revision = state
             .prompt_revision
             .checked_add(1)
@@ -138,7 +142,7 @@ impl CommandCapture {
         wait_until(&self.changed, Duration::MAX, || {
             let state = self.state.lock();
             Ok(state.prompt_revision > after
-                || !matches!(state.phase, CapturePhase::Pending | CapturePhase::Active))
+                || !matches!(state.phase, CapturePhase::Pending | CapturePhase::Active(_)))
         })
         .await?;
         let state = self.state.lock();
@@ -150,7 +154,7 @@ impl CommandCapture {
     }
     pub(super) fn fail(&self, message: &str) {
         let mut state = self.state.lock();
-        if state.phase != CapturePhase::Finished {
+        if !matches!(state.phase, CapturePhase::Finished(_)) {
             let failure = if let Some(output) = state.output.as_mut()
                 && let Err(error) = output.finish()
             {
@@ -162,5 +166,14 @@ impl CommandCapture {
             self.changed.notify(usize::MAX);
         }
         drop(state);
+    }
+}
+impl CapturePhase {
+    fn elapsed(&self) -> Option<Duration> {
+        match *self {
+            Self::Active(started) => Some(started.elapsed()),
+            Self::Finished(elapsed) => elapsed,
+            Self::Pending | Self::Failed(_) => None,
+        }
     }
 }

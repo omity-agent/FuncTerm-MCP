@@ -1,8 +1,8 @@
 mod dialect;
 mod dispatch;
 mod runner;
-use crate::contract::{CLAIM_RECEIPT_FILE, HELPER_EXECUTABLE_ENV, SESSION_STATE_DIRECTORY};
-use crate::shell::shims::{SESSION_ROOT_ENV, SHIM_DIR_ENV};
+use crate::contract::{CLAIM_RECEIPT_FILE, HELPER_EXECUTABLE_ENV};
+use crate::shell::shims::{FRAME_STATE_ENV, SESSION_ROOT_ENV, SHIM_DIR_ENV};
 pub(super) use dialect::PosixDialect;
 pub(in crate::shell) use dispatch::script as posix_dispatch_script;
 pub(in crate::shell) fn bash_wrapper() -> String {
@@ -57,10 +57,7 @@ const EXIT_HOOK: &str = r#"functerm_complete_exit() {
     if [ -z "${@VAR_command_id@-}" ] || [ -z "${@VAR_native_directory@-}" ]; then
         return 0
     fi
-    local @VAR_command_finished_at@
-    @VAR_command_finished_at@="$(functerm_command_time_millis)" || return 1
-    local @VAR_time_consumption@="$((@VAR_command_finished_at@ - @VAR_command_started_at@))ms"
-    functerm_publish_done "$@VAR_command_id@" "$@VAR_exit_code@" "$@VAR_time_consumption@" "$PWD" "$@VAR_native_directory@"
+    functerm_publish_done "$@VAR_command_id@" "$@VAR_exit_code@" "$@VAR_native_directory@" true
 }
 trap 'functerm_complete_exit "$?"' EXIT
 "#;
@@ -107,7 +104,7 @@ functerm_native_cwd() {{
 @VAR_helper_path@="$(functerm_posix_path "${{{HELPER_EXECUTABLE_ENV}}}")" || return 1
 @VAR_session_root_path@="$(functerm_posix_path "${{{SESSION_ROOT_ENV}}}")" || return 1
 @VAR_shim_path@="$(functerm_posix_path "${{{SHIM_DIR_ENV}-}}")" || return 1
-@VAR_receipt_path@="$@VAR_session_root_path@/{SESSION_STATE_DIRECTORY}/{CLAIM_RECEIPT_FILE}"
+@VAR_receipt_path@="$(functerm_posix_path "${{{FRAME_STATE_ENV}}}/{CLAIM_RECEIPT_FILE}")" || return 1
 readonly @VAR_helper_path@ @VAR_session_root_path@ @VAR_shim_path@ @VAR_receipt_path@"#
     )
 }

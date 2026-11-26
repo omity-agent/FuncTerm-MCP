@@ -1,4 +1,4 @@
-use super::{capture::CommandCapture, markers::ProtocolEvent, rendering::CommandScreen};
+use super::{capture::CommandCapture, markers::ShellPrompt, rendering::CommandScreen};
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result, ensure};
 use parking_lot::Mutex;
@@ -8,6 +8,7 @@ pub(super) struct CaptureRegistry {
 }
 struct RegisteredCapture {
     id: String,
+    frame_id: u32,
     capture: Arc<CommandCapture>,
     titles: TitleUpdates,
 }
@@ -33,6 +34,7 @@ impl CaptureRegistry {
     pub(super) fn register(
         &mut self,
         id: &str,
+        frame_id: u32,
         separate_output: bool,
         screen: Arc<Mutex<CommandScreen>>,
     ) -> Result<Arc<CommandCapture>> {
@@ -47,28 +49,18 @@ impl CaptureRegistry {
         ));
         self.current = Some(RegisteredCapture {
             id: id.to_owned(),
+            frame_id,
             capture: Arc::clone(&capture),
             titles: TitleUpdates::Live,
         });
         tracing::trace!(command_id = %id, "terminal command capture registered");
         Ok(capture)
     }
-    pub(super) fn handle(&mut self, event: ProtocolEvent) -> Result<()> {
-        match event {
-            ProtocolEvent::Start(id) => {
-                tracing::debug!(command_id = %id, "terminal command start marker");
-                self.start(&id)
-            }
-            ProtocolEvent::End(id) => {
-                tracing::debug!(command_id = %id, "terminal command end marker");
-                self.finish(&id, CaptureEnd::Marker)
-            }
-            ProtocolEvent::Prompt(cwd) => {
-                if let Some(current) = self.current.as_ref() {
-                    current.capture.observe_prompt(cwd);
-                }
-                Ok(())
-            }
+    pub(super) fn observe_prompt(&self, prompt: &ShellPrompt) {
+        if let Some(current) = self.current.as_ref()
+            && current.frame_id == prompt.frame_id
+        {
+            current.capture.observe_prompt(&prompt.cwd);
         }
     }
     pub(super) fn fail(&mut self, message: &str) {
@@ -83,10 +75,12 @@ impl CaptureRegistry {
         self.current = None;
         Ok(())
     }
-    fn start(&mut self, id: &str) -> Result<()> {
+    pub(super) fn start(&mut self, id: &str) -> Result<()> {
+        tracing::debug!(command_id = %id, "terminal command start marker");
         self.require(id)?.capture.start()
     }
     pub(super) fn finish(&mut self, id: &str, end: CaptureEnd) -> Result<()> {
+        tracing::debug!(command_id = %id, "terminal command boundary");
         let current = self.require(id)?;
         if matches!(end, CaptureEnd::Marker)
             && let TitleUpdates::Deferred(title) = core::mem::take(&mut current.titles)

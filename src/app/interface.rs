@@ -7,6 +7,7 @@ use crate::shell::ShellChoice;
 use anyhow::{Context as _, Result, ensure};
 use clap::{Parser, Subcommand};
 use core::num::NonZeroUsize;
+use core::time::Duration;
 use std::path::PathBuf;
 #[derive(Parser)]
 #[command(version, about)]
@@ -97,8 +98,6 @@ pub(super) enum CliCommand {
         #[arg(last = true, required = true)]
         command: Vec<std::ffi::OsString>,
     },
-    #[command(hide = true)]
-    InternalTimeMillis,
     #[cfg(windows)]
     #[command(hide = true)]
     InternalCmdPath {
@@ -120,8 +119,8 @@ pub(super) enum CliCommand {
         command_id: String,
         #[arg(long, allow_negative_numbers = true)]
         exit_code: i32,
-        #[arg(long)]
-        time_consumption: String,
+        #[arg(long, value_parser = humantime::parse_duration)]
+        time_consumption: Option<Duration>,
         #[arg(long)]
         cwd: String,
         #[arg(long)]

@@ -17,9 +17,9 @@ pub(super) fn helpers(dialect: PosixDialect) -> String {
 functerm_publish_done() {{
 {emulate}    local @VAR_command_id@="$1"
     local @VAR_exit_code@="$2"
-    local @VAR_time_consumption@="$3"
-    local @VAR_cwd@="$4"
-    local @VAR_native_directory@="$5"
+    local @VAR_native_directory@="$3"
+    local @VAR_shell_exit@="$4"
+    local @VAR_cwd@
     local @VAR_replay@=''
     if [ "${{@VAR_separate_output@-0}}" = 1 ]; then
         @VAR_replay@=--replay-output
@@ -28,19 +28,11 @@ functerm_publish_done() {{
     functerm_terminal_helper "$@VAR_helper_path@" internal-write-done \
         --command-id "$@VAR_command_id@" \
         --exit-code "$@VAR_exit_code@" \
-        --time-consumption "$@VAR_time_consumption@" \
         --cwd "$@VAR_cwd@" \
+        --session-exit "$@VAR_shell_exit@" \
         --directory "$@VAR_native_directory@" $@VAR_replay@
 }}
 {publish_start}
-functerm_command_time_millis() {{
-{emulate}    local @VAR_millis@
-    @VAR_millis@="$("$@VAR_helper_path@" internal-time-millis < /dev/null 2>&1)" || {{
-        builtin printf '%s\n' "$@VAR_millis@" >&2
-        return 1
-    }}
-    builtin printf '%s' "$@VAR_millis@"
-}}
 functerm_terminal_helper() (
     builtin set -o pipefail
     "$@" --stdio < /dev/null 2>&1 | "$@VAR_cat@" > /dev/tty

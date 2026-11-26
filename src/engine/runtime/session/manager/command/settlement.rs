@@ -1,12 +1,55 @@
 use super::super::{shell_session::ShellSession, tab::Tab};
 use super::{ManagedCommand, completion::Completion};
+use crate::contract::CommandReport;
+use crate::runtime::session::observation::PathEvents;
+use crate::runtime::session::terminal::{ShellPrompt, Terminal};
+use crate::shell::frame::ShellRoute;
 use alloc::sync::Arc;
 use anyhow::Result;
+use core::time::Duration;
+use std::path::Path;
 #[derive(Clone, Copy)]
 pub(in crate::engine::runtime::session::manager) enum SessionEnd {
     Closed,
     Exited(i32),
     Failed,
+}
+pub(super) async fn wait_for_resumption(
+    command: &ManagedCommand,
+    terminal: &Terminal,
+    events: &PathEvents,
+    tab_root: &Path,
+) -> Result<Option<Arc<ShellPrompt>>> {
+    let published = events.wait(Duration::MAX, || {
+        let route = ShellRoute::read(tab_root)?;
+        Ok(route.frame != command.frame && route.continuation.is_none())
+    });
+    tokio::select! {
+        biased;
+        ready = published => {
+            ready?;
+            Ok(None)
+        }
+        prompted = parent_prompt(command, terminal, tab_root) => prompted.map(Some),
+    }
+}
+async fn parent_prompt(
+    command: &ManagedCommand,
+    terminal: &Terminal,
+    tab_root: &Path,
+) -> Result<Arc<ShellPrompt>> {
+    let mut after = command.registered_at();
+    loop {
+        let prompt = terminal.wait_for_prompt_after(after).await?;
+        after = prompt.observed_at;
+        let route = ShellRoute::read(tab_root)?;
+        if route.frame != command.frame
+            && route.frame.id() == prompt.frame_id
+            && route.continuation.is_some()
+        {
+            return Ok(prompt);
+        }
+    }
 }
 impl Tab {
     pub(in crate::engine::runtime::session::manager) fn end_session(
@@ -41,7 +84,7 @@ impl Tab {
             command.mark_unavailable(error);
         }
         session.release(command.id());
-        settled.map(|_| ())
+        settled
     }
     pub(in crate::engine::runtime::session::manager) async fn stop_after_failure(
         self: &Arc<Self>,
@@ -61,10 +104,17 @@ impl Tab {
         &self,
         session: &ShellSession,
         command: &ManagedCommand,
+        mut report: CommandReport<String>,
     ) -> Result<()> {
-        let requests_exit = command.settle(Completion::Reported, |cwd| session.set_cwd(cwd))?;
+        session.refresh_route()?;
+        let exits_shell = report.outcome.exits_shell();
+        if exits_shell && !command.frame.is_root() {
+            report.cwd =
+                crate::text::path_text(&session.handoff_cwd(), "restored shell working directory")?;
+        }
+        command.settle(Completion::Reported(&report), |cwd| session.set_cwd(cwd))?;
         session.release(command.id());
-        if requests_exit {
+        if exits_shell && command.frame.is_root() {
             self.end_session(session, SessionEnd::Closed)?;
         }
         Ok(())

@@ -56,7 +56,7 @@ python = ["python3", "python"]
 
 [resource_alerts]
 # 在系统资源达到警戒值时警告。可通过 FUNCTERM_RESOURCE_ALERTS 覆盖
-enabled = false
+enabled = true
 
 # 整数百分比，取值 0–100（包含边界）。
 # 可分别通过 FUNCTERM_RESOURCE_CPU_PERCENT、FUNCTERM_RESOURCE_RAM_PERCENT 和

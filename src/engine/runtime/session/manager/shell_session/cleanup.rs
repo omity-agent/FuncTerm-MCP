@@ -40,12 +40,15 @@ impl Drop for ShellSession {
             process::join_reader(reader, "pty reader thread");
             tracing::debug!("closed shell PTY reader joined");
         }
-        if let Err(error) = self.command_watch.unwatch(&self.command_root) {
-            tracing::error!("failed to release Tab workspace watch");
-            tracing::debug!(
-                error = format!("{error:#}"),
-                "Tab workspace watch cleanup failed"
-            );
+        let state = self.tab_root.join(crate::contract::SESSION_STATE_DIRECTORY);
+        for directory in [self.command_root.as_path(), state.as_path()] {
+            if let Err(error) = self.workspace_watch.unwatch(directory) {
+                tracing::error!("failed to release Tab workspace watch");
+                tracing::debug!(
+                    error = format!("{error:#}"),
+                    "Tab workspace watch cleanup failed"
+                );
+            }
         }
         if let Some(directory) = self.directory.take()
             && let Err(error) = directory.close()

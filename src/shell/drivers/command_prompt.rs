@@ -101,10 +101,11 @@ fn initialization_script(context: StartupContext<'_>) -> Result<String> {
         ""
     };
     Ok(format!(
-        "@echo off\r\nchcp 65001 >nul\r\n{}\r\nset {CURRENT_SHELL_ENV}=cmd\r\n{}\r\nset \"PATH=%~dp0;%FUNCTERM_SHIM_DIR%;%PATH%\"\r\ndoskey /listsize=0 >nul 2>nul\r\ndoskey f=\r\nif not defined PROMPT prompt $P$G\r\nprompt $E]9999;FuncTerm;prompt;cmd;$P$E\\%PROMPT%\r\ncd /d {}\r\ntype nul > {}\r\n",
+        "@echo off\r\nchcp 65001 >nul\r\n{}\r\nset {CURRENT_SHELL_ENV}=cmd\r\n{}\r\nset \"PATH=%~dp0;%FUNCTERM_SHIM_DIR%;%PATH%\"\r\ndoskey /listsize=0 >nul 2>nul\r\ndoskey f=\r\nif not defined PROMPT prompt $P$G\r\nprompt $E]9999;FuncTerm;prompt;{};$P$E\\%PROMPT%\r\ncd /d {}\r\ntype nul > {}\r\n",
         startup_environment(crate::shell::ShellChoice::Cmd, context.environment)?
             .replace('\n', "\r\n"),
         style,
+        context.frame_id,
         quote::cmd_string(&quote::native_path(context.cwd)?.replace('%', "%%")),
         quote::cmd_string(&quote::native_path(context.ready_file)?)
     ))

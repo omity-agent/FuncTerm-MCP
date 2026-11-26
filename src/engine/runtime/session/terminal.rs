@@ -9,10 +9,12 @@ mod transcript;
 pub(super) use self::capture::CommandCapture;
 use self::emulation::{PtyResponder, WindowTitleChanges};
 pub(super) use self::io::start_reader;
+use self::markers::ProtocolEvent;
+pub(super) use self::markers::ShellPrompt;
 use self::registry::{CaptureEnd, CaptureRegistry};
 use self::rendering::CommandScreen;
 use alloc::sync::Arc;
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result};
 use bytestring::ByteString;
 use event_listener::Event;
 use parking_lot::Mutex;
@@ -36,6 +38,7 @@ struct TerminalState {
     parser: Parser,
     actions: Vec<Action>,
     captures: CaptureRegistry,
+    prompt: Option<Arc<ShellPrompt>>,
     visible_revision: u64,
     visible_contents: ByteString,
     reader_closed: bool,
@@ -67,6 +70,7 @@ impl Terminal {
                 parser: Parser::new(),
                 actions: Vec::new(),
                 captures: CaptureRegistry::new(model_title.to_owned()),
+                prompt: None,
                 visible_revision: 0,
                 visible_contents,
                 reader_closed: false,
@@ -79,21 +83,6 @@ impl Terminal {
             lifetime_changed: Event::new(),
         }))
     }
-    pub(super) fn capture_command(
-        &self,
-        command_id: &str,
-        separate_output: bool,
-    ) -> Result<Arc<CommandCapture>> {
-        let mut state = self.state.lock();
-        if let Some(message) = state.reader_failure.as_deref() {
-            bail!("cannot start command after terminal reader failure: {message}");
-        }
-        if state.reader_closed {
-            bail!("cannot start command after terminal reader closed");
-        }
-        let screen = Arc::clone(&state.screen);
-        state.captures.register(command_id, separate_output, screen)
-    }
     pub(super) fn contents(&self) -> ByteString {
         self.state.lock().visible_contents.clone()
     }
@@ -102,9 +91,6 @@ impl Terminal {
     }
     pub(super) fn defer_window_titles(&self, id: &str) {
         self.state.lock().captures.defer_window_titles(id);
-    }
-    pub(super) fn complete_at_prompt(&self, id: &str) -> Result<()> {
-        self.state.lock().captures.finish(id, CaptureEnd::Prompt)
     }
     pub(super) fn process(&self, chunk: &[u8]) -> Result<()> {
         let mut state = self.state.lock();
@@ -143,7 +129,14 @@ impl TerminalState {
         for action in actions {
             if let Some(event) = markers::parse(&action)? {
                 applied |= self.apply(core::mem::take(&mut pending))?;
-                self.captures.handle(event)?;
+                match event {
+                    ProtocolEvent::Start(id) => self.captures.start(&id)?,
+                    ProtocolEvent::End(id) => self.captures.finish(&id, CaptureEnd::Marker)?,
+                    ProtocolEvent::Prompt(prompt) => {
+                        self.captures.observe_prompt(&prompt);
+                        self.prompt = Some(Arc::new(prompt));
+                    }
+                }
             } else {
                 let checkpoint = matches!(
                     action,

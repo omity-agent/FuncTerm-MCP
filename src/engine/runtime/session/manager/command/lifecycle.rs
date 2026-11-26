@@ -1,13 +1,15 @@
 mod buffering;
 mod history;
 use self::{buffering::SeparatedOutput, history::CommandInputHistory};
+use crate::contract::CommandReport;
 use crate::runtime::protocol::{
     CommandOutput, CommandSnapshot, EndReason, OutputTokenizer, OutputTokens, RequestRejected,
 };
 use crate::runtime::session::keyboard::InputDelivery;
 use crate::runtime::session::observation::{PathEvents, wait_until};
-use crate::runtime::session::records::{CommandRecord, DoneFile, read_command_result};
+use crate::runtime::session::records::{CommandRecord, command_snapshot};
 use crate::runtime::session::terminal::CommandCapture;
+use crate::shell::frame::ShellFrame;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result, ensure};
 use core::time::Duration;
@@ -16,6 +18,7 @@ use parking_lot::Mutex;
 use std::time::Instant;
 pub(in crate::engine::runtime::session::manager) struct ManagedCommand {
     id: String,
+    pub(super) frame: ShellFrame,
     pub(super) record: CommandRecord,
     started_at: Instant,
     start_timeout: Duration,
@@ -44,6 +47,7 @@ impl ManagedCommandState {
 impl ManagedCommand {
     pub(super) fn new(
         id: String,
+        frame: ShellFrame,
         record: CommandRecord,
         capture: Arc<CommandCapture>,
         tokenizer: Arc<OutputTokenizer>,
@@ -52,6 +56,7 @@ impl ManagedCommand {
         tracing :: debug ! (command_id = % id , directory = % record . directory . display () , "command registered");
         Self {
             id,
+            frame,
             record,
             started_at: Instant::now(),
             start_timeout,
@@ -77,7 +82,10 @@ impl ManagedCommand {
         write: impl FnOnce() -> Result<InputDelivery>,
     ) -> Result<()> {
         let mut state = self.state.lock();
-        if state.outcome.is_some() || !self.capture.active() || self.record.done.try_exists()? {
+        if state.outcome.is_some()
+            || !self.capture.active()
+            || CommandReport::exists(&self.record.directory)?
+        {
             return Err(RequestRejected::new(
                 "manual_write target command ended before input could be written",
             )
@@ -97,6 +105,9 @@ impl ManagedCommand {
     }
     pub(super) fn is_settled(&self) -> bool {
         self.state.lock().outcome.is_some()
+    }
+    pub(in crate::engine::runtime::session::manager) fn capture_finished(&self) -> Result<bool> {
+        self.capture.finished()
     }
     pub(super) async fn wait_for_start(&self) -> Result<()> {
         ensure!(
@@ -132,11 +143,14 @@ impl ManagedCommand {
     pub(super) fn time_consumption(&self) -> Duration {
         self.started_at.elapsed()
     }
+    pub(super) const fn registered_at(&self) -> Instant {
+        self.started_at
+    }
     pub(super) fn snapshot(
         &self,
         state: &mut ManagedCommandState,
         title: String,
-        done: Option<&DoneFile>,
+        report: Option<&CommandReport<String>>,
         finished: bool,
     ) -> Result<CommandSnapshot> {
         let (output, tokens) = if let Some(output) = self.capture.output()? {
@@ -149,6 +163,13 @@ impl ManagedCommand {
                 .get_or_insert_default()
                 .read(&self.record, &self.tokenizer, finished)?
         };
-        read_command_result(self.time_consumption(), title, output, tokens, done)
+        let elapsed = if finished {
+            self.capture
+                .elapsed()
+                .unwrap_or_else(|| self.time_consumption())
+        } else {
+            self.time_consumption()
+        };
+        Ok(command_snapshot(elapsed, title, output, tokens, report))
     }
 }

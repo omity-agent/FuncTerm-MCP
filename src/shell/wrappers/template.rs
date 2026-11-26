@@ -1,11 +1,10 @@
 use crate::contract::{
     CLAIM_RECEIPT_FILE, COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, COMMAND_SCRIPT_FILE,
-    DONE_FILE, HELPER_EXECUTABLE_ENV, SESSION_STATE_DIRECTORY, STDERR_FILE, STDOUT_FILE,
+    HELPER_EXECUTABLE_ENV, STDERR_FILE, STDOUT_FILE,
 };
-const COMMON: [(&str, &str); 6] = [
+const COMMON: [(&str, &str); 5] = [
     ("@COMMAND_DIR_ENV@", COMMAND_DIRECTORY_ENV),
     ("@COMMAND_ID_ENV@", COMMAND_ID_ENV),
-    ("@DONE@", DONE_FILE),
     ("@HELPER_ENV@", HELPER_EXECUTABLE_ENV),
     ("@STDERR@", STDERR_FILE),
     ("@STDOUT@", STDOUT_FILE),
@@ -26,13 +25,7 @@ pub(super) fn render_powershell(template: &str) -> String {
     )
 }
 pub(in crate::shell) fn cmd_dispatcher() -> String {
-    let rendered = render(
-        CMD_DISPATCHER,
-        &[
-            ("@CLAIM@", CLAIM_RECEIPT_FILE),
-            ("@SESSION_STATE@", SESSION_STATE_DIRECTORY),
-        ],
-    );
+    let rendered = render(CMD_DISPATCHER, &[("@CLAIM@", CLAIM_RECEIPT_FILE)]);
     super::VariableNamespace::new().render(&rendered)
 }
 fn render(template: &str, extra: &[(&str, &str)]) -> String {
@@ -44,7 +37,7 @@ fn render(template: &str, extra: &[(&str, &str)]) -> String {
 }
 const CMD_DISPATCHER: &str = r#"@echo off
 set "@VAR_previous_status@=%ERRORLEVEL%"
-set "@VAR_receipt_file@=%FUNCTERM_SESSION_ROOT%\@SESSION_STATE@\@CLAIM@"
+set "@VAR_receipt_file@=%FUNCTERM_FRAME_STATE%\@CLAIM@"
 "%@HELPER_ENV@%" internal-claim-command --session-root "%FUNCTERM_SESSION_ROOT%" --shell cmd > "%@VAR_receipt_file@%" || exit /b 1
 set "@VAR_command_id@="
 set "@VAR_directory@="

@@ -1,5 +1,5 @@
 use super::super::{template, variables};
-use crate::contract::{DISPATCH_FILE, NUSHELL_SUBMISSION_FILE, SESSION_STATE_DIRECTORY};
+use crate::contract::{DISPATCH_FILE, NUSHELL_SUBMISSION_FILE};
 pub(in crate::shell) fn wrapper() -> String {
     let protected = TEMPLATE
         .replace(
@@ -7,8 +7,7 @@ pub(in crate::shell) fn wrapper() -> String {
             &variables::nushell_protected_environment_names(),
         )
         .replace("@DISPATCH@", DISPATCH_FILE)
-        .replace("@SUBMISSION@", NUSHELL_SUBMISSION_FILE)
-        .replace("@STATE_DIRECTORY@", SESSION_STATE_DIRECTORY);
+        .replace("@SUBMISSION@", NUSHELL_SUBMISSION_FILE);
     template::render_command_function(&protected, "functerm_finish")
 }
 const TEMPLATE: &str = "let @VAR_protected_environment@ = ($env | select --optional @NUSHELL_PROTECTED_ENVIRONMENT@)
@@ -21,7 +20,7 @@ def --wrapped functerm_helper [...@VAR_arguments@] {
     $@VAR_result@.stdout
 }
 def --env functerm_begin [] {
-    let @VAR_dispatch@ = $env.FUNCTERM_SESSION_ROOT | path join '@STATE_DIRECTORY@' '@DISPATCH@'
+    let @VAR_dispatch@ = $env.FUNCTERM_FRAME_STATE | path join '@DISPATCH@'
     if not ($@VAR_dispatch@ | path exists) { return }
     let @VAR_receipt@ = functerm_helper internal-claim-command --session-root $env.FUNCTERM_SESSION_ROOT --shell nu | from json
     let @VAR_directory@ = $@VAR_receipt@.directory | path expand

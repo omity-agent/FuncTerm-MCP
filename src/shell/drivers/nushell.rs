@@ -4,7 +4,7 @@ use crate::shell::ShellChoice;
 use crate::shell::quote;
 use crate::shell::shims::{CURRENT_SHELL_ENV, SESSION_ROOT_ENV};
 use crate::shell::wrappers::{nushell_wrapper, startup_environment};
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Context as _, Result};
 use std::path::Path;
 pub(super) fn startup(context: StartupContext<'_>) -> Result<DriverStartup> {
     let bootstrap = context.startup_directory.join("nu_bootstrap.nu");
@@ -70,14 +70,7 @@ $env.config.shell_integration = { osc2: false, osc7: false, osc8: false, osc9_9:
     );
     Ok(crate::shell::wrappers::VariableNamespace::new().render(&initialization))
 }
-pub(super) fn invocation(
-    directory: &Path,
-    separate_output: bool,
-) -> Result<super::ShellInvocation> {
-    ensure!(
-        !separate_output,
-        "NuShell does not support separate_output=true; use separate_output=false"
-    );
+pub(super) fn invocation(directory: &Path) -> Result<super::ShellInvocation> {
     let submission = directory.join(NUSHELL_SUBMISSION_FILE);
     let commands = directory
         .parent()

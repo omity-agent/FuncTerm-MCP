@@ -2,7 +2,6 @@ use super::super::tab::Tab;
 use super::{ManagedCommand, SessionEnd};
 use crate::runtime::protocol::RequestRejected;
 use crate::runtime::session::records::{create_record, discard_record};
-use crate::shell::ShellChoice;
 use alloc::sync::Arc;
 use anyhow::Result;
 impl Tab {
@@ -14,9 +13,10 @@ impl Tab {
     ) -> Result<Arc<ManagedCommand>> {
         let session = self.live_session()?;
         session.ensure_idle(self.id())?;
-        session.refresh_choice()?;
-        let choice = session.current_choice();
-        if choice == ShellChoice::NuShell && separate_output {
+        session.refresh_route()?;
+        let frame = session.dispatch_frame(self.id())?;
+        let choice = frame.choice;
+        if separate_output && !choice.supports_separated_output() {
             return Err(RequestRejected::new(
                 "NuShell does not support separate_output=true; use separate_output=false",
             )
@@ -24,10 +24,11 @@ impl Tab {
         }
         let record = create_record(session.command_root(), &command_id, choice)?;
         let capture = session
-            .capture_command(&command_id, separate_output)
+            .capture_command(&command_id, frame, separate_output)
             .inspect_err(|_error| discard_record(&record))?;
         let managed = Arc::new(ManagedCommand::new(
             command_id,
+            frame,
             record,
             capture,
             Arc::clone(&self.tokenizer),
@@ -35,6 +36,7 @@ impl Tab {
         ));
         session.reserve(Arc::clone(&managed));
         if let Err(error) = session.write_invocation(
+            frame,
             managed.id(),
             command_text,
             managed.record(),
@@ -51,7 +53,8 @@ impl Tab {
         }
         self.supervise(
             session.terminal(),
-            session.command_events(),
+            session.workspace_events(),
+            session.tab_root().to_path_buf(),
             Arc::clone(&managed),
         );
         Ok(managed)

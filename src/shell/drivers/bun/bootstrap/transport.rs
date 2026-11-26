@@ -73,6 +73,7 @@ const route = async (stream, name, terminal) => {
                             "internal-write-done", "--command-id", frame.id,
                             "--directory", join(commandRoot, frame.id),
                             "--exit-code", String(frame.exitCode),
+                            "--session-exit", String(frame.shellExit),
                             "--time-consumption", frame.elapsed, "--cwd", frame.cwd,
                         ], { stdio: "inherit" });
                         if (result.error) throw result.error;

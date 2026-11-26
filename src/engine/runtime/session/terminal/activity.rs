@@ -1,8 +1,57 @@
-use super::Terminal;
+use super::{CaptureEnd, CommandCapture, ShellPrompt, Terminal};
 use crate::runtime::session::observation::wait_until;
-use anyhow::{Result, bail};
+use alloc::sync::Arc;
+use anyhow::{Context as _, Result, bail};
 use core::time::Duration;
+use std::time::Instant;
 impl Terminal {
+    pub(in crate::engine::runtime::session) fn capture_command(
+        &self,
+        command_id: &str,
+        frame_id: u32,
+        separate_output: bool,
+    ) -> Result<Arc<CommandCapture>> {
+        let mut state = self.state.lock();
+        if let Some(message) = state.reader_failure.as_deref() {
+            bail!("cannot start command after terminal reader failure: {message}");
+        }
+        if state.reader_closed {
+            bail!("cannot start command after terminal reader closed");
+        }
+        let screen = Arc::clone(&state.screen);
+        state
+            .captures
+            .register(command_id, frame_id, separate_output, screen)
+    }
+    pub(in crate::engine::runtime::session) fn complete_at_prompt(
+        &self,
+        id: &str,
+        capture: &CommandCapture,
+    ) -> Result<()> {
+        let mut state = self.state.lock();
+        if capture.finished()? {
+            return Ok(());
+        }
+        state.captures.finish(id, CaptureEnd::Prompt)
+    }
+    pub(in crate::engine::runtime::session) async fn wait_for_prompt_after(
+        &self,
+        after: Instant,
+    ) -> Result<Arc<ShellPrompt>> {
+        let mut observed = None;
+        wait_until(&self.changed, Duration::MAX, || {
+            observed = self
+                .state
+                .lock()
+                .prompt
+                .as_ref()
+                .filter(|prompt| prompt.observed_at > after)
+                .cloned();
+            Ok(observed.is_some())
+        })
+        .await?;
+        observed.context("terminal did not report a fresh prompt")
+    }
     pub(in crate::engine::runtime::session) fn visible_revision(&self) -> Result<u64> {
         let state = self.state.lock();
         if let Some(message) = state.reader_failure.as_deref() {

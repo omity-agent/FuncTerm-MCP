@@ -2,7 +2,6 @@ mod echo_control;
 mod transport;
 use crate::contract::{
     COMMAND_DIRECTORY_ENV, COMMAND_FILE, COMMAND_ID_ENV, DISPATCH_FILE, HELPER_EXECUTABLE_ENV,
-    SESSION_EXIT_FILE, SESSION_STATE_DIRECTORY,
 };
 pub(super) const fn host_script() -> &'static str {
     transport::HOST
@@ -45,12 +44,11 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
 	    const @VAR_command@ = @VAR_activeCommand@;
 		    if (!@VAR_command@) return;
 		    @VAR_activeCommand@ = undefined;
-		    if (@VAR_exitCode@ !== undefined && !process.env.FUNCTERM_PARENT_SHELL) @VAR_writeFileSync@(@VAR_join@(@VAR_command@.directory, "{session_exit}"), "");
 	    @VAR_server@.writer = @VAR_command@.previousWriter;
 	    const @VAR_elapsed@ = `${{Math.max(1, Math.ceil(performance.now() - @VAR_command@.started))}}ms`;
             Object.assign(process.env, @VAR_command@.protectedEnvironment);
 		    @VAR_prependShimPath@();
-			    @VAR_streamBoundary@("end", @VAR_command@, {{ exitCode: @VAR_exitCode@ ?? (@VAR_command@.failed ? 1 : 0), elapsed: @VAR_elapsed@, cwd: process.cwd() }});
+                            @VAR_streamBoundary@("end", @VAR_command@, {{ exitCode: @VAR_exitCode@ ?? (@VAR_command@.failed ? 1 : 0), shellExit: @VAR_exitCode@ !== undefined, elapsed: @VAR_elapsed@, cwd: process.cwd() }});
 	    @VAR_restoreEnvironment@("{command_id_env}", @VAR_command@.previousId);
 	    @VAR_restoreEnvironment@("{command_directory_env}", @VAR_command@.previousDirectory);
 	}};
@@ -108,7 +106,7 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
 		    @VAR_watcher@.close();
 		}});
 		process.on("exit", @VAR_exitCode@ => @VAR_finishCommand@(@VAR_exitCode@));
-	const @VAR_stateDirectory@ = @VAR_join@(process.env.FUNCTERM_SESSION_ROOT, "{session_state}");
+        const @VAR_stateDirectory@ = process.env.FUNCTERM_FRAME_STATE;
 	const @VAR_dispatchFile@ = @VAR_join@(@VAR_stateDirectory@, "{dispatch_file}");
 	const @VAR_dispatch@ = () => {{
 	    if (@VAR_dispatching@ || @VAR_activeCommand@) return;
@@ -169,8 +167,6 @@ pub(super) fn script(cwd: &str, ready: &str) -> String {
 	@VAR_writeFileSync@({ready}, "");
 "#,
         helper_env = HELPER_EXECUTABLE_ENV,
-        session_state = SESSION_STATE_DIRECTORY,
-        session_exit = SESSION_EXIT_FILE,
         dispatch_file = DISPATCH_FILE,
         command_file = COMMAND_FILE,
         command_id_env = COMMAND_ID_ENV,

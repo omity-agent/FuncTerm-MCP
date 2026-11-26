@@ -1,4 +1,4 @@
-use crate::contract::{SESSION_COMMANDS_DIRECTORY, SESSION_STATE_DIRECTORY};
+use crate::contract::SESSION_COMMANDS_DIRECTORY;
 use anyhow::{Context as _, Result};
 use std::path::PathBuf;
 const DAEMON_ROOT: &str = "functerm";
@@ -36,9 +36,6 @@ pub(crate) fn create_tab_directory(
         .rand_bytes(0)
         .tempdir_in(parent)
         .context("failed to create Tab runtime directory")
-}
-pub(crate) fn tab_state_directory(tab_root: &std::path::Path) -> PathBuf {
-    tab_root.join(SESSION_STATE_DIRECTORY)
 }
 pub(crate) fn clear_service_runtime(root: &std::path::Path, service_name: &str) -> Result<()> {
     remove_directory_if_present(&service_root(root, service_name))

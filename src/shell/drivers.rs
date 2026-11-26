@@ -12,6 +12,7 @@ use std::ffi::OsString;
 use std::path::Path;
 #[derive(Clone, Copy)]
 pub(crate) struct StartupContext<'value> {
+    pub(crate) frame_id: u32,
     pub(crate) cwd: &'value Path,
     pub(crate) startup_directory: &'value Path,
     pub(crate) ready_file: &'value Path,
@@ -22,6 +23,10 @@ pub(crate) struct StartupContext<'value> {
 pub(crate) struct ShellInvocation {
     line: String,
     terminator: InvocationTerminator,
+}
+pub(crate) enum DispatchWake {
+    Keyboard(ShellInvocation),
+    Mailbox,
 }
 #[derive(Clone, Copy)]
 pub(crate) enum InvocationTerminator {
@@ -63,33 +68,20 @@ pub(crate) fn startup(choice: ShellChoice, context: StartupContext<'_>) -> Resul
         ShellChoice::Python => python::startup(context),
     }
 }
-pub(crate) fn invocation(choice: ShellChoice) -> Result<Option<ShellInvocation>> {
+pub(crate) fn dispatch_wakeup(choice: ShellChoice, directory: &Path) -> Result<DispatchWake> {
     let line = match choice {
-        ShellChoice::Bun => return Ok(None),
+        ShellChoice::Bun => return Ok(DispatchWake::Mailbox),
         ShellChoice::Python => "_functerm_dispatch()".to_owned(),
         ShellChoice::PowerShell => format!(". {POWERSHELL_DISPATCHER_FUNCTION}"),
         ShellChoice::Bash | ShellChoice::Zsh => {
             r#"builtin eval -- "$(functerm_dispatch_source "$?")""#.to_owned()
         }
-        ShellChoice::NuShell | ShellChoice::Cmd => DISPATCHER_COMMAND.to_owned(),
+        ShellChoice::NuShell => return nushell::invocation(directory).map(DispatchWake::Keyboard),
+        ShellChoice::Cmd => DISPATCHER_COMMAND.to_owned(),
     };
-    ShellInvocation::new(line, invocation_terminator(choice)).map(Some)
+    ShellInvocation::new(line, invocation_terminator(choice)).map(DispatchWake::Keyboard)
 }
-pub(crate) fn invocation_for(
-    choice: ShellChoice,
-    directory: &Path,
-    separate_output: bool,
-) -> Result<Option<ShellInvocation>> {
-    if choice == ShellChoice::NuShell {
-        return nushell::invocation(directory, separate_output).map(Some);
-    }
-    invocation(choice)
-}
-pub(crate) fn prepare_command(
-    choice: ShellChoice,
-    directory: &Path,
-    _session_root: &Path,
-) -> Result<()> {
+pub(crate) fn prepare_command(choice: ShellChoice, directory: &Path) -> Result<()> {
     let source = directory.join(choice.source_file());
     let metadata = std::fs::metadata(&source).map_err(|error| {
         tracing::debug!(%error, source = %source.display(), "command input inspection failed");

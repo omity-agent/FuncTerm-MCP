@@ -1,13 +1,16 @@
 mod cleanup;
 #[cfg(windows)]
 mod containment;
+mod foreground;
 mod input;
 pub(super) mod process;
 use super::command::ManagedCommand;
+use crate::contract::DISPATCH_FILE;
 use crate::runtime::session::observation::{PathEvents, PathWatch};
 use crate::runtime::session::records::CommandRecord;
 use crate::runtime::session::terminal::{CommandCapture, Terminal};
-use crate::shell::{ShellChoice, shims};
+use crate::shell::DispatchWake;
+use crate::shell::frame::{ShellFrame, ShellRoute};
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
 use core::time::Duration;
@@ -18,8 +21,8 @@ use std::path::{Path, PathBuf};
 use std::thread::JoinHandle;
 #[derive(bon::Builder)]
 pub(super) struct ShellSession {
-    #[builder(with = |value: ShellChoice| Mutex::new(value))]
-    choice: Mutex<ShellChoice>,
+    #[builder(with = |value: ShellRoute| Mutex::new(value))]
+    route: Mutex<ShellRoute>,
     #[builder(with = |value: PathBuf| Mutex::new(value))]
     cwd: Mutex<PathBuf>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
@@ -29,9 +32,8 @@ pub(super) struct ShellSession {
     #[builder(skip)]
     terminated: Mutex<bool>,
     command_root: PathBuf,
-    command_watch: PathWatch,
-    dispatch_file: PathBuf,
-    active_shell_file: PathBuf,
+    workspace_watch: PathWatch,
+    tab_root: PathBuf,
     command_start_timeout: Duration,
     process_tree: process::ProcessTree,
     #[builder(with = |value: Box<dyn Child + Send + Sync>| Mutex::new(value))]
@@ -50,8 +52,11 @@ impl ShellSession {
     pub(super) fn command_root(&self) -> &Path {
         &self.command_root
     }
-    pub(super) fn command_events(&self) -> PathEvents {
-        self.command_watch.events()
+    pub(super) fn workspace_events(&self) -> PathEvents {
+        self.workspace_watch.events()
+    }
+    pub(super) fn tab_root(&self) -> &Path {
+        &self.tab_root
     }
     pub(super) const fn command_start_timeout(&self) -> Duration {
         self.command_start_timeout
@@ -74,18 +79,11 @@ impl ShellSession {
     pub(super) fn capture_command(
         &self,
         command_id: &str,
+        frame: ShellFrame,
         separate_output: bool,
     ) -> Result<Arc<CommandCapture>> {
-        self.screen.capture_command(command_id, separate_output)
-    }
-    pub(super) fn current_choice(&self) -> ShellChoice {
-        *self.choice.lock()
-    }
-    pub(super) fn refresh_choice(&self) -> Result<()> {
-        if let Some(choice) = shims::read_active_shell(&self.active_shell_file)? {
-            *self.choice.lock() = choice;
-        }
-        Ok(())
+        self.screen
+            .capture_command(command_id, frame.id(), separate_output)
     }
     pub(super) fn exit_code(&self) -> Result<Option<i32>> {
         Ok(self
@@ -97,12 +95,14 @@ impl ShellSession {
     }
     pub(super) fn write_invocation(
         &self,
+        frame: ShellFrame,
         command_id: &str,
         command: &str,
         record: &CommandRecord,
         separate_output: bool,
     ) -> Result<()> {
-        let choice = self.current_choice();
+        let choice = frame.choice;
+        let delivery = choice.dispatch_wakeup(&record.directory)?;
         let command_source = choice.command_source(command);
         fs_err::write(&record.source, command_source)?;
         fs_err::write(
@@ -117,9 +117,10 @@ impl ShellSession {
             separate_output,
         })
         .context("failed to encode command dispatch")?;
-        crate::publication::write_replace(&self.dispatch_file, dispatch)
+        let dispatch_file = frame.state_directory(&self.tab_root).join(DISPATCH_FILE);
+        crate::publication::write_replace(&dispatch_file, dispatch)
             .context("failed to publish command dispatch")?;
-        let Some(invocation) = choice.invocation_for(&record.directory, separate_output)? else {
+        let DispatchWake::Keyboard(invocation) = delivery else {
             return Ok(());
         };
         let invocation_bytes = invocation.into_bytes();
@@ -128,9 +129,5 @@ impl ShellSession {
             .write_all(&invocation_bytes)
             .context("failed to write command invocation")?;
         writer.flush().context("failed to flush command invocation")
-    }
-    pub(super) fn complete_interruption(&self, command: &ManagedCommand, cwd: &str) -> Result<()> {
-        command.publish_interruption(cwd)?;
-        self.screen.complete_at_prompt(command.id())
     }
 }

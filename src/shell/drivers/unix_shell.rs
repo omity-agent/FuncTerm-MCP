@@ -42,7 +42,8 @@ if builtin shopt -q expand_aliases; then @VAR_aliases_enabled@=1; fi
         ""
     };
     let script = format!(
-        "{profile}{style}{guard}{initialization}\nPS1='\\[\\e]9999;FuncTerm;prompt;bash;$(functerm_native_cwd)\\e\\\\\\]'\"$PS1\"\n"
+        "{profile}{style}{guard}{initialization}\nPS1='\\[\\e]9999;FuncTerm;prompt;{};$(functerm_native_cwd)\\e\\\\\\]'\"$PS1\"\n",
+        context.frame_id
     );
     fs_err::write(&init_path, VariableNamespace::new().render(&script))?;
     Ok(DriverStartup {
@@ -100,7 +101,8 @@ pub(super) fn zsh_startup(context: StartupContext<'_>) -> Result<DriverStartup> 
     fs_err::write(
         &init_path,
         namespace.render(&format!(
-            "{guard}{initialization}\nPS1=$'%{{\\e]9999;FuncTerm;prompt;zsh;%/\\e\\\\%}}'\"$PS1\"\n"
+            "{guard}{initialization}\nPS1=$'%{{\\e]9999;FuncTerm;prompt;{};%/\\e\\\\%}}'\"$PS1\"\n",
+            context.frame_id
         )),
     )?;
     Ok(DriverStartup {
