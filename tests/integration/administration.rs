@@ -59,10 +59,12 @@ fn concurrent_starts_share_a_single_background_instance() {
         })
         .sum::<usize>();
     assert_eq!(started, 1);
-    let tab = create_tab(&temp_root(), SHELL);
+    let cwd = temp_dir("stopped-tab");
+    let tab = create_tab(&cwd, SHELL);
     assert!(parse_tab_view(&run_cli(&["view", &tab.tab_id])).alive);
     assert_lifecycle("start", "already running");
     assert_lifecycle("stop", "stopped");
+    fs_err::remove_dir(cwd).unwrap();
     assert_lifecycle("stop", "not running");
     assert_lifecycle("restart", "restarted");
     let restarted = create_tab(&temp_root(), SHELL);

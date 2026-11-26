@@ -1,12 +1,12 @@
 use super::PtyProcess;
 use super::access_token::normal_parent;
-use super::tree_guard::HostedChild;
+use super::tree_guard::{self, HostedChild, SHELL_JOB_ENV};
 use crate::shell::ShellStartup;
 use alloc::sync::Arc;
 use anyhow::{Context as _, Result};
-use portable_pty::{ChildKiller as _, PtySize};
+use portable_pty::PtySize;
 use std::path::Path;
-use windows_spawn::{Command, CreationFlags, Job, ParentProcess, SpawnOptions, Stdio};
+use windows_spawn::{Command, CreationFlags, ParentProcess, SpawnOptions, Stdio};
 pub(crate) fn spawn(
     executable: &str,
     startup: ShellStartup,
@@ -44,12 +44,14 @@ pub(crate) fn spawn(
         .stdin(Stdio::piped())
         .stdout(Stdio::from_borrowed(&output)?)
         .stderr(Stdio::from_borrowed(&output)?);
-    let job = Arc::new(Job::create().context("failed to create ordinary PTY host Job")?);
-    job.set_kill_on_close(true)
-        .context("failed to guard ordinary PTY descendants")?;
+    let host_job = Arc::new(tree_guard::create_job()?);
+    let shell_job = tree_guard::create_job()?;
+    command
+        .env_handle(SHELL_JOB_ENV, &shell_job)
+        .context("failed to transfer the shell containment Job to its PTY host")?;
     let options = SpawnOptions::new()
         .parent_process(&parent)
-        .job(&job)
+        .job(&host_job)
         .creation_flags(CreationFlags::DETACHED_PROCESS);
     let mut child = command
         .spawn_with(options)
@@ -58,14 +60,12 @@ pub(crate) fn spawn(
         .stdin
         .take()
         .context("ordinary PTY host has no input pipe")?;
-    let hosted = HostedChild::new(child, job);
-    let tree_killer = hosted.clone_killer();
     Ok(PtyProcess {
-        child: Box::new(hosted),
+        child: Box::new(HostedChild::new(child, host_job)),
         reader: Box::new(reader),
         writer: Box::new(writer),
         slave: None,
         master: None,
-        tree_killer: Some(tree_killer),
+        tree_killer: Some(tree_guard::job_killer(shell_job)),
     })
 }

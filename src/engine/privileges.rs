@@ -8,7 +8,7 @@ mod relay_process;
 #[cfg(windows)]
 pub(crate) mod stream_host;
 #[cfg(windows)]
-mod tree_guard;
+pub(super) mod tree_guard;
 #[cfg(unix)]
 mod unix_account;
 #[cfg(unix)]

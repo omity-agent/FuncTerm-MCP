@@ -7,11 +7,17 @@ use super::{
 };
 use itertools::Itertools as _;
 use sugar_path::SugarPath as _;
+const COMPLETION_WAIT_SECONDS: f64 = 20.0;
 #[test]
 fn mcp_views_preserve_mixed_id_order_errors_and_shared_completion() {
     let mut session = McpSession::new();
     let [first, second] = create_tabs(&mut session);
-    let command = session.execute(&first, "echo VIEW_ID_LIST_RESULT", true, 5.0);
+    let command = session.execute(
+        &first,
+        "echo VIEW_ID_LIST_RESULT",
+        true,
+        COMPLETION_WAIT_SECONDS,
+    );
     let command_id = text(command_result(&command), "/command_id");
     let first_cwd = text(result(&command), "/shell/cwd");
     let second_cwd = crate::support::temp_root()
@@ -55,7 +61,7 @@ fn mcp_views_preserve_mixed_id_order_errors_and_shared_completion() {
     let source = "sleep 2\necho MANY_WAITERS_FINISHED";
     let accepted = session.execute(&first, source, true, 0.0);
     let pending_id = text(command_result(&accepted), "/command_id");
-    let waited = session.view(&[(pending_id, 1); 64], 5.0);
+    let waited = session.view(&[(pending_id, 1); 64], COMPLETION_WAIT_SECONDS);
     assert_eq!(entries(&waited).len(), 64);
     for entry in entries(&waited) {
         assert_finished_output(

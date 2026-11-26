@@ -1,4 +1,5 @@
 use super::access_token::{current_token, is_elevated};
+use super::tree_guard::{self, SHELL_JOB_ENV};
 use anyhow::{Context as _, Result, ensure};
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::ffi::OsString;
@@ -11,6 +12,7 @@ pub(crate) fn run(rows: u16, cols: u16, cwd: &Path, arguments: Vec<OsString>) ->
         !is_elevated(&current_token()?)?,
         "ordinary PTY host still has administrator permissions"
     );
+    let job = tree_guard::inherited_shell_job()?;
     unsafe { windows::Win32::SetConsoleCtrlHandler(None, false) }
         .ok()
         .context("failed to restore Ctrl+C processing for ordinary PTY descendants")?;
@@ -26,12 +28,24 @@ pub(crate) fn run(rows: u16, cols: u16, cwd: &Path, arguments: Vec<OsString>) ->
     command.cwd(cwd);
     command.env_clear();
     for (name, value) in std::env::vars_os() {
-        command.env(name, value);
+        if !name
+            .as_encoded_bytes()
+            .eq_ignore_ascii_case(SHELL_JOB_ENV.as_bytes())
+        {
+            command.env(name, value);
+        }
     }
     let mut child = pair
         .slave
         .spawn_command(command)
         .context("failed to start shell in ordinary PTY")?;
+    if let Err(error) = tree_guard::attach(&job, child.as_ref()) {
+        if let Err(cleanup) = child.kill().and_then(|()| child.wait()) {
+            return Err(error.context(format!("failed to reap uncontained shell: {cleanup}")));
+        }
+        return Err(error);
+    }
+    drop(job);
     let mut reader = pair
         .master
         .try_clone_reader()
